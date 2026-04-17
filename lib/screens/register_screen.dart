@@ -1,39 +1,78 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../services/auth_service.dart';
-import 'user_dashboard.dart';
-import 'restaurant_dashboard.dart';
-import 'admin_dashboard.dart';
-import 'register_screen.dart';
+import 'login_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _RegisterScreenState extends State<RegisterScreen> {
+  final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  String selectedRole = 'individual';
   bool showPassword = false;
   bool isLoading = false;
 
+  File? _image;
+
   @override
   void dispose() {
+    _fullNameController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _pickImage() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+
+    if (picked != null) {
+      setState(() {
+        _image = File(picked.path);
+      });
+    }
+  }
+
+  Future<String?> _uploadImage(String email) async {
+    if (_image == null) return null;
+
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('profile_images')
+          .child('${email.replaceAll('@', '_').replaceAll('.', '_')}.jpg');
+
+      await ref.putFile(_image!);
+      return await ref.getDownloadURL();
+    } catch (e) {
+      debugPrint("Upload error: $e");
+      return null;
+    }
+  }
+
+  Future<void> _handleRegister() async {
+    final fullName = _fullNameController.text.trim();
+    final phone = _phoneController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter both email and password")),
-      );
+    if (fullName.isEmpty ||
+        phone.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
       return;
     }
 
@@ -41,8 +80,20 @@ class _LoginScreenState extends State<LoginScreen> {
       isLoading = true;
     });
 
+    String? imageUrl;
+    if (_image != null) {
+      imageUrl = await _uploadImage(email);
+    }
+
     final auth = AuthService();
-    final result = await auth.login(email, password);
+    final result = await auth.registerUser(
+      fullName: fullName,
+      email: email,
+      password: password,
+      phone: phone,
+      role: selectedRole,
+      imageUrl: imageUrl,
+    );
 
     if (!mounted) return;
 
@@ -51,51 +102,25 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (result["success"] == true) {
-      final role = result["role"];
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result["message"] ?? "Registered successfully")),
+      );
 
-      if (role == "individual") {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const UserDashboard()),
-        );
-      } else if (role == "restaurant") {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const RestaurantDashboard()),
-        );
-      } else if (role == "admin") {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminDashboard()),
-        );
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Unknown role")));
-      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result["message"] ?? "Login failed")),
+        SnackBar(content: Text(result["message"] ?? "Registration failed")),
       );
     }
   }
 
-  void _goToSignUp() {
-    Navigator.push(
+  void _goToLogin() {
+    Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const RegisterScreen()),
-    );
-  }
-
-  void _forgotPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Forgot Password not connected yet")),
-    );
-  }
-
-  void _continueAsGuest() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Guest mode not connected yet")),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
   }
 
@@ -110,19 +135,35 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 50),
+                const SizedBox(height: 40),
 
-                Image.asset(
-                  'assets/images/zad_logo.png',
-                  height: 80,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.eco, size: 80, color: Colors.green),
+                GestureDetector(
+                  onTap: _pickImage,
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.grey[200],
+                    backgroundImage: _image != null ? FileImage(_image!) : null,
+                    child: _image == null
+                        ? const Icon(
+                            Icons.camera_alt,
+                            size: 30,
+                            color: Colors.grey,
+                          )
+                        : null,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                const Text(
+                  "Tap to add profile picture",
+                  style: TextStyle(color: Colors.grey),
                 ),
 
                 const SizedBox(height: 24),
 
                 const Text(
-                  "Welcome Back",
+                  "Create Account",
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -133,11 +174,29 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 8),
 
                 const Text(
-                  "Sign in to continue saving food",
+                  "Join ZAD and start saving food",
                   style: TextStyle(color: Colors.grey, fontSize: 16),
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
+
+                _buildTextField(
+                  label: "Full Name",
+                  hint: "Enter your full name",
+                  controller: _fullNameController,
+                  icon: Icons.person_outline,
+                ),
+
+                const SizedBox(height: 20),
+
+                _buildTextField(
+                  label: "Phone Number",
+                  hint: "Enter your phone number",
+                  controller: _phoneController,
+                  icon: Icons.phone_outlined,
+                ),
+
+                const SizedBox(height: 20),
 
                 _buildTextField(
                   label: "Email Address",
@@ -162,70 +221,66 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
 
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: _forgotPassword,
-                    child: const Text(
-                      "Forgot Password?",
-                      style: TextStyle(
+                const SizedBox(height: 20),
+
+                DropdownButtonFormField<String>(
+                  value: selectedRole,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: const BorderSide(
                         color: Colors.green,
-                        fontWeight: FontWeight.w600,
+                        width: 1,
                       ),
                     ),
                   ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'individual',
+                      child: Text('Individual'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'restaurant',
+                      child: Text('Restaurant'),
+                    ),
+                    DropdownMenuItem(value: 'charity', child: Text('Charity')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        selectedRole = value;
+                      });
+                    }
+                  },
                 ),
 
                 const SizedBox(height: 24),
 
                 _buildPrimaryButton(
-                  text: isLoading ? "Logging in..." : "Login",
-                  onPressed: isLoading ? null : _handleLogin,
+                  text: isLoading ? "Creating account..." : "Register",
+                  onPressed: isLoading ? null : _handleRegister,
                 ),
 
-                const SizedBox(height: 20),
-
-                const Row(
-                  children: [
-                    Expanded(child: Divider(thickness: 1)),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text("or", style: TextStyle(color: Colors.grey)),
-                    ),
-                    Expanded(child: Divider(thickness: 1)),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: OutlinedButton(
-                    onPressed: _continueAsGuest,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
-                    child: const Text(
-                      "Continue as Guest",
-                      style: TextStyle(color: Colors.black87, fontSize: 16),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 30),
+                const SizedBox(height: 24),
 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text("Don't have an account? "),
+                    const Text("Already have an account? "),
                     GestureDetector(
-                      onTap: _goToSignUp,
+                      onTap: _goToLogin,
                       child: const Text(
-                        "Sign Up",
+                        "Login",
                         style: TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.bold,

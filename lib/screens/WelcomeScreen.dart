@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
+import 'register_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -109,9 +110,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     text: "Create Account",
                     isPrimary: true,
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Sign Up not implemented yet"),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
                         ),
                       );
                     },
@@ -124,7 +126,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     text: "Login",
                     isPrimary: false,
                     onPressed: _goToLogin,
-                    
                   ),
 
                   const SizedBox(height: 40),
