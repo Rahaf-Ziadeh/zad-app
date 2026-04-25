@@ -1,31 +1,27 @@
 import '../models/offer_model.dart';
 
 class OfferService {
-  List<OfferModel> getOffers() {
+  List<Offer> getOffers() {
     return [
-      OfferModel(
-        title: "Surplus Meal Package",
-        provider: "Al Quds Restaurant",
-        price: "5 ILS",
+      Offer(
+        id: "1",
+        title: "Surplus Pizza Package",
+        providerName: "Pizza House",
+        description: "Fresh pizza slices available for pickup.",
+        price: 5,
+        location: "Ramallah - Al Tireh",
         pickupTime: "6:00 PM - 8:00 PM",
-        location: "Ramallah",
-        type: "Low-price",
+        isFree: false,
       ),
-      OfferModel(
-        title: "Fresh Bread Donation",
-        provider: "Local Bakery",
-        price: "Free",
+      Offer(
+        id: "2",
+        title: "Free Bread Donation",
+        providerName: "Local Bakery",
+        description: "Fresh bread donated for families in need.",
+        price: 0,
+        location: "Ramallah Center",
         pickupTime: "4:00 PM - 6:00 PM",
-        location: "Al-Bireh",
-        type: "Donation",
-      ),
-      OfferModel(
-        title: "Family Meal Box",
-        provider: "Home Donor",
-        price: "3 ILS",
-        pickupTime: "2:00 PM - 4:00 PM",
-        location: "Nablus",
-        type: "Low-price",
+        isFree: true,
       ),
     ];
   }

@@ -1,13 +1,15 @@
-class User {
+class AppUser {
   final String name;
+  final String email;
   final String role;
+  final String phone;
+  final String address;
 
-  User({required this.name, required this.role});
-
-  factory User.fromMap(Map<String, dynamic> map) {
-    return User(
-      name: map["name"],
-      role: map["role"],
-    );
-  }
+  AppUser({
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.phone,
+    required this.address,
+  });
 }

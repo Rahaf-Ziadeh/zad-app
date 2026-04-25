@@ -1,17 +1,21 @@
-class OfferModel {
+class Offer {
+  final String id;
   final String title;
-  final String provider;
-  final String price;
-  final String pickupTime;
+  final String providerName;
+  final String description;
+  final double price;
   final String location;
-  final String type;
+  final String pickupTime;
+  final bool isFree;
 
-  OfferModel({
+  Offer({
+    required this.id,
     required this.title,
-    required this.provider,
+    required this.providerName,
+    required this.description,
     required this.price,
-    required this.pickupTime,
     required this.location,
-    required this.type,
+    required this.pickupTime,
+    required this.isFree,
   });
 }
