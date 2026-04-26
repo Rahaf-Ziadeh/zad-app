@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
-import 'register_screen.dart';
+import 'signup_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -32,7 +32,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.2),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    );
 
     _controller.forward();
   }
@@ -43,11 +45,19 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.dispose();
   }
 
-  // 🔥 دالة التنقل لصفحة Login
+  // 🔵 الانتقال للـ Login
   void _goToLogin() {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  // 🟢 الانتقال للـ Signup
+  void _goToSignup() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SignupScreen()),
     );
   }
 
@@ -66,13 +76,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 children: [
                   const Spacer(flex: 2),
 
-                  // 🔥 Logo + Hero Animation
+                  // 🔥 Logo
                   Hero(
                     tag: 'zad_logo',
                     child: Image.asset(
                       'assets/images/zad_logo.png',
                       height: 120,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(
                         Icons.eco,
                         size: 100,
                         color: Color(0xFF10B981),
@@ -105,23 +116,16 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                   const Spacer(flex: 3),
 
-                  // 🔵 Create Account
+                  // 🟢 Create Account
                   _buildButton(
                     text: "Create Account",
                     isPrimary: true,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const RegisterScreen(),
-                        ),
-                      );
-                    },
+                    onPressed: _goToSignup,
                   ),
 
                   const SizedBox(height: 15),
 
-                  // 🟢 Login Button
+                  // 🔵 Login
                   _buildButton(
                     text: "Login",
                     isPrimary: false,
@@ -171,9 +175,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
-              child: Text(
-                text,
-                style: const TextStyle(
+              child: const Text(
+                "Create Account",
+                style: TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
@@ -183,14 +187,17 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           : OutlinedButton(
               onPressed: onPressed,
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF10B981), width: 1.5),
+                side: const BorderSide(
+                  color: Color(0xFF10B981),
+                  width: 1.5,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
                 ),
               ),
-              child: Text(
-                text,
-                style: const TextStyle(
+              child: const Text(
+                "Login",
+                style: TextStyle(
                   color: Color(0xFF059669),
                   fontSize: 17,
                   fontWeight: FontWeight.bold,

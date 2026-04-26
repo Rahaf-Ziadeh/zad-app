@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'screens/WelcomeScreen.dart';
+import 'screens/auth/WelcomeScreen.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,17 +16,19 @@ void main() async {
     ),
   );
 
-  runApp(const MyApp());
+  runApp(const ZADApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class ZADApp extends StatelessWidget {
+  const ZADApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
+      title: "ZAD",
       debugShowCheckedModeBanner: false,
-      home: WelcomeScreen(),
+      theme: AppTheme.lightTheme,
+      home: const WelcomeScreen(),
     );
   }
 }
