@@ -1,11 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/user.dart';
+
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  Future<AppUser> login(String email, String password) async {
     try {
       final credential = await _auth.signInWithEmailAndPassword(
         email: email,
@@ -13,41 +15,41 @@ class AuthService {
       );
 
       final uid = credential.user!.uid;
-
       final userDoc = await _firestore.collection('users').doc(uid).get();
 
       if (!userDoc.exists) {
-        return {
-          "success": false,
-          "message": "User data not found in Firestore",
-        };
+        throw Exception("User data not found in Firestore");
       }
 
       final data = userDoc.data()!;
-      final role = data["role"];
+
+      final role = data["role"] ?? "individual";
       final status = data["status"] ?? "active";
       final isApproved = data["isApproved"] ?? false;
 
       if (status != "active") {
-        return {"success": false, "message": "Your account is not active"};
+        throw Exception("Your account is not active");
       }
 
       if ((role == "restaurant" || role == "charity") && isApproved == false) {
-        return {
-          "success": false,
-          "message": "Your account is waiting for admin approval",
-        };
+        throw Exception("Your account is waiting for admin approval");
       }
 
-      return {"success": true, "role": role, "message": "Login successful"};
+      return AppUser(
+        name: data["fullName"] ?? "User",
+        email: data["email"] ?? email,
+        role: role,
+        phone: data["phone"] ?? "",
+        address: data["address"] ?? "Ramallah",
+      );
     } on FirebaseAuthException catch (e) {
-      return {"success": false, "message": e.message ?? "Login failed"};
+      throw Exception(e.message ?? "Login failed");
     } catch (e) {
-      return {"success": false, "message": "Error: $e"};
+      throw Exception(e.toString().replaceAll("Exception: ", ""));
     }
   }
 
-  Future<Map<String, dynamic>> registerUser({
+  Future<void> registerUser({
     required String fullName,
     required String email,
     required String password,
@@ -70,28 +72,16 @@ class AuthService {
         'phone': phone,
         'role': role,
         'status': 'active',
-        'isApproved': role == 'individual' ? true : false,
+        'isApproved': role == 'individual',
         'profileImageUrl': imageUrl ?? '',
+        'address': 'Ramallah',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      return {"success": true, "message": "Registered successfully"};
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        return {"success": false, "message": "This email is already in use"};
-      } else if (e.code == 'weak-password') {
-        return {"success": false, "message": "Password is too weak"};
-      } else if (e.code == 'invalid-email') {
-        return {"success": false, "message": "Invalid email"};
-      } else {
-        return {
-          "success": false,
-          "message": e.message ?? "Registration failed",
-        };
-      }
+      throw Exception(e.message ?? "Registration failed");
     } catch (e) {
-      return {"success": false, "message": "Error: $e"};
+      throw Exception(e.toString().replaceAll("Exception: ", ""));
     }
   }
 

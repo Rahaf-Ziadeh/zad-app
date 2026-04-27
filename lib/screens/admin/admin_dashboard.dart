@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
+
+enum PendingFilter { all, restaurants, charities }
 
 class AdminDashboard extends StatefulWidget {
   final AppUser user;
@@ -51,97 +56,429 @@ class AdminHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final firestore = FirebaseFirestore.instance;
+
     return Scaffold(
       appBar: AppBar(title: const Text("Admin Dashboard")),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: ListView(
-          children: const [
-            Text(
-              "System Overview",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: _AdminStatCard(title: "Users", value: "124", icon: Icons.people)),
-                SizedBox(width: 12),
-                Expanded(child: _AdminStatCard(title: "Offers", value: "58", icon: Icons.fastfood)),
-              ],
-            ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _AdminStatCard(title: "Orders", value: "76", icon: Icons.receipt_long)),
-                SizedBox(width: 12),
-                Expanded(child: _AdminStatCard(title: "Complaints", value: "5", icon: Icons.report)),
-              ],
-            ),
-            SizedBox(height: 24),
-            Text(
-              "Quick Management",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            _AdminActionTile(
-              icon: Icons.verified_user,
-              title: "Verify New Donors",
-              subtitle: "Review identity verification requests",
-            ),
-            _AdminActionTile(
-              icon: Icons.warning,
-              title: "Resolve Conflicts",
-              subtitle: "Handle reports, complaints, and duplicated reservations",
-            ),
-            _AdminActionTile(
-              icon: Icons.analytics,
-              title: "View Reports",
-              subtitle: "Monitor platform performance and activity",
-            ),
-          ],
-        ),
+        children: [
+          Text(
+            "Welcome, ${user.name}",
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            "Monitor users, approvals, complaints, and system activity.",
+            style: TextStyle(color: AppColors.textLight),
+          ),
+          const SizedBox(height: 18),
+          StreamBuilder<QuerySnapshot>(
+            stream: firestore.collection('users').snapshots(),
+            builder: (context, snapshot) {
+              final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+              return _AdminStatCard(
+                title: "Total Users",
+                value: count.toString(),
+                icon: Icons.people,
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<QuerySnapshot>(
+            stream: firestore
+                .collection('users')
+                .where('isApproved', isEqualTo: false)
+                .where('status', isEqualTo: 'active')
+                .snapshots(),
+            builder: (context, snapshot) {
+              final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+              return _AdminStatCard(
+                title: "Pending Approval",
+                value: count.toString(),
+                icon: Icons.verified_user,
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<QuerySnapshot>(
+            stream: firestore
+                .collection('admins')
+                .orderBy('createdAt', descending: true)
+                .limit(5)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+              return _AdminStatCard(
+                title: "Recent Admin Logs",
+                value: count.toString(),
+                icon: Icons.history,
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            "Quick Management",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          const _AdminActionTile(
+            icon: Icons.verified_user,
+            title: "Verify New Accounts",
+            subtitle: "Approve restaurants and charities",
+          ),
+          const _AdminActionTile(
+            icon: Icons.warning,
+            title: "Resolve Conflicts",
+            subtitle: "Handle reports and complaints",
+          ),
+          const _AdminActionTile(
+            icon: Icons.analytics,
+            title: "View Reports",
+            subtitle: "Monitor platform activity",
+          ),
+        ],
       ),
     );
   }
 }
 
-class AdminUsersScreen extends StatelessWidget {
+class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
 
   @override
+  State<AdminUsersScreen> createState() => _AdminUsersScreenState();
+}
+
+class _AdminUsersScreenState extends State<AdminUsersScreen> {
+  PendingFilter selectedFilter = PendingFilter.all;
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+  Stream<QuerySnapshot> _pendingAccountsStream() {
+    Query query = firestore
+        .collection('users')
+        .where('isApproved', isEqualTo: false)
+        .where('status', isEqualTo: 'active');
+
+    if (selectedFilter == PendingFilter.restaurants) {
+      query = query.where('role', isEqualTo: 'restaurant');
+    } else if (selectedFilter == PendingFilter.charities) {
+      query = query.where('role', isEqualTo: 'charity');
+    }
+
+    return query.snapshots();
+  }
+
+  String _filterTitle() {
+    if (selectedFilter == PendingFilter.restaurants) {
+      return "Pending Restaurants";
+    } else if (selectedFilter == PendingFilter.charities) {
+      return "Pending Charities";
+    }
+    return "Accounts Waiting for Approval";
+  }
+
+  Future<void> _logAdminAction({
+    required String action,
+    required String reason,
+    required String targetId,
+    required String targetType,
+  }) async {
+    final adminId = FirebaseAuth.instance.currentUser?.uid ?? "unknown_admin";
+
+    await firestore.collection('admins').add({
+      'adminId': adminId,
+      'action': action,
+      'reason': reason,
+      'targetId': targetId,
+      'targetType': targetType,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _approveAccount(String userId, Map<String, dynamic> data) async {
+    await firestore.collection('users').doc(userId).update({
+      'isApproved': true,
+      'status': 'active',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await _logAdminAction(
+      action: 'approve_account',
+      reason: 'Account approved by admin',
+      targetId: userId,
+      targetType: data['role'] ?? 'user',
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Account approved")),
+    );
+  }
+
+  Future<void> _rejectAccount(String userId, Map<String, dynamic> data) async {
+    await firestore.collection('users').doc(userId).update({
+      'isApproved': false,
+      'status': 'rejected',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await _logAdminAction(
+      action: 'reject_account',
+      reason: 'Account rejected by admin',
+      targetId: userId,
+      targetType: data['role'] ?? 'user',
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Account rejected")),
+    );
+  }
+
+  Future<void> _suspendUser(String userId, Map<String, dynamic> data) async {
+    await firestore.collection('users').doc(userId).update({
+      'status': 'suspended',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await _logAdminAction(
+      action: 'suspend_user',
+      reason: 'Suspended by admin',
+      targetId: userId,
+      targetType: data['role'] ?? 'user',
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("User suspended")),
+    );
+  }
+
+  Future<void> _unsuspendUser(String userId, Map<String, dynamic> data) async {
+    await firestore.collection('users').doc(userId).update({
+      'status': 'active',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await _logAdminAction(
+      action: 'unsuspend_user',
+      reason: 'Unsuspended by admin',
+      targetId: userId,
+      targetType: data['role'] ?? 'user',
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("User unsuspended")),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final users = [
-      {"name": "Regular User", "role": "Individual", "status": "Active"},
-      {"name": "Pizza House", "role": "Restaurant", "status": "Pending"},
-      {"name": "Hope Charity", "role": "Charity", "status": "Active"},
-    ];
-
     return Scaffold(
-      appBar: AppBar(title: const Text("Manage Users")),
-      body: ListView.builder(
+      appBar: AppBar(
+        title: const Text("Manage Users"),
+      ),
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: users.length,
-        itemBuilder: (context, index) {
-          final user = users[index];
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ChoiceChip(
+                label: const Text("All Pending"),
+                selected: selectedFilter == PendingFilter.all,
+                onSelected: (_) {
+                  setState(() => selectedFilter = PendingFilter.all);
+                },
+              ),
+              ChoiceChip(
+                label: const Text("Restaurants"),
+                selected: selectedFilter == PendingFilter.restaurants,
+                onSelected: (_) {
+                  setState(() => selectedFilter = PendingFilter.restaurants);
+                },
+              ),
+              ChoiceChip(
+                label: const Text("Charities"),
+                selected: selectedFilter == PendingFilter.charities,
+                onSelected: (_) {
+                  setState(() => selectedFilter = PendingFilter.charities);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _filterTitle(),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<QuerySnapshot>(
+            stream: _pendingAccountsStream(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Text("Error: ${snapshot.error}");
+              }
 
-          return Card(
-            child: ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: AppColors.primary,
-                child: Icon(Icons.person, color: Colors.white),
-              ),
-              title: Text(user["name"]!),
-              subtitle: Text("${user["role"]} • ${user["status"]}"),
-              trailing: PopupMenuButton(
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: "view", child: Text("View Details")),
-                  PopupMenuItem(value: "activate", child: Text("Activate")),
-                  PopupMenuItem(value: "suspend", child: Text("Suspend")),
-                ],
-              ),
-            ),
-          );
-        },
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final docs = snapshot.data!.docs;
+
+              if (docs.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text("No pending accounts"),
+                  ),
+                );
+              }
+
+              return Column(
+                children: docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+
+                  if (data['role'] == 'admin') return const SizedBox.shrink();
+
+                  return Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: AppColors.primary,
+                        child: Icon(Icons.person, color: Colors.white),
+                      ),
+                      title: Text(data['fullName'] ?? 'No Name'),
+                      subtitle: Text(
+                        "${data['email'] ?? ''}\nRole: ${data['role'] ?? ''}",
+                      ),
+                      isThreeLine: true,
+                      trailing: Wrap(
+                        spacing: 8,
+                        children: [
+                          IconButton(
+                            tooltip: "Approve",
+                            icon: const Icon(Icons.check_circle,
+                                color: AppColors.primary),
+                            onPressed: () => _approveAccount(doc.id, data),
+                          ),
+                          IconButton(
+                            tooltip: "Reject",
+                            icon: const Icon(Icons.cancel,
+                                color: AppColors.danger),
+                            onPressed: () => _rejectAccount(doc.id, data),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            "Active Users",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<QuerySnapshot>(
+            stream: firestore
+                .collection('users')
+                .where('status', isEqualTo: 'active')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final docs = snapshot.data!.docs;
+
+              if (docs.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text("No active users"),
+                  ),
+                );
+              }
+
+              return Column(
+                children: docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  if (data['role'] == 'admin') return const SizedBox.shrink();
+
+                  return Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.person_outline,
+                          color: AppColors.primary),
+                      title: Text(data['fullName'] ?? 'No Name'),
+                      subtitle: Text(
+                        "${data['email'] ?? ''} | ${data['role'] ?? ''}",
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => _suspendUser(doc.id, data),
+                        child: const Text("Suspend"),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            "Suspended Users",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<QuerySnapshot>(
+            stream: firestore
+                .collection('users')
+                .where('status', isEqualTo: 'suspended')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final docs = snapshot.data!.docs;
+
+              if (docs.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text("No suspended users"),
+                  ),
+                );
+              }
+
+              return Column(
+                children: docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  if (data['role'] == 'admin') return const SizedBox.shrink();
+
+                  return Card(
+                    child: ListTile(
+                      leading:
+                          const Icon(Icons.lock_open, color: AppColors.primary),
+                      title: Text(data['fullName'] ?? 'No Name'),
+                      subtitle: Text(
+                        "${data['email'] ?? ''} | ${data['role'] ?? ''}",
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => _unsuspendUser(doc.id, data),
+                        child: const Text("Unsuspend"),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -186,27 +523,63 @@ class AdminReportsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reports = [
-      "Total food offers this month: 58",
-      "Completed pickups: 43",
-      "Free donations: 22",
-      "Low-price offers: 36",
-    ];
+    final firestore = FirebaseFirestore.instance;
 
     return Scaffold(
       appBar: AppBar(title: const Text("Reports")),
       body: ListView(
         padding: const EdgeInsets.all(16),
-        children: reports
-            .map(
-              (report) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.analytics, color: AppColors.primary),
-                  title: Text(report),
-                ),
-              ),
-            )
-            .toList(),
+        children: [
+          const Text(
+            "Recent Admin Logs",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<QuerySnapshot>(
+            stream: firestore
+                .collection('admins')
+                .orderBy('createdAt', descending: true)
+                .limit(10)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text("Error loading logs");
+              }
+
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final logs = snapshot.data!.docs;
+
+              if (logs.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text("No admin logs found"),
+                  ),
+                );
+              }
+
+              return Column(
+                children: logs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+
+                  return Card(
+                    child: ListTile(
+                      leading:
+                          const Icon(Icons.history, color: AppColors.primary),
+                      title: Text(data['action'] ?? 'No Action'),
+                      subtitle: Text(
+                        "Reason: ${data['reason'] ?? ''}\nTarget: ${data['targetType'] ?? ''}",
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -252,12 +625,20 @@ class _AdminStatCard extends StatelessWidget {
           BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
         ],
       ),
-      child: Column(
+      child: Row(
         children: [
-          Icon(icon, color: AppColors.primary, size: 32),
-          const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          Text(title),
+          CircleAvatar(
+            backgroundColor: AppColors.primary.withOpacity(0.12),
+            child: Icon(icon, color: AppColors.primary),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(title,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Text(value,
+              style:
+                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -319,15 +700,19 @@ class _ProfileLayout extends StatelessWidget {
             const CircleAvatar(
               radius: 48,
               backgroundColor: AppColors.primary,
-              child: Icon(Icons.person, color: Colors.white, size: 55),
+              child: Icon(Icons.admin_panel_settings,
+                  color: Colors.white, size: 55),
             ),
             const SizedBox(height: 14),
-            Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(name,
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             Text(role.toUpperCase()),
             const SizedBox(height: 24),
             _ProfileTile(icon: Icons.email, title: "Email", value: email),
             _ProfileTile(icon: Icons.phone, title: "Phone", value: phone),
-            _ProfileTile(icon: Icons.location_on, title: "Address", value: address),
+            _ProfileTile(
+                icon: Icons.location_on, title: "Address", value: address),
           ],
         ),
       ),
