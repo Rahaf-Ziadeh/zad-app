@@ -30,7 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.3
   firebase_core: ^2.25.0
   firebase_auth: ^4.17.0
   cloud_firestore: ^4.15.0
