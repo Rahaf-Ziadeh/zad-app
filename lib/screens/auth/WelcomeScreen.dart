@@ -43,7 +43,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.dispose();
   }
 
-  // 🔥 دالة التنقل لصفحة Login
   void _goToLogin() {
     Navigator.pushReplacement(
       context,
@@ -51,84 +50,96 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     );
   }
 
+  void _goToSignup() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SignupScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8FAF9),
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnimation,
           child: SlideTransition(
             position: _slideAnimation,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
+              padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Column(
                 children: [
                   const Spacer(flex: 2),
 
-                  // 🔥 Logo + Hero Animation
                   Hero(
                     tag: 'zad_logo',
                     child: Image.asset(
                       'assets/images/zad_logo.png',
-                      height: 120,
-                      errorBuilder: (context, error, stackTrace) => const Icon(
-                        Icons.eco,
-                        size: 100,
+                      height: 125,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(
+                        Icons.eco_rounded,
+                        size: 105,
                         color: Color(0xFF10B981),
                       ),
                     ),
                   ),
 
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 18),
 
                   const Text(
-                    'Save Food, Share Good',
+                    'مرحباً بك في زاد',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey,
-                      letterSpacing: 0.5,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF064E3B),
                     ),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 10),
 
                   const Text(
-                    'Help reduce food waste by discovering surplus food from nearby restaurants, individuals, and charities.',
+                    'وفّر الطعام… وشارك الخير',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 18,
+                      color: Color(0xFF059669),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  const Text(
+                    'اكتشف الطعام الفائض من المطاعم والأفراد والجمعيات القريبة منك، وساهم في تقليل الهدر ودعم المجتمع.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
                       color: Colors.black54,
-                      height: 1.6,
+                      height: 1.8,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
 
                   const Spacer(flex: 3),
 
-                  // 🔵 Create Account
                   _buildButton(
-                    text: "Create Account",
+                    text: "إنشاء حساب",
                     isPrimary: true,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                         builder: (_) => const SignupScreen(),
-                        ),
-                      );
-                    },
+                    onPressed: _goToSignup,
                   ),
 
                   const SizedBox(height: 15),
 
-                  // 🟢 Login Button
                   _buildButton(
-                    text: "Login",
+                    text: "تسجيل الدخول",
                     isPrimary: false,
                     onPressed: _goToLogin,
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 35),
                 ],
               ),
             ),
@@ -145,18 +156,21 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }) {
     return Container(
       width: double.infinity,
-      height: 55,
+      height: 56,
       decoration: isPrimary
           ? BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF34D399), Color(0xFF059669)],
+                colors: [
+                  Color(0xFF34D399),
+                  Color(0xFF059669),
+                ],
               ),
-              borderRadius: BorderRadius.circular(30),
+              borderRadius: BorderRadius.circular(32),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF059669).withOpacity(0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  color: const Color(0xFF059669).withOpacity(0.28),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
                 ),
               ],
             )
@@ -168,7 +182,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 backgroundColor: Colors.transparent,
                 shadowColor: Colors.transparent,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(32),
                 ),
               ),
               child: Text(
@@ -183,9 +197,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           : OutlinedButton(
               onPressed: onPressed,
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF10B981), width: 1.5),
+                side: const BorderSide(
+                  color: Color(0xFF10B981),
+                  width: 1.6,
+                ),
+                backgroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(32),
                 ),
               ),
               child: Text(

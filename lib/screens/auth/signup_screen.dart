@@ -1,8 +1,4 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
@@ -23,10 +19,10 @@ class _SignupScreenState extends State<SignupScreen> {
   final passwordController = TextEditingController();
 
   String selectedRole = "individual";
+  String selectedCountryCode = "+970";
+
   bool isPasswordVisible = false;
   bool isLoading = false;
-
-  File? imageFile;
 
   @override
   void dispose() {
@@ -38,39 +34,11 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  Future<void> pickImage() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-
-    if (picked != null) {
-      setState(() {
-        imageFile = File(picked.path);
-      });
-    }
-  }
-
-  Future<String?> uploadImage(String email) async {
-    if (imageFile == null) return null;
-
-    try {
-      final safeEmail = email.replaceAll('@', '_').replaceAll('.', '_');
-
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('profile_images')
-          .child('$safeEmail.jpg');
-
-      await ref.putFile(imageFile!);
-      return await ref.getDownloadURL();
-    } catch (e) {
-      debugPrint("Upload error: $e");
-      return null;
-    }
-  }
-
   Future<void> handleSignup() async {
     final name = nameController.text.trim();
     final email = emailController.text.trim();
-    final phone = phoneController.text.trim();
+    final phone =
+        "$selectedCountryCode${phoneController.text.trim()}";
     final address = addressController.text.trim();
     final password = passwordController.text.trim();
 
@@ -80,7 +48,7 @@ class _SignupScreenState extends State<SignupScreen> {
         address.isEmpty ||
         password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill all fields")),
+        const SnackBar(content: Text("يرجى تعبئة جميع الحقول")),
       );
       return;
     }
@@ -88,21 +56,19 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => isLoading = true);
 
     try {
-      final imageUrl = await uploadImage(email);
-
       await AuthService().registerUser(
         fullName: name,
         email: email,
         password: password,
         phone: phone,
         role: selectedRole,
-        imageUrl: imageUrl,
+        imageUrl: null,
       );
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Account created successfully")),
+        const SnackBar(content: Text("تم إنشاء الحساب بنجاح")),
       );
 
       Navigator.pushReplacement(
@@ -129,50 +95,33 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  String getRoleLabel(String role) {
+    switch (role) {
+      case "individual":
+        return "مستخدم";
+      case "restaurant":
+        return "مطعم";
+      case "charity":
+        return "جمعية";
+      default:
+        return role;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text("Create Account")),
+      appBar: AppBar(title: const Text("إنشاء حساب")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: GestureDetector(
-                onTap: pickImage,
-                child: CircleAvatar(
-                  radius: 52,
-                  backgroundColor: Colors.grey[200],
-                  backgroundImage:
-                      imageFile != null ? FileImage(imageFile!) : null,
-                  child: imageFile == null
-                      ? const Icon(
-                          Icons.camera_alt,
-                          size: 34,
-                          color: Colors.grey,
-                        )
-                      : null,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            const Center(
-              child: Text(
-                "Tap to add profile picture",
-                style: TextStyle(color: AppColors.textLight),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
             const Text(
-              "Join ZAD",
+              "انضم إلى زاد",
               style: TextStyle(
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textDark,
               ),
@@ -181,15 +130,15 @@ class _SignupScreenState extends State<SignupScreen> {
             const SizedBox(height: 6),
 
             const Text(
-              "Create your account and start reducing food waste.",
+              "أنشئ حسابك وابدأ بالمساهمة في تقليل هدر الطعام",
               style: TextStyle(color: AppColors.textLight),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 25),
 
             _InputField(
               controller: nameController,
-              label: "Full Name / Organization Name",
+              label: "الاسم الكامل / اسم الجهة",
               icon: Icons.person,
             ),
 
@@ -197,23 +146,49 @@ class _SignupScreenState extends State<SignupScreen> {
 
             _InputField(
               controller: emailController,
-              label: "Email",
+              label: "البريد الإلكتروني",
               icon: Icons.email,
             ),
 
             const SizedBox(height: 14),
 
-            _InputField(
+            /// 📞 رقم الهاتف
+            TextField(
               controller: phoneController,
-              label: "Phone Number",
-              icon: Icons.phone,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: "رقم الهاتف",
+                hintText: "مثال: 599123456",
+                prefixIcon: const Icon(Icons.phone),
+                prefix: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedCountryCode,
+                      items: const [
+                        DropdownMenuItem(
+                            value: "+970", child: Text("🇵🇸 +970")),
+                        DropdownMenuItem(
+                            value: "+962", child: Text("🇯🇴 +962")),
+                        DropdownMenuItem(
+                            value: "+966", child: Text("🇸🇦 +966")),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedCountryCode = value!;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ),
             ),
 
             const SizedBox(height: 14),
 
             _InputField(
               controller: addressController,
-              label: "Address / Location",
+              label: "العنوان / الموقع",
               icon: Icons.location_on,
             ),
 
@@ -223,7 +198,7 @@ class _SignupScreenState extends State<SignupScreen> {
               controller: passwordController,
               obscureText: !isPasswordVisible,
               decoration: InputDecoration(
-                labelText: "Password",
+                labelText: "كلمة المرور",
                 prefixIcon: const Icon(Icons.lock),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -243,7 +218,7 @@ class _SignupScreenState extends State<SignupScreen> {
             const SizedBox(height: 18),
 
             const Text(
-              "Select Account Type",
+              "نوع الحساب",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
 
@@ -254,18 +229,18 @@ class _SignupScreenState extends State<SignupScreen> {
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.badge),
               ),
-              items: const [
+              items: [
                 DropdownMenuItem(
                   value: "individual",
-                  child: Text("Individual User"),
+                  child: Text(getRoleLabel("individual")),
                 ),
                 DropdownMenuItem(
                   value: "restaurant",
-                  child: Text("Restaurant"),
+                  child: Text(getRoleLabel("restaurant")),
                 ),
                 DropdownMenuItem(
                   value: "charity",
-                  child: Text("Charitable Organization"),
+                  child: Text(getRoleLabel("charity")),
                 ),
               ],
               onChanged: (value) {
@@ -275,14 +250,14 @@ class _SignupScreenState extends State<SignupScreen> {
               },
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 25),
 
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: isLoading ? null : handleSignup,
                 child: Text(
-                  isLoading ? "Creating account..." : "Create Account",
+                  isLoading ? "جاري إنشاء الحساب..." : "إنشاء حساب",
                 ),
               ),
             ),
@@ -292,7 +267,7 @@ class _SignupScreenState extends State<SignupScreen> {
             Center(
               child: TextButton(
                 onPressed: goToLogin,
-                child: const Text("Already have an account? Login"),
+                child: const Text("لديك حساب بالفعل؟ تسجيل الدخول"),
               ),
             ),
           ],

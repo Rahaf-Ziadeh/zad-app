@@ -15,11 +15,14 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
 
   bool showPassword = false;
   bool isLoading = false;
+  bool rememberMe = true;
+
+  String? errorMessage;
 
   @override
   void dispose() {
@@ -28,14 +31,37 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  bool isValidEmail(String email) {
+    final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$');
+    return emailRegex.hasMatch(email);
+  }
+
   Future<void> handleLogin() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
+    setState(() {
+      errorMessage = null;
+    });
+
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter both email and password")),
-      );
+      setState(() {
+        errorMessage = "يرجى إدخال البريد الإلكتروني وكلمة المرور";
+      });
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      setState(() {
+        errorMessage = "صيغة البريد الإلكتروني غير صحيحة";
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      setState(() {
+        errorMessage = "كلمة المرور يجب أن تكون 6 أحرف على الأقل";
+      });
       return;
     }
 
@@ -65,11 +91,9 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll("Exception: ", "")),
-        ),
-      );
+      setState(() {
+        errorMessage = e.toString().replaceAll("Exception: ", "");
+      });
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -83,234 +107,202 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void forgotPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Forgot Password not connected yet")),
-    );
+    setState(() {
+      errorMessage = "ميزة استعادة كلمة المرور غير مفعّلة حالياً";
+    });
   }
 
   void continueAsGuest() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Guest mode not connected yet")),
-    );
+    setState(() {
+      errorMessage = "وضع الزائر غير مفعّل حالياً";
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 50),
-                Hero(
-                  tag: 'zad_logo',
-                  child: Image.asset(
-                    'assets/images/zad_logo.png',
-                    height: 80,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const Icon(Icons.eco, size: 80, color: Colors.green),
+          padding: const EdgeInsets.symmetric(horizontal: 26),
+          child: Column(
+            children: [
+              const SizedBox(height: 55),
+              Hero(
+                tag: 'zad_logo',
+                child: Image.asset(
+                  'assets/images/zad_logo.png',
+                  height: 90,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.eco_rounded, size: 90),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                "مرحباً بعودتك",
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "سجّل دخولك للمتابعة في زاد",
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 34),
+              _buildField(
+                controller: emailController,
+                hint: "البريد الإلكتروني",
+                icon: Icons.email_outlined,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+              _buildField(
+                controller: passwordController,
+                hint: "كلمة المرور",
+                icon: Icons.lock_outline,
+                isPassword: true,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Checkbox(
+                    value: rememberMe,
+                    onChanged: (value) {
+                      setState(() {
+                        rememberMe = value ?? false;
+                      });
+                    },
                   ),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  "Welcome Back",
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D3142),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "Sign in to continue saving food",
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
-                ),
-                const SizedBox(height: 40),
-                _buildTextField(
-                  label: "Email Address",
-                  hint: "Enter your email",
-                  controller: emailController,
-                  icon: Icons.email_outlined,
-                ),
-                const SizedBox(height: 20),
-                _buildTextField(
-                  label: "Password",
-                  hint: "Enter your password",
-                  controller: passwordController,
-                  icon: Icons.lock_outline,
-                  isPassword: true,
-                  showPassword: showPassword,
-                  onTogglePassword: () {
-                    setState(() => showPassword = !showPassword);
-                  },
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
+                  const Text("تذكرني"),
+                  const Spacer(),
+                  TextButton(
                     onPressed: forgotPassword,
+                    child: const Text("نسيت كلمة المرور؟"),
+                  ),
+                ],
+              ),
+              if (errorMessage != null) ...[
+                const SizedBox(height: 8),
+                _buildErrorBox(errorMessage!),
+              ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : handleLogin,
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text("تسجيل الدخول"),
+                ),
+              ),
+              const SizedBox(height: 25),
+              const Row(
+                children: [
+                  Expanded(child: Divider()),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Text("أو"),
+                  ),
+                  Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton(
+                  onPressed: continueAsGuest,
+                  child: const Text("المتابعة كزائر"),
+                ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("ليس لديك حساب؟ "),
+                  GestureDetector(
+                    onTap: goToSignUp,
                     child: const Text(
-                      "Forgot Password?",
+                      "إنشاء حساب",
                       style: TextStyle(
                         color: Colors.green,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                _buildPrimaryButton(
-                  text: isLoading ? "Logging in..." : "Login",
-                  onPressed: isLoading ? null : handleLogin,
-                ),
-                const SizedBox(height: 20),
-                const Row(
-                  children: [
-                    Expanded(child: Divider(thickness: 1)),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text("or", style: TextStyle(color: Colors.grey)),
-                    ),
-                    Expanded(child: Divider(thickness: 1)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: OutlinedButton(
-                    onPressed: continueAsGuest,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
-                    child: const Text(
-                      "Continue as Guest",
-                      style: TextStyle(color: Colors.black87, fontSize: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Don't have an account? "),
-                    GestureDetector(
-                      onTap: goToSignUp,
-                      child: const Text(
-                        "Sign Up",
-                        style: TextStyle(
-                          color: Colors.green,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
+                ],
+              ),
+              const SizedBox(height: 25),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTextField({
-    required String label,
-    required String hint,
-    required TextEditingController controller,
-    required IconData icon,
-    bool isPassword = false,
-    bool showPassword = false,
-    VoidCallback? onTogglePassword,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          obscureText: isPassword && !showPassword,
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: Icon(icon, color: Colors.green),
-            suffixIcon: isPassword
-                ? IconButton(
-                    icon: Icon(
-                      showPassword ? Icons.visibility_off : Icons.visibility,
-                    ),
-                    onPressed: onTogglePassword,
-                  )
-                : null,
-            filled: true,
-            fillColor: Colors.grey[100],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(15),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(15),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(15),
-              borderSide: const BorderSide(color: Colors.green, width: 1),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPrimaryButton({
-    required String text,
-    required VoidCallback? onPressed,
-  }) {
+  Widget _buildErrorBox(String message) {
     return Container(
       width: double.infinity,
-      height: 55,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF34D399), Color(0xFF059669)],
-        ),
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.green.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+        color: const Color(0xFFFFF1F2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFCA5A5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline,
+            color: Color(0xFFDC2626),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF991B1B),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          disabledBackgroundColor: Colors.transparent,
-          disabledForegroundColor: Colors.white70,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-        ),
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+    );
+  }
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    bool isPassword = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: isPassword && !showPassword,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: Icon(icon),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                  showPassword ? Icons.visibility_off : Icons.visibility,
+                ),
+                onPressed: () {
+                  setState(() => showPassword = !showPassword);
+                },
+              )
+            : null,
       ),
     );
   }

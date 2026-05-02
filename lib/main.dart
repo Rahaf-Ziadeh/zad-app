@@ -25,10 +25,21 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-  title: "ZAD",
-  debugShowCheckedModeBanner: false,
-  theme: AppTheme.lightTheme,
-  home: const WelcomeScreen(),
-);
+      title: "زاد",
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+
+      // Arabic app direction
+      locale: const Locale('ar'),
+
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child ?? const SizedBox(),
+        );
+      },
+
+      home: const WelcomeScreen(),
+    );
   }
 }

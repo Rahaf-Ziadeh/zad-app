@@ -12,15 +12,44 @@ class DonateTab extends StatefulWidget {
 }
 
 class _DonateTabState extends State<DonateTab> {
-  final TextEditingController amountController = TextEditingController();
+  final foodNameController = TextEditingController();
+  final quantityController = TextEditingController();
+  final locationController = TextEditingController();
+  final notesController = TextEditingController();
+
+  String selectedCategory = "وجبات";
+  DateTime? expiryDate;
+
   bool isLoading = false;
 
-  Future<void> donate() async {
-    final amount = double.tryParse(amountController.text);
+  final categories = [
+    "وجبات",
+    "مخبوزات",
+    "خضار وفواكه",
+    "معلبات",
+    "حلويات",
+  ];
 
-    if (amount == null || amount <= 0) {
+  Future<void> pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2030),
+      initialDate: DateTime.now(),
+    );
+
+    if (picked != null) {
+      setState(() => expiryDate = picked);
+    }
+  }
+
+  Future<void> donateFood() async {
+    if (foodNameController.text.isEmpty ||
+        quantityController.text.isEmpty ||
+        locationController.text.isEmpty ||
+        expiryDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter valid amount")),
+        const SnackBar(content: Text("يرجى تعبئة جميع الحقول")),
       );
       return;
     }
@@ -30,18 +59,28 @@ class _DonateTabState extends State<DonateTab> {
     try {
       await FirebaseFirestore.instance.collection('donations').add({
         'userId': FirebaseAuth.instance.currentUser!.uid,
-        'amount': amount,
+        'foodName': foodNameController.text.trim(),
+        'category': selectedCategory,
+        'quantity': quantityController.text.trim(),
+        'location': locationController.text.trim(),
+        'expiryDate': expiryDate,
+        'notes': notesController.text.trim(),
+        'status': 'pending', // 🔥 مهم جداً
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      amountController.clear();
+      foodNameController.clear();
+      quantityController.clear();
+      locationController.clear();
+      notesController.clear();
+      expiryDate = null;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Donation successful ❤️")),
+        const SnackBar(content: Text("تم إضافة التبرع بنجاح ❤️")),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
+        SnackBar(content: Text("خطأ: $e")),
       );
     } finally {
       if (mounted) setState(() => isLoading = false);
@@ -50,43 +89,103 @@ class _DonateTabState extends State<DonateTab> {
 
   @override
   void dispose() {
-    amountController.dispose();
+    foodNameController.dispose();
+    quantityController.dispose();
+    locationController.dispose();
+    notesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       children: [
         const Text(
-          "Support the Community ❤️",
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-          ),
+          "تبرع بالطعام ❤️",
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
 
         const SizedBox(height: 6),
 
         const Text(
-          "Your donation helps reduce food waste and support people in need.",
+          "شارك الطعام الفائض وساهم في دعم المجتمع.",
           style: TextStyle(color: AppColors.textLight),
         ),
 
         const SizedBox(height: 20),
 
+        /// 🔥 الفورم
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 TextField(
-                  controller: amountController,
-                  keyboardType: TextInputType.number,
+                  controller: foodNameController,
                   decoration: const InputDecoration(
-                    labelText: "Donation Amount",
-                    prefixIcon: Icon(Icons.payments),
+                    labelText: "اسم الطعام",
+                    prefixIcon: Icon(Icons.fastfood),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                /// 🔥 Categories
+                Wrap(
+                  spacing: 8,
+                  children: categories.map((cat) {
+                    return ChoiceChip(
+                      label: Text(cat),
+                      selected: selectedCategory == cat,
+                      onSelected: (_) {
+                        setState(() => selectedCategory = cat);
+                      },
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: quantityController,
+                  decoration: const InputDecoration(
+                    labelText: "الكمية",
+                    prefixIcon: Icon(Icons.production_quantity_limits),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                /// 🔥 Expiry Date
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.calendar_today),
+                  title: Text(
+                    expiryDate == null
+                        ? "تاريخ انتهاء الصلاحية"
+                        : "${expiryDate!.day}/${expiryDate!.month}/${expiryDate!.year}",
+                  ),
+                  onTap: pickDate,
+                ),
+
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: locationController,
+                  decoration: const InputDecoration(
+                    labelText: "الموقع / مكان الاستلام",
+                    prefixIcon: Icon(Icons.location_on),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: notesController,
+                  decoration: const InputDecoration(
+                    labelText: "ملاحظات (اختياري)",
+                    prefixIcon: Icon(Icons.note),
                   ),
                 ),
 
@@ -95,21 +194,10 @@ class _DonateTabState extends State<DonateTab> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: isLoading ? null : donate,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                    ),
+                    onPressed: isLoading ? null : donateFood,
                     child: isLoading
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text("Donate Now"),
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text("إضافة التبرع"),
                   ),
                 ),
               ],
@@ -120,7 +208,7 @@ class _DonateTabState extends State<DonateTab> {
         const SizedBox(height: 20),
 
         const Text(
-          "Recent Donations",
+          "آخر التبرعات",
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
 
@@ -140,19 +228,22 @@ class _DonateTabState extends State<DonateTab> {
             final donations = snapshot.data!.docs;
 
             if (donations.isEmpty) {
-              return const Text("No donations yet");
+              return const Text("لا يوجد تبرعات بعد");
             }
 
             return Column(
               children: donations.map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
-                final amount = data['amount'] ?? 0;
 
                 return Card(
                   child: ListTile(
                     leading: const Icon(Icons.favorite, color: Colors.red),
-                    title: Text("$amount ILS"),
-                    subtitle: const Text("Donation"),
+                    title: Text(data['foodName'] ?? ''),
+                    subtitle: Text("${data['quantity']} • ${data['category']}"),
+                    trailing: Text(
+                      data['status'] == 'pending' ? "قيد المراجعة" : "متاح",
+                      style: const TextStyle(color: Colors.orange),
+                    ),
                   ),
                 );
               }).toList(),
