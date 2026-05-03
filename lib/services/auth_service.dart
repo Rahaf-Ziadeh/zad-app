@@ -18,7 +18,7 @@ class AuthService {
       final userDoc = await _firestore.collection('users').doc(uid).get();
 
       if (!userDoc.exists) {
-        throw Exception("User data not found in Firestore");
+        throw Exception("بيانات المستخدم غير موجودة");
       }
 
       final data = userDoc.data()!;
@@ -27,23 +27,31 @@ class AuthService {
       final status = data["status"] ?? "active";
       final isApproved = data["isApproved"] ?? false;
 
+      if (status == "suspended") {
+        throw Exception("تم تعليق هذا الحساب من قبل الإدارة");
+      }
+
+      if (status == "rejected") {
+        throw Exception("تم رفض هذا الحساب من قبل الإدارة");
+      }
+
       if (status != "active") {
-        throw Exception("Your account is not active");
+        throw Exception("هذا الحساب غير نشط حالياً");
       }
 
       if ((role == "restaurant" || role == "charity") && isApproved == false) {
-        throw Exception("Your account is waiting for admin approval");
+        throw Exception("حسابك بانتظار موافقة الإدارة");
       }
 
       return AppUser(
-        name: data["fullName"] ?? "User",
+        name: data["fullName"] ?? "مستخدم",
         email: data["email"] ?? email,
         role: role,
         phone: data["phone"] ?? "",
-        address: data["address"] ?? "Ramallah",
+        address: data["address"] ?? "",
       );
     } on FirebaseAuthException catch (e) {
-      throw Exception(e.message ?? "Login failed");
+      throw Exception(_authErrorMessage(e.code));
     } catch (e) {
       throw Exception(e.toString().replaceAll("Exception: ", ""));
     }
@@ -55,7 +63,7 @@ class AuthService {
     required String password,
     required String phone,
     required String role,
-    String? imageUrl,
+    required String address,
   }) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -73,13 +81,12 @@ class AuthService {
         'role': role,
         'status': 'active',
         'isApproved': role == 'individual',
-        'profileImageUrl': imageUrl ?? '',
-        'address': 'Ramallah',
+        'address': address,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } on FirebaseAuthException catch (e) {
-      throw Exception(e.message ?? "Registration failed");
+      throw Exception(_authErrorMessage(e.code));
     } catch (e) {
       throw Exception(e.toString().replaceAll("Exception: ", ""));
     }
@@ -87,5 +94,27 @@ class AuthService {
 
   Future<void> logout() async {
     await _auth.signOut();
+  }
+
+  String _authErrorMessage(String code) {
+    switch (code) {
+      case 'invalid-email':
+        return "صيغة البريد الإلكتروني غير صحيحة";
+      case 'user-disabled':
+        return "تم تعطيل هذا الحساب";
+      case 'user-not-found':
+        return "لا يوجد حساب بهذا البريد الإلكتروني";
+      case 'wrong-password':
+      case 'invalid-credential':
+        return "البريد الإلكتروني أو كلمة المرور غير صحيحة";
+      case 'email-already-in-use':
+        return "هذا البريد الإلكتروني مستخدم مسبقاً";
+      case 'weak-password':
+        return "كلمة المرور ضعيفة، استخدم 6 أحرف على الأقل";
+      case 'network-request-failed':
+        return "تحقق من اتصال الإنترنت";
+      default:
+        return "حدث خطأ، يرجى المحاولة مرة أخرى";
+    }
   }
 }

@@ -19,30 +19,53 @@ class AdminDashboard extends StatefulWidget {
 class _AdminDashboardState extends State<AdminDashboard> {
   int selectedIndex = 0;
 
-  late final List<Widget> pages = [
-    AdminHomeScreen(user: widget.user),
-    const AdminUsersScreen(),
-    const AdminComplaintsScreen(),
-    const AdminReportsScreen(),
-    AdminProfileScreen(user: widget.user),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final pages = [
+      AdminHomeScreen(
+        user: widget.user,
+        onNavigate: (index) => setState(() => selectedIndex = index),
+      ),
+      const AdminUsersScreen(),
+      const AdminComplaintsScreen(),
+      const AdminReportsScreen(),
+      AdminProfileScreen(user: widget.user),
+    ];
+
     return Scaffold(
       body: pages[selectedIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
-        indicatorColor: AppColors.secondary.withOpacity(0.2),
+        indicatorColor: AppColors.primaryLight.withOpacity(0.25),
         onDestinationSelected: (index) {
           setState(() => selectedIndex = index);
         },
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard), label: "Home"),
-          NavigationDestination(icon: Icon(Icons.people), label: "Users"),
-          NavigationDestination(icon: Icon(Icons.report), label: "Complaints"),
-          NavigationDestination(icon: Icon(Icons.bar_chart), label: "Reports"),
-          NavigationDestination(icon: Icon(Icons.person), label: "Profile"),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: "الرئيسية",
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people_rounded),
+            label: "المستخدمون",
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.report_outlined),
+            selectedIcon: Icon(Icons.report_rounded),
+            label: "الشكاوى",
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart_rounded),
+            label: "التقارير",
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: "حسابي",
+          ),
         ],
       ),
     );
@@ -51,36 +74,102 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
 class AdminHomeScreen extends StatelessWidget {
   final AppUser user;
+  final ValueChanged<int> onNavigate;
 
-  const AdminHomeScreen({super.key, required this.user});
+  const AdminHomeScreen({
+    super.key,
+    required this.user,
+    required this.onNavigate,
+  });
 
   @override
   Widget build(BuildContext context) {
     final firestore = FirebaseFirestore.instance;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Admin Dashboard")),
+      appBar: AppBar(
+        title: const Text("لوحة التحكم"),
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.notifications_none_rounded),
+          ),
+        ],
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         children: [
-          Text(
-            "Welcome, ${user.name}",
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF10B981),
+                  Color(0xFF059669),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(0.22),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Colors.white,
+                  child: Icon(
+                    Icons.admin_panel_settings_rounded,
+                    color: AppColors.primary,
+                    size: 30,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "مرحباً بعودتك",
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        user.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "راقب الحسابات، الموافقات، الشكاوى، ونشاط النظام من مكان واحد.",
+                        style: TextStyle(
+                          color: Colors.white,
+                          height: 1.5,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          const Text(
-            "Monitor users, approvals, complaints, and system activity.",
-            style: TextStyle(color: AppColors.textLight),
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
           StreamBuilder<QuerySnapshot>(
             stream: firestore.collection('users').snapshots(),
             builder: (context, snapshot) {
               final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
               return _AdminStatCard(
-                title: "Total Users",
+                title: "إجمالي المستخدمين",
                 value: count.toString(),
-                icon: Icons.people,
+                icon: Icons.people_rounded,
               );
             },
           ),
@@ -94,9 +183,9 @@ class AdminHomeScreen extends StatelessWidget {
             builder: (context, snapshot) {
               final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
               return _AdminStatCard(
-                title: "Pending Approval",
+                title: "حسابات بانتظار الموافقة",
                 value: count.toString(),
-                icon: Icons.verified_user,
+                icon: Icons.verified_user_rounded,
               );
             },
           ),
@@ -110,32 +199,39 @@ class AdminHomeScreen extends StatelessWidget {
             builder: (context, snapshot) {
               final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
               return _AdminStatCard(
-                title: "Recent Admin Logs",
+                title: "آخر إجراءات الأدمن",
                 value: count.toString(),
-                icon: Icons.history,
+                icon: Icons.history_rounded,
               );
             },
           ),
           const SizedBox(height: 24),
           const Text(
-            "Quick Management",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            "إدارة سريعة",
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
           ),
-          const SizedBox(height: 10),
-          const _AdminActionTile(
-            icon: Icons.verified_user,
-            title: "Verify New Accounts",
-            subtitle: "Approve restaurants and charities",
+          const SizedBox(height: 12),
+          _AdminActionTile(
+            icon: Icons.verified_user_rounded,
+            title: "مراجعة الحسابات الجديدة",
+            subtitle: "قبول أو رفض حسابات المطاعم والجمعيات",
+            onTap: () => onNavigate(1),
           ),
-          const _AdminActionTile(
-            icon: Icons.warning,
-            title: "Resolve Conflicts",
-            subtitle: "Handle reports and complaints",
+          _AdminActionTile(
+            icon: Icons.warning_amber_rounded,
+            title: "متابعة الشكاوى",
+            subtitle: "مراجعة البلاغات وحل النزاعات",
+            onTap: () => onNavigate(2),
           ),
-          const _AdminActionTile(
-            icon: Icons.analytics,
-            title: "View Reports",
-            subtitle: "Monitor platform activity",
+          _AdminActionTile(
+            icon: Icons.analytics_rounded,
+            title: "عرض التقارير",
+            subtitle: "مراقبة نشاط النظام وسجل الإجراءات",
+            onTap: () => onNavigate(3),
           ),
         ],
       ),
@@ -171,11 +267,26 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   String _filterTitle() {
     if (selectedFilter == PendingFilter.restaurants) {
-      return "Pending Restaurants";
+      return "مطاعم بانتظار الموافقة";
     } else if (selectedFilter == PendingFilter.charities) {
-      return "Pending Charities";
+      return "جمعيات بانتظار الموافقة";
     }
-    return "Accounts Waiting for Approval";
+    return "حسابات بانتظار الموافقة";
+  }
+
+  String _roleLabel(String role) {
+    switch (role) {
+      case 'restaurant':
+        return 'مطعم';
+      case 'charity':
+        return 'جمعية';
+      case 'individual':
+        return 'مستخدم';
+      case 'admin':
+        return 'مدير';
+      default:
+        return role;
+    }
   }
 
   Future<void> _logAdminAction({
@@ -205,14 +316,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
     await _logAdminAction(
       action: 'approve_account',
-      reason: 'Account approved by admin',
+      reason: 'تمت الموافقة على الحساب',
       targetId: userId,
       targetType: data['role'] ?? 'user',
     );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Account approved")),
+      const SnackBar(content: Text("تمت الموافقة على الحساب")),
     );
   }
 
@@ -225,14 +336,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
     await _logAdminAction(
       action: 'reject_account',
-      reason: 'Account rejected by admin',
+      reason: 'تم رفض الحساب',
       targetId: userId,
       targetType: data['role'] ?? 'user',
     );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Account rejected")),
+      const SnackBar(content: Text("تم رفض الحساب")),
     );
   }
 
@@ -244,14 +355,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
     await _logAdminAction(
       action: 'suspend_user',
-      reason: 'Suspended by admin',
+      reason: 'تم تعليق الحساب',
       targetId: userId,
       targetType: data['role'] ?? 'user',
     );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("User suspended")),
+      const SnackBar(content: Text("تم تعليق المستخدم")),
     );
   }
 
@@ -263,14 +374,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
     await _logAdminAction(
       action: 'unsuspend_user',
-      reason: 'Unsuspended by admin',
+      reason: 'تمت إعادة تفعيل الحساب',
       targetId: userId,
       targetType: data['role'] ?? 'user',
     );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("User unsuspended")),
+      const SnackBar(content: Text("تمت إعادة تفعيل المستخدم")),
     );
   }
 
@@ -278,31 +389,31 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Manage Users"),
+        title: const Text("إدارة المستخدمين"),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         children: [
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
               ChoiceChip(
-                label: const Text("All Pending"),
+                label: const Text("الكل"),
                 selected: selectedFilter == PendingFilter.all,
                 onSelected: (_) {
                   setState(() => selectedFilter = PendingFilter.all);
                 },
               ),
               ChoiceChip(
-                label: const Text("Restaurants"),
+                label: const Text("المطاعم"),
                 selected: selectedFilter == PendingFilter.restaurants,
                 onSelected: (_) {
                   setState(() => selectedFilter = PendingFilter.restaurants);
                 },
               ),
               ChoiceChip(
-                label: const Text("Charities"),
+                label: const Text("الجمعيات"),
                 selected: selectedFilter == PendingFilter.charities,
                 onSelected: (_) {
                   setState(() => selectedFilter = PendingFilter.charities);
@@ -313,14 +424,18 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           const SizedBox(height: 20),
           Text(
             _filterTitle(),
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
           ),
           const SizedBox(height: 10),
           StreamBuilder<QuerySnapshot>(
             stream: _pendingAccountsStream(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return Text("Error: ${snapshot.error}");
+                return const Text("حدث خطأ أثناء تحميل الحسابات");
               }
 
               if (!snapshot.hasData) {
@@ -330,12 +445,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               final docs = snapshot.data!.docs;
 
               if (docs.isEmpty) {
-                return const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text("No pending accounts"),
-                  ),
-                );
+                return const _EmptyCard(
+                    text: "لا توجد حسابات بانتظار الموافقة");
               }
 
               return Column(
@@ -344,35 +455,30 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
                   if (data['role'] == 'admin') return const SizedBox.shrink();
 
-                  return Card(
-                    child: ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: AppColors.primary,
-                        child: Icon(Icons.person, color: Colors.white),
+                  return _UserManagementCard(
+                    name: data['fullName'] ?? 'بدون اسم',
+                    email: data['email'] ?? '',
+                    role: _roleLabel(data['role'] ?? ''),
+                    status: "بانتظار الموافقة",
+                    icon: Icons.pending_actions_rounded,
+                    actions: [
+                      IconButton(
+                        tooltip: "موافقة",
+                        icon: const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.primary,
+                        ),
+                        onPressed: () => _approveAccount(doc.id, data),
                       ),
-                      title: Text(data['fullName'] ?? 'No Name'),
-                      subtitle: Text(
-                        "${data['email'] ?? ''}\nRole: ${data['role'] ?? ''}",
+                      IconButton(
+                        tooltip: "رفض",
+                        icon: const Icon(
+                          Icons.cancel_rounded,
+                          color: AppColors.danger,
+                        ),
+                        onPressed: () => _rejectAccount(doc.id, data),
                       ),
-                      isThreeLine: true,
-                      trailing: Wrap(
-                        spacing: 8,
-                        children: [
-                          IconButton(
-                            tooltip: "Approve",
-                            icon: const Icon(Icons.check_circle,
-                                color: AppColors.primary),
-                            onPressed: () => _approveAccount(doc.id, data),
-                          ),
-                          IconButton(
-                            tooltip: "Reject",
-                            icon: const Icon(Icons.cancel,
-                                color: AppColors.danger),
-                            onPressed: () => _rejectAccount(doc.id, data),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   );
                 }).toList(),
               );
@@ -380,8 +486,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           ),
           const SizedBox(height: 24),
           const Text(
-            "Active Users",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            "المستخدمون النشطون",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
           ),
           const SizedBox(height: 10),
           StreamBuilder<QuerySnapshot>(
@@ -397,32 +507,27 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               final docs = snapshot.data!.docs;
 
               if (docs.isEmpty) {
-                return const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text("No active users"),
-                  ),
-                );
+                return const _EmptyCard(text: "لا يوجد مستخدمون نشطون");
               }
 
               return Column(
                 children: docs.map((doc) {
                   final data = doc.data() as Map<String, dynamic>;
+
                   if (data['role'] == 'admin') return const SizedBox.shrink();
 
-                  return Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.person_outline,
-                          color: AppColors.primary),
-                      title: Text(data['fullName'] ?? 'No Name'),
-                      subtitle: Text(
-                        "${data['email'] ?? ''} | ${data['role'] ?? ''}",
-                      ),
-                      trailing: TextButton(
+                  return _UserManagementCard(
+                    name: data['fullName'] ?? 'بدون اسم',
+                    email: data['email'] ?? '',
+                    role: _roleLabel(data['role'] ?? ''),
+                    status: "نشط",
+                    icon: Icons.person_outline_rounded,
+                    actions: [
+                      TextButton(
                         onPressed: () => _suspendUser(doc.id, data),
-                        child: const Text("Suspend"),
+                        child: const Text("تعليق"),
                       ),
-                    ),
+                    ],
                   );
                 }).toList(),
               );
@@ -430,8 +535,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           ),
           const SizedBox(height: 24),
           const Text(
-            "Suspended Users",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            "المستخدمون المعلّقون",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
           ),
           const SizedBox(height: 10),
           StreamBuilder<QuerySnapshot>(
@@ -447,32 +556,27 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               final docs = snapshot.data!.docs;
 
               if (docs.isEmpty) {
-                return const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text("No suspended users"),
-                  ),
-                );
+                return const _EmptyCard(text: "لا يوجد مستخدمون معلّقون");
               }
 
               return Column(
                 children: docs.map((doc) {
                   final data = doc.data() as Map<String, dynamic>;
+
                   if (data['role'] == 'admin') return const SizedBox.shrink();
 
-                  return Card(
-                    child: ListTile(
-                      leading:
-                          const Icon(Icons.lock_open, color: AppColors.primary),
-                      title: Text(data['fullName'] ?? 'No Name'),
-                      subtitle: Text(
-                        "${data['email'] ?? ''} | ${data['role'] ?? ''}",
-                      ),
-                      trailing: TextButton(
+                  return _UserManagementCard(
+                    name: data['fullName'] ?? 'بدون اسم',
+                    email: data['email'] ?? '',
+                    role: _roleLabel(data['role'] ?? ''),
+                    status: "معلّق",
+                    icon: Icons.lock_open_rounded,
+                    actions: [
+                      TextButton(
                         onPressed: () => _unsuspendUser(doc.id, data),
-                        child: const Text("Unsuspend"),
+                        child: const Text("إعادة تفعيل"),
                       ),
-                    ),
+                    ],
                   );
                 }).toList(),
               );
@@ -490,25 +594,34 @@ class AdminComplaintsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final complaints = [
-      "User did not pick up the reserved order",
-      "Restaurant published wrong pickup time",
-      "Duplicate reservation issue",
+      "مستخدم لم يستلم الطلب في الموعد",
+      "مطعم نشر وقت استلام غير صحيح",
+      "مشكلة حجز مكرر لنفس العرض",
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Complaints")),
+      appBar: AppBar(title: const Text("الشكاوى والبلاغات")),
       body: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         itemCount: complaints.length,
         itemBuilder: (context, index) {
           return Card(
             child: ListTile(
-              leading: const Icon(Icons.report, color: AppColors.danger),
-              title: Text(complaints[index]),
-              subtitle: const Text("Status: Under Review"),
+              leading: CircleAvatar(
+                backgroundColor: AppColors.danger.withOpacity(0.12),
+                child: const Icon(
+                  Icons.report_rounded,
+                  color: AppColors.danger,
+                ),
+              ),
+              title: Text(
+                complaints[index],
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text("الحالة: قيد المراجعة"),
               trailing: ElevatedButton(
                 onPressed: () {},
-                child: const Text("Resolve"),
+                child: const Text("حل"),
               ),
             ),
           );
@@ -521,18 +634,37 @@ class AdminComplaintsScreen extends StatelessWidget {
 class AdminReportsScreen extends StatelessWidget {
   const AdminReportsScreen({super.key});
 
+  String _actionLabel(String action) {
+    switch (action) {
+      case 'approve_account':
+        return 'الموافقة على حساب';
+      case 'reject_account':
+        return 'رفض حساب';
+      case 'suspend_user':
+        return 'تعليق مستخدم';
+      case 'unsuspend_user':
+        return 'إعادة تفعيل مستخدم';
+      default:
+        return action;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final firestore = FirebaseFirestore.instance;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Reports")),
+      appBar: AppBar(title: const Text("التقارير والسجلات")),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         children: [
           const Text(
-            "Recent Admin Logs",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            "آخر إجراءات الإدارة",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
           ),
           const SizedBox(height: 10),
           StreamBuilder<QuerySnapshot>(
@@ -543,7 +675,7 @@ class AdminReportsScreen extends StatelessWidget {
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const Text("Error loading logs");
+                return const Text("حدث خطأ أثناء تحميل السجلات");
               }
 
               if (!snapshot.hasData) {
@@ -553,12 +685,7 @@ class AdminReportsScreen extends StatelessWidget {
               final logs = snapshot.data!.docs;
 
               if (logs.isEmpty) {
-                return const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text("No admin logs found"),
-                  ),
-                );
+                return const _EmptyCard(text: "لا توجد سجلات حالياً");
               }
 
               return Column(
@@ -567,11 +694,19 @@ class AdminReportsScreen extends StatelessWidget {
 
                   return Card(
                     child: ListTile(
-                      leading:
-                          const Icon(Icons.history, color: AppColors.primary),
-                      title: Text(data['action'] ?? 'No Action'),
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.primary.withOpacity(0.12),
+                        child: const Icon(
+                          Icons.history_rounded,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      title: Text(
+                        _actionLabel(data['action'] ?? ''),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       subtitle: Text(
-                        "Reason: ${data['reason'] ?? ''}\nTarget: ${data['targetType'] ?? ''}",
+                        "السبب: ${data['reason'] ?? ''}\nالنوع: ${data['targetType'] ?? ''}",
                       ),
                     ),
                   );
@@ -593,9 +728,9 @@ class AdminProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _ProfileLayout(
-      title: "Admin Profile",
+      title: "حساب المدير",
       name: user.name,
-      role: user.role,
+      role: "مدير النظام",
       email: user.email,
       phone: user.phone,
       address: user.address,
@@ -617,28 +752,44 @@ class _AdminStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: Row(
         children: [
           CircleAvatar(
+            radius: 24,
             backgroundColor: AppColors.primary.withOpacity(0.12),
             child: Icon(icon, color: AppColors.primary),
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Text(title,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textDark,
+              ),
+            ),
           ),
-          Text(value,
-              style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primaryDark,
+            ),
+          ),
         ],
       ),
     );
@@ -649,24 +800,78 @@ class _AdminActionTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final VoidCallback onTap;
 
   const _AdminActionTile({
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: AppColors.primary.withOpacity(0.12),
           child: Icon(icon, color: AppColors.primary),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textDark,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(color: AppColors.textLight),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+      ),
+    );
+  }
+}
+
+class _UserManagementCard extends StatelessWidget {
+  final String name;
+  final String email;
+  final String role;
+  final String status;
+  final IconData icon;
+  final List<Widget> actions;
+
+  const _UserManagementCard({
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.status,
+    required this.icon,
+    required this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: AppColors.primary.withOpacity(0.12),
+          child: Icon(icon, color: AppColors.primary),
+        ),
+        title: Text(
+          name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text("$email\nالدور: $role • الحالة: $status"),
+        isThreeLine: true,
+        trailing: Wrap(
+          spacing: 6,
+          children: actions,
+        ),
       ),
     );
   }
@@ -693,28 +898,41 @@ class _ProfileLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            const CircleAvatar(
-              radius: 48,
-              backgroundColor: AppColors.primary,
-              child: Icon(Icons.admin_panel_settings,
-                  color: Colors.white, size: 55),
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          const SizedBox(height: 10),
+          const CircleAvatar(
+            radius: 48,
+            backgroundColor: AppColors.primary,
+            child: Icon(
+              Icons.admin_panel_settings_rounded,
+              color: Colors.white,
+              size: 52,
             ),
-            const SizedBox(height: 14),
-            Text(name,
-                style:
-                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            Text(role.toUpperCase()),
-            const SizedBox(height: 24),
-            _ProfileTile(icon: Icons.email, title: "Email", value: email),
-            _ProfileTile(icon: Icons.phone, title: "Phone", value: phone),
-            _ProfileTile(
-                icon: Icons.location_on, title: "Address", value: address),
-          ],
-        ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            name,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            role,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textLight),
+          ),
+          const SizedBox(height: 24),
+          _ProfileTile(
+              icon: Icons.email_outlined, title: "البريد", value: email),
+          _ProfileTile(
+              icon: Icons.phone_outlined, title: "الهاتف", value: phone),
+          _ProfileTile(
+            icon: Icons.location_on_outlined,
+            title: "العنوان",
+            value: address,
+          ),
+        ],
       ),
     );
   }
@@ -737,7 +955,27 @@ class _ProfileTile extends StatelessWidget {
       child: ListTile(
         leading: Icon(icon, color: AppColors.primary),
         title: Text(title),
-        subtitle: Text(value),
+        subtitle: Text(value.isEmpty ? "غير محدد" : value),
+      ),
+    );
+  }
+}
+
+class _EmptyCard extends StatelessWidget {
+  final String text;
+
+  const _EmptyCard({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.textLight),
+        ),
       ),
     );
   }

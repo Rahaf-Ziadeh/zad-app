@@ -37,8 +37,7 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> handleSignup() async {
     final name = nameController.text.trim();
     final email = emailController.text.trim();
-    final phone =
-        "$selectedCountryCode${phoneController.text.trim()}";
+    final phone = "$selectedCountryCode${phoneController.text.trim()}";
     final address = addressController.text.trim();
     final password = passwordController.text.trim();
 
@@ -62,7 +61,7 @@ class _SignupScreenState extends State<SignupScreen> {
         password: password,
         phone: phone,
         role: selectedRole,
-        imageUrl: null,
+        address: address,
       );
 
       if (!mounted) return;
@@ -202,9 +201,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 prefixIcon: const Icon(Icons.lock),
                 suffixIcon: IconButton(
                   icon: Icon(
-                    isPasswordVisible
-                        ? Icons.visibility_off
-                        : Icons.visibility,
+                    isPasswordVisible ? Icons.visibility_off : Icons.visibility,
                   ),
                   onPressed: () {
                     setState(() {
