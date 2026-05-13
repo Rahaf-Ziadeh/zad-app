@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import '../../services/notification_service.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
 
@@ -313,7 +313,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       'status': 'active',
       'updatedAt': FieldValue.serverTimestamp(),
     });
-
+    await NotificationService().sendNotification(
+      userId: userId,
+      title: "تم قبول الحساب",
+      message: "تمت الموافقة على حسابك ويمكنك الآن استخدام التطبيق.",
+      type: "account",
+    );
     await _logAdminAction(
       action: 'approve_account',
       reason: 'تمت الموافقة على الحساب',
@@ -333,7 +338,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       'status': 'rejected',
       'updatedAt': FieldValue.serverTimestamp(),
     });
-
+    await NotificationService().sendNotification(
+      userId: userId,
+      title: "تم رفض الحساب",
+      message: "عذراً، تم رفض طلب إنشاء الحساب.",
+      type: "account",
+    );
     await _logAdminAction(
       action: 'reject_account',
       reason: 'تم رفض الحساب',
@@ -352,7 +362,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       'status': 'suspended',
       'updatedAt': FieldValue.serverTimestamp(),
     });
-
+    await NotificationService().sendNotification(
+      userId: userId,
+      title: "تم تعليق الحساب",
+      message: "تم تعليق حسابك مؤقتاً من قبل الإدارة.",
+      type: "account",
+    );
     await _logAdminAction(
       action: 'suspend_user',
       reason: 'تم تعليق الحساب',

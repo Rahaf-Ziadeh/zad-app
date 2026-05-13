@@ -43,13 +43,7 @@ class AuthService {
         throw Exception("حسابك بانتظار موافقة الإدارة");
       }
 
-      return AppUser(
-        name: data["fullName"] ?? "مستخدم",
-        email: data["email"] ?? email,
-        role: role,
-        phone: data["phone"] ?? "",
-        address: data["address"] ?? "",
-      );
+      return AppUser.fromMap(uid, data);
     } on FirebaseAuthException catch (e) {
       throw Exception(_authErrorMessage(e.code));
     } catch (e) {
@@ -82,6 +76,7 @@ class AuthService {
         'status': 'active',
         'isApproved': role == 'individual',
         'address': address,
+        'points': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });

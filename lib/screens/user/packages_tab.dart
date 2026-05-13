@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../services/reservation_service.dart';
+import 'qr_code_screen.dart';
 import '../../theme/app_colors.dart';
 
 class PackagesTab extends StatelessWidget {
@@ -124,13 +126,38 @@ class PackagesTab extends StatelessWidget {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                      "ميزة حجز الباقة سيتم إضافتها لاحقاً"),
-                                ),
-                              );
+                            onPressed: () async {
+                              try {
+                                final reservationId =
+                                    await ReservationService().reserveOffer(
+                                  offerId: packages[index].id,
+                                  offerData: data,
+                                );
+
+                                final userId =
+                                    FirebaseAuth.instance.currentUser!.uid;
+
+                                if (!context.mounted) return;
+
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => QrCodeScreen(
+                                      reservationId: reservationId,
+                                      offerId: packages[index].id,
+                                      userId: userId,
+                                    ),
+                                  ),
+                                );
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(e
+                                        .toString()
+                                        .replaceAll("Exception: ", "")),
+                                  ),
+                                );
+                              }
                             },
                             icon: const Icon(Icons.shopping_bag_outlined),
                             label: const Text("حجز الباقة"),

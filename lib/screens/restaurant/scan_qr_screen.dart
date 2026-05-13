@@ -90,6 +90,14 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
         'status': 'picked_up',
         'pickedAt': FieldValue.serverTimestamp(),
       });
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'userId': userId,
+        'title': 'تم تأكيد الاستلام',
+        'message': 'تم استلام طلبك بنجاح. نتمنى لك وجبة شهية ❤️',
+        'type': 'pickup',
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
       _showResultDialog(
         title: "تم تأكيد الاستلام",

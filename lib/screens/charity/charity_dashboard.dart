@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
+import '../../services/notification_service.dart';
 
 class CharityDashboard extends StatefulWidget {
   final AppUser user;
@@ -275,6 +276,13 @@ class CharityDonationsScreen extends StatelessWidget {
     String status,
   ) async {
     try {
+      final donationDoc = await FirebaseFirestore.instance
+          .collection('donations')
+          .doc(donationId)
+          .get();
+
+      final data = donationDoc.data() as Map<String, dynamic>;
+
       await FirebaseFirestore.instance
           .collection('donations')
           .doc(donationId)
@@ -282,6 +290,25 @@ class CharityDonationsScreen extends StatelessWidget {
         'status': status,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // 🔔 إرسال إشعار
+      if (status == 'approved') {
+        await NotificationService().sendNotification(
+          userId: data['userId'],
+          title: "تم قبول التبرع",
+          message: "وافقت الجمعية على تبرع الطعام الخاص بك.",
+          type: "donation",
+        );
+      }
+
+      if (status == 'rejected') {
+        await NotificationService().sendNotification(
+          userId: data['userId'],
+          title: "تم رفض التبرع",
+          message: "عذراً، تم رفض التبرع الخاص بك.",
+          type: "donation",
+        );
+      }
 
       if (!context.mounted) return;
 
@@ -292,7 +319,7 @@ class CharityDonationsScreen extends StatelessWidget {
                 ? "تم قبول التبرع"
                 : status == 'rejected'
                     ? "تم رفض التبرع"
-                    : "تم تحديث حالة التبرع",
+                    : "تم تحديث الحالة",
           ),
         ),
       );

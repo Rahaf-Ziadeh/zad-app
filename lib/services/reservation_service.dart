@@ -47,14 +47,26 @@ class ReservationService {
         'reservationId': reservationRef.id,
         'offerId': offerId,
         'offerTitle': data['title'] ?? '',
+        'offerType': data['offerType'] ?? '',
+        'imageUrl': data['imageUrl'] ?? '',
         'userId': user.uid,
         'providerUserId': data['providerUserId'] ?? '',
         'providerRole': data['providerRole'] ?? '',
+        'pickupLocation': data['pickupLocation'] ?? '',
+        'price': data['discountPrice'] ?? data['price'] ?? 0,
+        'currency': data['currency'] ?? 'ILS',
         'status': 'reserved',
         'createdAt': FieldValue.serverTimestamp(),
       });
     });
-
+    await firestore.collection('notifications').add({
+      'userId': user.uid,
+      'title': 'تم تأكيد الحجز',
+      'message': 'تم حجز العرض بنجاح ويمكنك الآن استخدام رمز QR للاستلام.',
+      'type': 'reservation',
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
     return reservationRef.id;
   }
 }
