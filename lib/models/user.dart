@@ -20,19 +20,18 @@ class AppUser {
   factory AppUser.fromMap(String uid, Map<String, dynamic> map) {
     return AppUser(
       uid: uid,
-      name: map['fullName'] ?? map['name'] ?? '',
+      name: map['name'] ?? '',
       email: map['email'] ?? '',
       role: map['role'] ?? 'individual',
       phone: map['phone'] ?? '',
       address: map['address'] ?? '',
-      photoUrl: map['photoUrl'] ?? map['profileImageUrl'],
+      photoUrl: map['photoUrl'],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'uid': uid,
-      'fullName': name,
+      'name': name,
       'email': email,
       'role': role,
       'phone': phone,

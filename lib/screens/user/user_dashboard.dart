@@ -527,8 +527,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // final uid =
-      //   (await FirebaseFirestore.instance.collection('_').get()).metadata;
+      final uid =
+          (await FirebaseFirestore.instance.collection('_').get()).metadata;
       // نستخدم Firebase Auth
       final userId = _getCurrentUserId();
 

@@ -2,6 +2,50 @@ import 'package:flutter/material.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
+// ─────────────────────────────────────────────
+// بيانات صفحات الـ Onboarding
+// ─────────────────────────────────────────────
+class _OnboardingPage {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+
+  const _OnboardingPage({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+}
+
+const _pages = [
+  _OnboardingPage(
+    title: 'مرحباً بك في زاد',
+    subtitle:
+        'اكتشف الطعام الفائض من المطاعم والأفراد القريبين منك وساهم في تقليل الهدر.',
+    icon: Icons.eco_rounded,
+    color: Color(0xFF059669),
+  ),
+  _OnboardingPage(
+    title: 'وفّر وشارك',
+    subtitle:
+        'احجز وجبات مجانية أو بأسعار رمزية، أو تبرع بطعامك الفائض لمن يحتاجه.',
+    icon: Icons.volunteer_activism_rounded,
+    color: Color(0xFFE11D48),
+  ),
+  _OnboardingPage(
+    title: 'معاً نقلل الهدر',
+    subtitle:
+        'انضم لآلاف المستخدمين والمطاعم والجمعيات في رحلة بناء مجتمع أكثر استدامة.',
+    icon: Icons.people_rounded,
+    color: Color(0xFF7C3AED),
+  ),
+];
+
+// ─────────────────────────────────────────────
+// WelcomeScreen
+// ─────────────────────────────────────────────
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -10,211 +54,362 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+    with TickerProviderStateMixin {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  // كل صفحة عندها controller خاص فيها
+  late final List<AnimationController> _controllers;
+  late final List<Animation<double>> _fades;
+  late final List<Animation<Offset>> _slides;
 
   @override
   void initState() {
     super.initState();
-
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
+    _controllers = List.generate(
+      _pages.length,
+      (_) => AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 700),
+      ),
     );
 
-    _fadeAnimation = Tween<double>(
-      begin: 0,
-      end: 1,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
+    _fades = _controllers
+        .map((c) => Tween<double>(begin: 0, end: 1).animate(
+              CurvedAnimation(parent: c, curve: Curves.easeIn),
+            ))
+        .toList();
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.2),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+    _slides = _controllers
+        .map((c) => Tween<Offset>(
+              begin: const Offset(0, 0.18),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: c, curve: Curves.easeOutBack)))
+        .toList();
 
-    _controller.forward();
+    // شغّل أنيميشن الصفحة الأولى فوراً
+    _controllers[0].forward();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pageController.dispose();
+    for (final c in _controllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _goToLogin() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
+  void _onPageChanged(int index) {
+    setState(() => _currentPage = index);
+    _controllers[index].forward(from: 0);
   }
 
-  void _goToSignup() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SignupScreen()),
-    );
+  void _nextPage() {
+    if (_currentPage < _pages.length - 1) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
   }
+
+  void _goToLogin() => Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+
+  void _goToSignup() => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SignupScreen()),
+      );
 
   @override
   Widget build(BuildContext context) {
+    final isLast = _currentPage == _pages.length - 1;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAF9),
+      backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: Padding(
+        child: Column(
+          children: [
+            // ── زر تخطي ──
+            Align(
+              alignment: AlignmentDirectional.topEnd,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 12, 20, 0),
+                child: TextButton(
+                  onPressed: _goToLogin,
+                  child: const Text(
+                    'تخطي',
+                    style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
+
+            // ── الصفحات ──
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                onPageChanged: _onPageChanged,
+                itemCount: _pages.length,
+                itemBuilder: (context, index) {
+                  final page = _pages[index];
+                  return FadeTransition(
+                    opacity: _fades[index],
+                    child: SlideTransition(
+                      position: _slides[index],
+                      child: _OnboardingPageWidget(page: page),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // ── Dots ──
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                _pages.length,
+                (i) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: _currentPage == i ? 24 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _currentPage == i
+                        ? _pages[i].color
+                        : const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 36),
+
+            // ── الأزرار ──
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Column(
                 children: [
-                  const Spacer(flex: 2),
-
-                  Hero(
-                    tag: 'zad_logo',
-                    child: Image.asset(
-                      'assets/images/zad_logo.png',
-                      height: 125,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(
-                        Icons.eco_rounded,
-                        size: 105,
-                        color: Color(0xFF10B981),
+                  if (isLast) ...[
+                    _PrimaryButton(
+                      text: 'إنشاء حساب',
+                      color: const Color(0xFF059669),
+                      onPressed: _goToSignup,
+                    ),
+                    const SizedBox(height: 12),
+                    _OutlineButton(
+                      text: 'تسجيل الدخول',
+                      onPressed: _goToLogin,
+                    ),
+                  ] else ...[
+                    _PrimaryButton(
+                      text: 'التالي',
+                      color: _pages[_currentPage].color,
+                      onPressed: _nextPage,
+                      icon: Icons.arrow_back_ios_rounded,
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: _goToLogin,
+                      child: const Text(
+                        'لديك حساب؟ تسجيل الدخول',
+                        style:
+                            TextStyle(color: Color(0xFF6B7280), fontSize: 14),
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  const Text(
-                    'مرحباً بك في زاد',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF064E3B),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  const Text(
-                    'وفّر الطعام… وشارك الخير',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Color(0xFF059669),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-
-                  const SizedBox(height: 28),
-
-                  const Text(
-                    'اكتشف الطعام الفائض من المطاعم والأفراد والجمعيات القريبة منك، وساهم في تقليل الهدر ودعم المجتمع.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.black54,
-                      height: 1.8,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-
-                  const Spacer(flex: 3),
-
-                  _buildButton(
-                    text: "إنشاء حساب",
-                    isPrimary: true,
-                    onPressed: _goToSignup,
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  _buildButton(
-                    text: "تسجيل الدخول",
-                    isPrimary: false,
-                    onPressed: _goToLogin,
-                  ),
-
-                  const SizedBox(height: 35),
+                  ],
                 ],
               ),
             ),
-          ),
+
+            const SizedBox(height: 28),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildButton({
-    required String text,
-    required bool isPrimary,
-    required VoidCallback onPressed,
-  }) {
+// ─────────────────────────────────────────────
+// صفحة onboarding واحدة
+// ─────────────────────────────────────────────
+class _OnboardingPageWidget extends StatelessWidget {
+  final _OnboardingPage page;
+
+  const _OnboardingPageWidget({required this.page});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // ── أيقونة كبيرة ──
+          Container(
+            width: 140,
+            height: 140,
+            decoration: BoxDecoration(
+              color: page.color.withOpacity(0.10),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: page.color.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(page.icon, size: 52, color: page.color),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 40),
+
+          // ── شعار زاد ──
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.eco_rounded, color: page.color, size: 20),
+              const SizedBox(width: 6),
+              Text(
+                'زاد',
+                style: TextStyle(
+                  color: page.color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          Text(
+            page.title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF111827),
+              height: 1.3,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          Text(
+            page.subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              color: Color(0xFF6B7280),
+              height: 1.8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Buttons
+// ─────────────────────────────────────────────
+class _PrimaryButton extends StatelessWidget {
+  final String text;
+  final Color color;
+  final VoidCallback onPressed;
+  final IconData? icon;
+
+  const _PrimaryButton({
+    required this.text,
+    required this.color,
+    required this.onPressed,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       height: 56,
-      decoration: isPrimary
-          ? BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF34D399),
-                  Color(0xFF059669),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(32),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF059669).withOpacity(0.28),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            )
-          : null,
-      child: isPrimary
-          ? ElevatedButton(
-              onPressed: onPressed,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(32),
-                ),
-              ),
-              child: Text(
-                text,
-                style: const TextStyle(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color.withOpacity(0.85), color],
+        ),
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.30),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              text,
+              style: const TextStyle(
                   color: Colors.white,
                   fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            )
-          : OutlinedButton(
-              onPressed: onPressed,
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(
-                  color: Color(0xFF10B981),
-                  width: 1.6,
-                ),
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(32),
-                ),
-              ),
-              child: Text(
-                text,
-                style: const TextStyle(
-                  color: Color(0xFF059669),
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+                  fontWeight: FontWeight.bold),
             ),
+            if (icon != null) ...[
+              const SizedBox(width: 8),
+              Icon(icon, color: Colors.white, size: 16),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OutlineButton extends StatelessWidget {
+  final String text;
+  final VoidCallback onPressed;
+
+  const _OutlineButton({required this.text, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: Color(0xFF059669), width: 1.6),
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Color(0xFF059669),
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
     );
   }
 }

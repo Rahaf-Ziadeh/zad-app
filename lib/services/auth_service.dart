@@ -17,37 +17,31 @@ class AuthService {
       final uid = credential.user!.uid;
       final userDoc = await _firestore.collection('users').doc(uid).get();
 
-      if (!userDoc.exists) {
-        throw Exception("بيانات المستخدم غير موجودة");
-      }
+      if (!userDoc.exists) throw Exception('بيانات المستخدم غير موجودة');
 
       final data = userDoc.data()!;
+      final role = data['role'] ?? 'individual';
+      final status = data['status'] ?? 'active';
+      final isApproved = data['isApproved'] ?? false;
 
-      final role = data["role"] ?? "individual";
-      final status = data["status"] ?? "active";
-      final isApproved = data["isApproved"] ?? false;
-
-      if (status == "suspended") {
-        throw Exception("تم تعليق هذا الحساب من قبل الإدارة");
+      if (status == 'suspended') {
+        throw Exception('تم تعليق هذا الحساب من قبل الإدارة');
       }
-
-      if (status == "rejected") {
-        throw Exception("تم رفض هذا الحساب من قبل الإدارة");
+      if (status == 'rejected') {
+        throw Exception('تم رفض هذا الحساب من قبل الإدارة');
       }
-
-      if (status != "active") {
-        throw Exception("هذا الحساب غير نشط حالياً");
+      if (status != 'active') {
+        throw Exception('هذا الحساب غير نشط حالياً');
       }
-
-      if ((role == "restaurant" || role == "charity") && isApproved == false) {
-        throw Exception("حسابك بانتظار موافقة الإدارة");
+      if ((role == 'restaurant' || role == 'charity') && !isApproved) {
+        throw Exception('حسابك بانتظار موافقة الإدارة');
       }
 
       return AppUser.fromMap(uid, data);
     } on FirebaseAuthException catch (e) {
       throw Exception(_authErrorMessage(e.code));
     } catch (e) {
-      throw Exception(e.toString().replaceAll("Exception: ", ""));
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
     }
   }
 
@@ -69,13 +63,15 @@ class AuthService {
 
       await _firestore.collection('users').doc(uid).set({
         'uid': uid,
-        'fullName': fullName,
+        'name': fullName, // ← متوافق مع AppUser.fromMap
+        'fullName': fullName, // ← نحتفظ بهاد برضو للأدمن
         'email': email,
         'phone': phone,
         'role': role,
-        'status': 'active',
-        'isApproved': role == 'individual',
         'address': address,
+        'status': 'active',
+        'isApproved': role == 'individual' || role == 'admin',
+        'photoUrl': null,
         'points': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -83,7 +79,7 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw Exception(_authErrorMessage(e.code));
     } catch (e) {
-      throw Exception(e.toString().replaceAll("Exception: ", ""));
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
     }
   }
 
@@ -91,25 +87,33 @@ class AuthService {
     await _auth.signOut();
   }
 
+  // ── مستمع حالة المستخدم ──
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  // ── المستخدم الحالي ──
+  User? get currentUser => _auth.currentUser;
+
   String _authErrorMessage(String code) {
     switch (code) {
       case 'invalid-email':
-        return "صيغة البريد الإلكتروني غير صحيحة";
+        return 'صيغة البريد الإلكتروني غير صحيحة';
       case 'user-disabled':
-        return "تم تعطيل هذا الحساب";
+        return 'تم تعطيل هذا الحساب';
       case 'user-not-found':
-        return "لا يوجد حساب بهذا البريد الإلكتروني";
+        return 'لا يوجد حساب بهذا البريد الإلكتروني';
       case 'wrong-password':
       case 'invalid-credential':
-        return "البريد الإلكتروني أو كلمة المرور غير صحيحة";
+        return 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
       case 'email-already-in-use':
-        return "هذا البريد الإلكتروني مستخدم مسبقاً";
+        return 'هذا البريد الإلكتروني مستخدم مسبقاً';
       case 'weak-password':
-        return "كلمة المرور ضعيفة، استخدم 6 أحرف على الأقل";
+        return 'كلمة المرور ضعيفة، استخدم 6 أحرف على الأقل';
       case 'network-request-failed':
-        return "تحقق من اتصال الإنترنت";
+        return 'تحقق من اتصال الإنترنت';
+      case 'too-many-requests':
+        return 'محاولات كثيرة، انتظر قليلاً وأعد المحاولة';
       default:
-        return "حدث خطأ، يرجى المحاولة مرة أخرى";
+        return 'حدث خطأ، يرجى المحاولة مرة أخرى';
     }
   }
 }
