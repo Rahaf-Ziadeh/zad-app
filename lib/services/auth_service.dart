@@ -24,15 +24,11 @@ class AuthService {
       final status = data['status'] ?? 'active';
       final isApproved = data['isApproved'] ?? false;
 
-      if (status == 'suspended') {
+      if (status == 'suspended')
         throw Exception('تم تعليق هذا الحساب من قبل الإدارة');
-      }
-      if (status == 'rejected') {
+      if (status == 'rejected')
         throw Exception('تم رفض هذا الحساب من قبل الإدارة');
-      }
-      if (status != 'active') {
-        throw Exception('هذا الحساب غير نشط حالياً');
-      }
+      if (status != 'active') throw Exception('هذا الحساب غير نشط حالياً');
       if ((role == 'restaurant' || role == 'charity') && !isApproved) {
         throw Exception('حسابك بانتظار موافقة الإدارة');
       }
@@ -52,6 +48,7 @@ class AuthService {
     required String phone,
     required String role,
     required String address,
+    String? nationalId, // ← جديد
   }) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -63,12 +60,13 @@ class AuthService {
 
       await _firestore.collection('users').doc(uid).set({
         'uid': uid,
-        'name': fullName, // ← متوافق مع AppUser.fromMap
-        'fullName': fullName, // ← نحتفظ بهاد برضو للأدمن
+        'name': fullName,
+        'fullName': fullName,
         'email': email,
         'phone': phone,
         'role': role,
         'address': address,
+        'nationalId': nationalId ?? '', // ← يُحفظ في Firestore
         'status': 'active',
         'isApproved': role == 'individual' || role == 'admin',
         'photoUrl': null,
@@ -83,14 +81,9 @@ class AuthService {
     }
   }
 
-  Future<void> logout() async {
-    await _auth.signOut();
-  }
+  Future<void> logout() async => await _auth.signOut();
 
-  // ── مستمع حالة المستخدم ──
   Stream<User?> get authStateChanges => _auth.authStateChanges();
-
-  // ── المستخدم الحالي ──
   User? get currentUser => _auth.currentUser;
 
   String _authErrorMessage(String code) {

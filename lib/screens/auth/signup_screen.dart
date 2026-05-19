@@ -20,6 +20,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _addressController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _nationalIdController = TextEditingController(); // ← جديد
 
   String _selectedRole = 'individual';
   String _selectedCountryCode = '+970';
@@ -28,7 +29,6 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _isLoading = false;
   bool _acceptedTerms = false;
 
-  // ── password strength ──
   double _passwordStrength = 0;
   String _passwordStrengthLabel = '';
   Color _passwordStrengthColor = AppColors.danger;
@@ -47,13 +47,13 @@ class _SignupScreenState extends State<SignupScreen> {
     _addressController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _nationalIdController.dispose();
     super.dispose();
   }
 
   void _updatePasswordStrength() {
     final p = _passwordController.text;
     double strength = 0;
-
     if (p.length >= 6) strength += 0.2;
     if (p.length >= 10) strength += 0.2;
     if (p.contains(RegExp(r'[A-Z]'))) strength += 0.2;
@@ -62,22 +62,11 @@ class _SignupScreenState extends State<SignupScreen> {
 
     String label;
     Color color;
-    if (strength <= 0.2) {
-      label = 'ضعيفة جداً';
-      color = AppColors.danger;
-    } else if (strength <= 0.4) {
-      label = 'ضعيفة';
-      color = Colors.orange;
-    } else if (strength <= 0.6) {
-      label = 'متوسطة';
-      color = AppColors.secondary;
-    } else if (strength <= 0.8) {
-      label = 'جيدة';
-      color = AppColors.primary;
-    } else {
-      label = 'قوية جداً ✓';
-      color = AppColors.success;
-    }
+    if (strength <= 0.2) { label = 'ضعيفة جداً'; color = AppColors.danger; }
+    else if (strength <= 0.4) { label = 'ضعيفة'; color = Colors.orange; }
+    else if (strength <= 0.6) { label = 'متوسطة'; color = AppColors.secondary; }
+    else if (strength <= 0.8) { label = 'جيدة'; color = AppColors.primary; }
+    else { label = 'قوية جداً ✓'; color = AppColors.success; }
 
     setState(() {
       _passwordStrength = strength;
@@ -86,7 +75,7 @@ class _SignupScreenState extends State<SignupScreen> {
     });
   }
 
-  // ── validation ──
+  // ── Validators ──
   String? _validateName(String? v) {
     if (v == null || v.trim().isEmpty) return 'يرجى إدخال الاسم';
     if (v.trim().length < 3) return 'الاسم يجب أن يكون 3 أحرف على الأقل';
@@ -95,8 +84,9 @@ class _SignupScreenState extends State<SignupScreen> {
 
   String? _validateEmail(String? v) {
     if (v == null || v.trim().isEmpty) return 'يرجى إدخال البريد الإلكتروني';
-    final regex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$');
-    if (!regex.hasMatch(v.trim())) return 'صيغة البريد الإلكتروني غير صحيحة';
+    if (!RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$').hasMatch(v.trim())) {
+      return 'صيغة البريد الإلكتروني غير صحيحة';
+    }
     return null;
   }
 
@@ -108,6 +98,13 @@ class _SignupScreenState extends State<SignupScreen> {
 
   String? _validateAddress(String? v) {
     if (v == null || v.trim().isEmpty) return 'يرجى إدخال العنوان';
+    return null;
+  }
+
+  String? _validateNationalId(String? v) {
+    if (v == null || v.trim().isEmpty) return 'رقم الهوية مطلوب';
+    if (v.trim().length < 7) return 'رقم الهوية يجب أن يكون 7 أرقام على الأقل';
+    if (!RegExp(r'^\d+$').hasMatch(v.trim())) return 'رقم الهوية يجب أن يحتوي أرقام فقط';
     return null;
   }
 
@@ -146,17 +143,16 @@ class _SignupScreenState extends State<SignupScreen> {
         phone: '$_selectedCountryCode${_phoneController.text.trim()}',
         role: _selectedRole,
         address: _addressController.text.trim(),
+        nationalId: _nationalIdController.text.trim(), // ← يُرسل للـ service
       );
 
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('تم إنشاء الحساب بنجاح ✅'),
           backgroundColor: AppColors.success,
         ),
       );
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -176,27 +172,19 @@ class _SignupScreenState extends State<SignupScreen> {
 
   String _roleLabel(String role) {
     switch (role) {
-      case 'individual':
-        return 'مستخدم عادي';
-      case 'restaurant':
-        return 'مطعم';
-      case 'charity':
-        return 'جمعية خيرية';
-      default:
-        return role;
+      case 'individual': return 'مستخدم عادي';
+      case 'restaurant': return 'مطعم';
+      case 'charity': return 'جمعية خيرية';
+      default: return role;
     }
   }
 
   IconData _roleIcon(String role) {
     switch (role) {
-      case 'individual':
-        return Icons.person_rounded;
-      case 'restaurant':
-        return Icons.restaurant_rounded;
-      case 'charity':
-        return Icons.volunteer_activism_rounded;
-      default:
-        return Icons.badge_rounded;
+      case 'individual': return Icons.person_rounded;
+      case 'restaurant': return Icons.restaurant_rounded;
+      case 'charity': return Icons.volunteer_activism_rounded;
+      default: return Icons.badge_rounded;
     }
   }
 
@@ -216,25 +204,19 @@ class _SignupScreenState extends State<SignupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ──
-              const Text(
-                'انضم إلى زاد 🌱',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
-                ),
-              ),
+              const Text('انضم إلى زاد 🌱',
+                  style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark)),
               const SizedBox(height: 6),
-              const Text(
-                'أنشئ حسابك وابدأ بالمساهمة في تقليل هدر الطعام',
-                style: TextStyle(color: AppColors.textLight, fontSize: 14),
-              ),
+              const Text('أنشئ حسابك وابدأ بالمساهمة في تقليل هدر الطعام',
+                  style: TextStyle(color: AppColors.textLight, fontSize: 14)),
 
               const SizedBox(height: 24),
 
-              // ── نوع الحساب أولاً ──
-              const _SectionLabel(label: 'نوع الحساب'),
+              // ── نوع الحساب ──
+              const _Label(text: 'نوع الحساب'),
               const SizedBox(height: 10),
               Row(
                 children: ['individual', 'restaurant', 'charity'].map((role) {
@@ -252,32 +234,26 @@ class _SignupScreenState extends State<SignupScreen> {
                               : Colors.white,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color:
-                                selected ? AppColors.primary : AppColors.border,
+                            color: selected ? AppColors.primary : AppColors.border,
                             width: selected ? 1.5 : 1,
                           ),
                         ),
                         child: Column(
                           children: [
-                            Icon(
-                              _roleIcon(role),
-                              color: selected
-                                  ? AppColors.primary
-                                  : AppColors.textLight,
-                              size: 22,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _roleLabel(role),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                            Icon(_roleIcon(role),
                                 color: selected
                                     ? AppColors.primary
                                     : AppColors.textLight,
-                              ),
-                            ),
+                                size: 22),
+                            const SizedBox(height: 4),
+                            Text(_roleLabel(role),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: selected
+                                        ? AppColors.primary
+                                        : AppColors.textLight)),
                           ],
                         ),
                       ),
@@ -298,7 +274,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // ── الاسم ──
+                      // الاسم
                       TextFormField(
                         controller: _nameController,
                         validator: _validateName,
@@ -311,10 +287,9 @@ class _SignupScreenState extends State<SignupScreen> {
                           prefixIcon: const Icon(Icons.person_outline_rounded),
                         ),
                       ),
-
                       const SizedBox(height: 14),
 
-                      // ── البريد ──
+                      // البريد
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
@@ -324,10 +299,9 @@ class _SignupScreenState extends State<SignupScreen> {
                           prefixIcon: Icon(Icons.email_outlined),
                         ),
                       ),
-
                       const SizedBox(height: 14),
 
-                      // ── الهاتف ──
+                      // الهاتف
                       TextFormField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
@@ -367,10 +341,9 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 14),
 
-                      // ── العنوان ──
+                      // العنوان
                       TextFormField(
                         controller: _addressController,
                         validator: _validateAddress,
@@ -379,10 +352,52 @@ class _SignupScreenState extends State<SignupScreen> {
                           prefixIcon: Icon(Icons.location_on_outlined),
                         ),
                       ),
+                      const SizedBox(height: 14),
+
+                      // ── رقم الهوية ── جديد
+                      TextFormField(
+                        controller: _nationalIdController,
+                        keyboardType: TextInputType.number,
+                        validator: _validateNationalId,
+                        decoration: const InputDecoration(
+                          labelText: 'رقم الهوية الوطنية *',
+                          hintText: 'مثال: 123456789',
+                          prefixIcon: Icon(Icons.badge_outlined),
+                        ),
+                      ),
+
+                      // تنبيه رقم الهوية
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: AppColors.secondary.withOpacity(0.3)),
+                        ),
+                        child: const Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.info_outline_rounded,
+                                color: AppColors.secondary, size: 16),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'رقم هويتك يُستخدم فقط للتحقق من الهوية في حال حدوث أي مشكلة تتعلق بسلامة الغذاء. لن يُشارك مع أي طرف آخر.',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.secondary,
+                                    height: 1.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
                       const SizedBox(height: 14),
 
-                      // ── كلمة المرور ──
+                      // كلمة المرور
                       TextFormField(
                         controller: _passwordController,
                         obscureText: !_showPassword,
@@ -400,48 +415,38 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
 
-                      // ── مؤشر قوة الباسورد ──
+                      // مؤشر قوة الباسورد
                       if (_passwordStrengthLabel.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: _passwordStrength,
+                            minHeight: 5,
+                            backgroundColor: AppColors.border,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                _passwordStrengthColor),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: _passwordStrength,
-                                minHeight: 5,
-                                backgroundColor: AppColors.border,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                    _passwordStrengthColor),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'قوة كلمة المرور',
-                                  style: TextStyle(
-                                      fontSize: 11, color: AppColors.textLight),
-                                ),
-                                Text(
-                                  _passwordStrengthLabel,
-                                  style: TextStyle(
+                            const Text('قوة كلمة المرور',
+                                style: TextStyle(
+                                    fontSize: 11, color: AppColors.textLight)),
+                            Text(_passwordStrengthLabel,
+                                style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
-                                    color: _passwordStrengthColor,
-                                  ),
-                                ),
-                              ],
-                            ),
+                                    color: _passwordStrengthColor)),
                           ],
                         ),
                       ],
 
                       const SizedBox(height: 14),
 
-                      // ── تأكيد كلمة المرور ──
+                      // تأكيد كلمة المرور
                       TextFormField(
                         controller: _confirmPasswordController,
                         obscureText: !_showConfirmPassword,
@@ -465,9 +470,39 @@ class _SignupScreenState extends State<SignupScreen> {
 
               const SizedBox(height: 16),
 
+              // ── إقرار قانوني — جديد ──
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.danger.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.gavel_rounded,
+                        color: AppColors.danger, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'إقرار قانوني: بالتسجيل في تطبيق زاد، أقرّ بأنني أتحمل المسؤولية الكاملة عن سلامة أي طعام أتبرع به أو أشاركه عبر التطبيق، وأن هويتي موثّقة لدى الجهة المشغّلة.',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.danger,
+                            height: 1.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
               // ── الشروط والأحكام ──
               GestureDetector(
-                onTap: () => setState(() => _acceptedTerms = !_acceptedTerms),
+                onTap: () =>
+                    setState(() => _acceptedTerms = !_acceptedTerms),
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -476,8 +511,9 @@ class _SignupScreenState extends State<SignupScreen> {
                         : Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color:
-                          _acceptedTerms ? AppColors.primary : AppColors.border,
+                      color: _acceptedTerms
+                          ? AppColors.primary
+                          : AppColors.border,
                     ),
                   ),
                   child: Row(
@@ -488,13 +524,14 @@ class _SignupScreenState extends State<SignupScreen> {
                         onChanged: (v) =>
                             setState(() => _acceptedTerms = v ?? false),
                         activeColor: AppColors.primary,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
                       const SizedBox(width: 6),
-                      Expanded(
-                        child: RichText(
-                          text: const TextSpan(
+                      const Expanded(
+                        child: Text.rich(
+                          TextSpan(
                             style: TextStyle(
                                 fontSize: 13,
                                 color: AppColors.textLight,
@@ -514,7 +551,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.bold),
                               ),
-                              TextSpan(text: ' لتطبيق زاد'),
+                              TextSpan(
+                                  text:
+                                      ' لتطبيق زاد، وأتحمل المسؤولية القانونية عن دقة بياناتي.'),
                             ],
                           ),
                         ),
@@ -526,7 +565,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
               const SizedBox(height: 20),
 
-              // ── زر إنشاء الحساب ──
+              // ── زر التسجيل ──
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -539,11 +578,9 @@ class _SignupScreenState extends State<SignupScreen> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2.5, color: Colors.white),
                         )
-                      : const Text(
-                          'إنشاء الحساب',
+                      : const Text('إنشاء الحساب',
                           style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                              fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
 
@@ -569,19 +606,16 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  const _SectionLabel({required this.label});
+class _Label extends StatelessWidget {
+  final String text;
+  const _Label({required this.text});
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.bold,
-        color: AppColors.textDark,
-      ),
-    );
+    return Text(text,
+        style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textDark));
   }
 }

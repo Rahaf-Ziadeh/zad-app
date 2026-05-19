@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../auth/WelcomeScreen.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
+import 'package:geolocator/geolocator.dart';
+
 import '../../widgets/offer_widgets.dart';
+import '../../services/location_service.dart';
 import 'scan_qr_screen.dart';
 import 'edit_offer_screen.dart';
 import 'restaurant_stats_screen.dart';
@@ -916,18 +921,90 @@ class AddOfferScreen extends StatefulWidget {
 class _AddOfferScreenState extends State<AddOfferScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
-  final _imageUrlController = TextEditingController();
+  File? _selectedImage;
+  bool _uploadingImage = false;
   final _quantityController = TextEditingController();
   final _originalPriceController = TextEditingController();
   final _discountPriceController = TextEditingController();
   final _pickupController = TextEditingController();
   bool _isLoading = false;
+  bool _isMysteryPackage = false;
+  // ── إحداثيات مكان الاستلام ──
+  double? _latitude;
+  double? _longitude;
+  bool _fetchingLocation = false;
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+    );
+
+    if (pickedFile == null) return;
+
+    setState(() {
+      _selectedImage = File(pickedFile.path);
+    });
+  }
+
+  Future<String?> _uploadImage() async {
+    if (_selectedImage == null) return null;
+
+    setState(() => _uploadingImage = true);
+
+    try {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      final ref =
+          FirebaseStorage.instance.ref().child('offers').child(fileName);
+
+      await ref.putFile(_selectedImage!);
+
+      return await ref.getDownloadURL();
+    } catch (e) {
+      return null;
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingImage = false);
+      }
+    }
+  }
+
+  // ── جلب الموقع الحالي ──
+  Future<void> _fetchLocation() async {
+    setState(() => _fetchingLocation = true);
+    final position = await LocationService().getCurrentLocation();
+    if (position != null) {
+      setState(() {
+        _latitude = position.latitude;
+        _longitude = position.longitude;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تحديد الموقع بنجاح ✅'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تعذّر الحصول على الموقع — تحقق من صلاحيات GPS'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    }
+    setState(() => _fetchingLocation = false);
+  }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descController.dispose();
-    _imageUrlController.dispose();
     _quantityController.dispose();
     _originalPriceController.dispose();
     _discountPriceController.dispose();
@@ -938,14 +1015,15 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   Future<void> _addOffer() async {
     final title = _titleController.text.trim();
     final desc = _descController.text.trim();
-    final imageUrl = _imageUrlController.text.trim();
+    final imageUrl = await _uploadImage() ?? '';
     final quantityStr = _quantityController.text.trim();
     final originalStr = _originalPriceController.text.trim();
     final discountStr = _discountPriceController.text.trim();
     final pickup = _pickupController.text.trim();
 
-    if ([title, desc, quantityStr, originalStr, discountStr, pickup]
-        .any((s) => s.isEmpty)) {
+    if ([title, quantityStr, originalStr, discountStr, pickup]
+            .any((s) => s.isEmpty) ||
+        (!_isMysteryPackage && desc.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى تعبئة جميع الحقول المطلوبة')),
       );
@@ -995,7 +1073,9 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         'providerRole': 'restaurant',
         'offerType': 'restaurant_package',
         'title': title,
-        'description': desc,
+        'description': _isMysteryPackage ? 'محتوى الباقة غير معلن' : desc,
+        'isMysteryPackage': _isMysteryPackage,
+        'packageType': _isMysteryPackage ? 'mystery' : 'clear',
         'imageUrl': imageUrl,
         'quantity': quantity,
         'remainingQuantity': quantity,
@@ -1006,6 +1086,9 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         'isFree': discountPrice == 0,
         'status': 'available',
         'pickupLocation': pickup,
+        'latitude': _latitude,
+        'longitude': _longitude,
+        'hasLocation': _latitude != null && _longitude != null,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -1013,11 +1096,12 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
       setState(() {
         _titleController.clear();
         _descController.clear();
-        _imageUrlController.clear();
+        _selectedImage = null;
         _quantityController.clear();
         _originalPriceController.clear();
         _discountPriceController.clear();
         _pickupController.clear();
+        _isMysteryPackage = false;
       });
 
       if (!mounted) return;
@@ -1100,11 +1184,57 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                       hint: 'مثال: باقة وجبات مشكّلة',
                       icon: Icons.fastfood_rounded),
                   const SizedBox(height: 14),
-                  _FormField(
-                      controller: _imageUrlController,
-                      label: 'رابط الصورة (اختياري)',
-                      hint: 'https://...',
-                      icon: Icons.image_outlined),
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: Container(
+                      width: double.infinity,
+                      height: 160,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                        image: _selectedImage != null
+                            ? DecorationImage(
+                                image: FileImage(_selectedImage!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: _selectedImage == null
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(
+                                  Icons.add_a_photo_outlined,
+                                  size: 34,
+                                  color: AppColors.primary,
+                                ),
+                                SizedBox(height: 10),
+                                Text(
+                                  'إضافة صورة للعرض',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Align(
+                              alignment: Alignment.topLeft,
+                              child: IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedImage = null;
+                                  });
+                                },
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                    ),
+                  ),
                   const SizedBox(height: 14),
 
                   // السعر جنباً إلى جنب
@@ -1142,25 +1272,160 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                       label: 'مكان الاستلام',
                       hint: 'العنوان أو المنطقة',
                       icon: Icons.location_on_outlined),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _descController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'وصف الباقة',
-                      hintText: 'صف محتوى الباقة...',
-                      prefixIcon: Padding(
-                        padding: EdgeInsets.only(bottom: 48),
-                        child: Icon(Icons.description_outlined),
+                  const SizedBox(height: 10),
+
+                  // ── زر تحديد الموقع ──
+                  GestureDetector(
+                    onTap: _fetchingLocation ? null : _fetchLocation,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _latitude != null
+                            ? AppColors.success.withOpacity(0.08)
+                            : AppColors.primary.withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: _latitude != null
+                              ? AppColors.success.withOpacity(0.4)
+                              : AppColors.primary.withOpacity(0.3),
+                        ),
                       ),
-                      alignLabelWithHint: true,
+                      child: Row(
+                        children: [
+                          _fetchingLocation
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: AppColors.primary))
+                              : Icon(
+                                  _latitude != null
+                                      ? Icons.my_location_rounded
+                                      : Icons.location_searching_rounded,
+                                  color: _latitude != null
+                                      ? AppColors.success
+                                      : AppColors.primary,
+                                  size: 20,
+                                ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _latitude != null
+                                  ? 'تم تحديد الموقع ✓ (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})'
+                                  : 'تحديد موقع الاستلام (اختياري لكن مهم)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: _latitude != null
+                                    ? AppColors.success
+                                    : AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (_latitude != null)
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _latitude = null;
+                                _longitude = null;
+                              }),
+                              child: const Icon(Icons.close_rounded,
+                                  size: 16, color: AppColors.textLight),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: AppColors.primary.withOpacity(0.20)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'نوع الباقة',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textDark,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        RadioListTile<bool>(
+                          value: false,
+                          groupValue: _isMysteryPackage,
+                          activeColor: AppColors.primary,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('عرض واضح المحتوى'),
+                          subtitle:
+                              const Text('سيظهر للمستخدم وصف محتوى الباقة'),
+                          onChanged: (value) {
+                            setState(() => _isMysteryPackage = value ?? false);
+                          },
+                        ),
+                        RadioListTile<bool>(
+                          value: true,
+                          groupValue: _isMysteryPackage,
+                          activeColor: AppColors.primary,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('باقة غامضة المحتوى 🎁'),
+                          subtitle: const Text(
+                              'لن يظهر للمستخدم محتوى الباقة قبل الاستلام'),
+                          onChanged: (value) {
+                            setState(() => _isMysteryPackage = value ?? false);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+                  if (!_isMysteryPackage)
+                    TextField(
+                      controller: _descController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'محتوى العرض',
+                        hintText: 'مثال: رز، دجاج، سلطة...',
+                        prefixIcon: Padding(
+                          padding: EdgeInsets.only(bottom: 48),
+                          child: Icon(Icons.description_outlined),
+                        ),
+                        alignLabelWithHint: true,
+                      ),
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7C3AED).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFF7C3AED).withOpacity(0.25),
+                        ),
+                      ),
+                      child: const Text(
+                        'سيتم نشرها كباقة غامضة، ولن يظهر محتواها للمستخدم قبل الاستلام.',
+                        style: TextStyle(
+                          color: Color(0xFF7C3AED),
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _addOffer,
+                      onPressed:
+                          (_isLoading || _uploadingImage) ? null : _addOffer,
                       icon: _isLoading
                           ? const SizedBox(
                               width: 18,
@@ -1168,7 +1433,11 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                               child: CircularProgressIndicator(
                                   color: Colors.white, strokeWidth: 2))
                           : const Icon(Icons.publish_rounded),
-                      label: Text(_isLoading ? 'جاري النشر...' : 'نشر الباقة'),
+                      label: Text(
+                        (_isLoading || _uploadingImage)
+                            ? 'جاري النشر...'
+                            : 'نشر الباقة',
+                      ),
                     ),
                   ),
                 ],
@@ -1267,16 +1536,7 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
         ],
       ),
     );
-    if (confirm == true) {
-      await FirebaseAuth.instance.signOut();
-
-      if (!mounted) return;
-
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-        (route) => false,
-      );
-    }
+    if (confirm == true) await FirebaseAuth.instance.signOut();
   }
 
   @override

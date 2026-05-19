@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/reservation_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/offer_widgets.dart';
+import 'offer_details_screen.dart';
 import 'qr_code_screen.dart';
 
 class PackagesTab extends StatelessWidget {
@@ -38,8 +39,7 @@ class PackagesTab extends StatelessWidget {
                 const SizedBox(height: 14),
                 const Text(
                   'لا توجد باقات متاحة حالياً',
-                  style:
-                      TextStyle(color: AppColors.textLight, fontSize: 14),
+                  style: TextStyle(color: AppColors.textLight, fontSize: 14),
                 ),
               ],
             ),
@@ -91,110 +91,121 @@ class _PackageCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         side: const BorderSide(color: AppColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── صورة ──
-          Stack(
-            children: [
-              imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      height: 175,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => buildImagePlaceholder(
-                          icon: Icons.card_giftcard_rounded, height: 175),
-                    )
-                  : buildImagePlaceholder(
-                      icon: Icons.card_giftcard_rounded, height: 175),
-              Positioned(
-                top: 12,
-                right: 12,
-                child: buildPriceBadge(
-                    isFree: isFree, discountPercent: discountPercent),
-              ),
-              Positioned(
-                bottom: 12,
-                left: 12,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.55),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.card_giftcard_rounded,
-                          color: Colors.white, size: 14),
-                      SizedBox(width: 5),
-                      Text(
-                        'باقة غامضة',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // ── تفاصيل ──
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: AppColors.textLight, height: 1.5, fontSize: 13),
-                ),
-                const SizedBox(height: 14),
-                OfferPriceRow(
-                  isFree: isFree,
-                  originalPrice: originalPrice,
-                  discountPrice: discountPrice,
-                  currency: currency,
-                ),
-                const SizedBox(height: 12),
-                OfferInfoRow(
-                  icon: Icons.location_on_outlined,
-                  label: 'مكان الاستلام',
-                  value: pickupLocation,
-                ),
-                OfferInfoRow(
-                  icon: Icons.inventory_2_outlined,
-                  label: 'عدد الباقات المتاحة',
-                  value: '$remainingQuantity',
-                ),
-                const OfferInfoRow(
-                  icon: Icons.info_outline_rounded,
-                  label: 'ملاحظة',
-                  value: 'محتوى الباقة يحدده المطعم حسب الطعام الفائض',
-                ),
-                const SizedBox(height: 14),
-                _ReserveButton(docId: docId, data: data),
-              ],
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OfferDetailsScreen(
+              docId: docId,
+              data: data,
             ),
           ),
-        ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── صورة ──
+            Stack(
+              children: [
+                imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        height: 175,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => buildImagePlaceholder(
+                            icon: Icons.card_giftcard_rounded, height: 175),
+                      )
+                    : buildImagePlaceholder(
+                        icon: Icons.card_giftcard_rounded, height: 175),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: buildPriceBadge(
+                      isFree: isFree, discountPercent: discountPercent),
+                ),
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.55),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.card_giftcard_rounded,
+                            color: Colors.white, size: 14),
+                        SizedBox(width: 5),
+                        Text(
+                          'باقة غامضة',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // ── تفاصيل ──
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: AppColors.textLight, height: 1.5, fontSize: 13),
+                  ),
+                  const SizedBox(height: 14),
+                  OfferPriceRow(
+                    isFree: isFree,
+                    originalPrice: originalPrice,
+                    discountPrice: discountPrice,
+                    currency: currency,
+                  ),
+                  const SizedBox(height: 12),
+                  OfferInfoRow(
+                    icon: Icons.location_on_outlined,
+                    label: 'مكان الاستلام',
+                    value: pickupLocation,
+                  ),
+                  OfferInfoRow(
+                    icon: Icons.inventory_2_outlined,
+                    label: 'عدد الباقات المتاحة',
+                    value: '$remainingQuantity',
+                  ),
+                  const OfferInfoRow(
+                    icon: Icons.info_outline_rounded,
+                    label: 'ملاحظة',
+                    value: 'محتوى الباقة يحدده المطعم حسب الطعام الفائض',
+                  ),
+                  const SizedBox(height: 14),
+                  _ReserveButton(docId: docId, data: data),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -279,8 +290,7 @@ class _ErrorState extends StatelessWidget {
               size: 48, color: AppColors.danger),
           const SizedBox(height: 12),
           Text(message,
-              style:
-                  const TextStyle(color: AppColors.textLight, fontSize: 14)),
+              style: const TextStyle(color: AppColors.textLight, fontSize: 14)),
         ],
       ),
     );

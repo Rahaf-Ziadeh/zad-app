@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../auth/WelcomeScreen.dart';
+
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
+import 'user_extra_screens.dart';
+import 'user_publish_offer_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final AppUser user;
@@ -113,13 +115,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     if (confirm == true) {
       await FirebaseAuth.instance.signOut();
-
-      if (!mounted) return;
-
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-        (route) => false,
-      );
+      // التوجيه للـ login يتم عبر StreamBuilder في main.dart
     }
   }
 
@@ -333,24 +329,47 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             child: Column(
               children: [
                 _MenuTile(
+                  icon: Icons.add_box_rounded,
+                  title: 'نشر عرض طعام',
+                  color: AppColors.primary,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const UserPublishOfferScreen()),
+                  ),
+                ),
+                const Divider(height: 1, indent: 56),
+                _MenuTile(
                   icon: Icons.history_rounded,
                   title: 'سجل التبرعات',
                   color: const Color(0xFFE11D48),
-                  onTap: () {},
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const UserDonationsHistoryScreen()),
+                  ),
                 ),
                 const Divider(height: 1, indent: 56),
                 _MenuTile(
                   icon: Icons.star_outline_rounded,
                   title: 'تقييماتي',
                   color: Colors.amber,
-                  onTap: () {},
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const UserRatingsScreen()),
+                  ),
                 ),
                 const Divider(height: 1, indent: 56),
                 _MenuTile(
                   icon: Icons.report_problem_outlined,
                   title: 'شكاواي',
                   color: AppColors.secondary,
-                  onTap: () {},
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const UserComplaintsScreen()),
+                  ),
                 ),
               ],
             ),

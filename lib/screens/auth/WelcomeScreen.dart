@@ -265,7 +265,19 @@ class _OnboardingPageWidget extends StatelessWidget {
                   color: page.color.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(page.icon, size: 52, color: page.color),
+                child: _pages.indexOf(page) == 0
+                    ? Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Image.asset(
+                          'assets/images/zad_logo.png',
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    : Icon(
+                        page.icon,
+                        size: 52,
+                        color: page.color,
+                      ),
               ),
             ),
           ),
@@ -276,19 +288,18 @@ class _OnboardingPageWidget extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.eco_rounded, color: page.color, size: 20),
-              const SizedBox(width: 6),
+              const SizedBox(width: 10),
               Text(
                 'زاد',
                 style: TextStyle(
                   color: page.color,
-                  fontSize: 16,
+                  fontSize: 32,
                   fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
 
           Text(

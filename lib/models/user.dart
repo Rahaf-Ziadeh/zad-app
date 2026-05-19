@@ -6,6 +6,7 @@ class AppUser {
   final String phone;
   final String address;
   final String? photoUrl;
+  final String? nationalId; // رقم الهوية الوطنية — للمساءلة القانونية
 
   AppUser({
     required this.uid,
@@ -15,17 +16,19 @@ class AppUser {
     required this.phone,
     required this.address,
     this.photoUrl,
+    this.nationalId,
   });
 
   factory AppUser.fromMap(String uid, Map<String, dynamic> map) {
     return AppUser(
       uid: uid,
-      name: map['name'] ?? '',
+      name: map['name'] ?? map['fullName'] ?? '',
       email: map['email'] ?? '',
       role: map['role'] ?? 'individual',
       phone: map['phone'] ?? '',
       address: map['address'] ?? '',
       photoUrl: map['photoUrl'],
+      nationalId: map['nationalId'],
     );
   }
 
@@ -37,6 +40,7 @@ class AppUser {
       'phone': phone,
       'address': address,
       'photoUrl': photoUrl,
+      'nationalId': nationalId,
     };
   }
 
@@ -45,6 +49,7 @@ class AppUser {
     String? phone,
     String? address,
     String? photoUrl,
+    String? nationalId,
   }) {
     return AppUser(
       uid: uid,
@@ -54,6 +59,7 @@ class AppUser {
       phone: phone ?? this.phone,
       address: address ?? this.address,
       photoUrl: photoUrl ?? this.photoUrl,
+      nationalId: nationalId ?? this.nationalId,
     );
   }
 }
