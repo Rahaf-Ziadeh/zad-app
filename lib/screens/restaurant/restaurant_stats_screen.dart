@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 
 import '../../theme/app_colors.dart';
 
@@ -17,6 +18,7 @@ class RestaurantStatsScreen extends StatelessWidget {
   Stream<QuerySnapshot> _reservationsStream() => FirebaseFirestore.instance
       .collection('reservations')
       .where('providerUserId', isEqualTo: _uid)
+      .orderBy('createdAt', descending: true)
       .snapshots();
 
   @override
@@ -133,19 +135,19 @@ class RestaurantStatsScreen extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _MiniStat(
+                            MiniStat(
                                 label: 'نسبة الإتمام',
                                 value: '$completionRate%'),
                             Container(
                                 width: 1, height: 36, color: Colors.white24),
-                            _MiniStat(
+                            MiniStat(
                                 label: 'متوسط التقييم',
                                 value: ratedCount > 0
                                     ? '${avgRating.toStringAsFixed(1)} ⭐'
                                     : 'لا يوجد'),
                             Container(
                                 width: 1, height: 36, color: Colors.white24),
-                            _MiniStat(label: 'تقييمات', value: '$ratedCount'),
+                            MiniStat(label: 'تقييمات', value: '$ratedCount'),
                           ],
                         ),
                       ],
@@ -155,12 +157,12 @@ class RestaurantStatsScreen extends StatelessWidget {
                   const SizedBox(height: 22),
 
                   // ── إحصائيات العروض ──
-                  _SectionTitle(title: 'العروض والباقات'),
+                  SectionTitle(title: 'العروض والباقات'),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: _StatCard(
+                        child: StatCard(
                           title: 'إجمالي العروض',
                           value: '$totalOffers',
                           icon: Icons.fastfood_rounded,
@@ -169,7 +171,7 @@ class RestaurantStatsScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StatCard(
+                        child: StatCard(
                           title: 'نشطة',
                           value: '$activeOffers',
                           icon: Icons.check_circle_rounded,
@@ -178,7 +180,7 @@ class RestaurantStatsScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StatCard(
+                        child: StatCard(
                           title: 'مغلقة',
                           value: '$closedOffers',
                           icon: Icons.pause_circle_rounded,
@@ -191,12 +193,12 @@ class RestaurantStatsScreen extends StatelessWidget {
                   const SizedBox(height: 22),
 
                   // ── إحصائيات الطلبات ──
-                  _SectionTitle(title: 'الحجوزات والطلبات'),
+                  SectionTitle(title: 'الحجوزات والطلبات'),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: _StatCard(
+                        child: StatCard(
                           title: 'إجمالي',
                           value: '$totalReservations',
                           icon: Icons.receipt_long_rounded,
@@ -205,7 +207,7 @@ class RestaurantStatsScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StatCard(
+                        child: StatCard(
                           title: 'مكتملة',
                           value: '$completedRes',
                           icon: Icons.done_all_rounded,
@@ -218,7 +220,7 @@ class RestaurantStatsScreen extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: _StatCard(
+                        child: StatCard(
                           title: 'بانتظار',
                           value: '$pendingRes',
                           icon: Icons.pending_rounded,
@@ -227,7 +229,7 @@ class RestaurantStatsScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StatCard(
+                        child: StatCard(
                           title: 'ملغاة',
                           value: '$cancelledRes',
                           icon: Icons.cancel_rounded,
@@ -240,7 +242,7 @@ class RestaurantStatsScreen extends StatelessWidget {
                   const SizedBox(height: 22),
 
                   // ── شريط تقدم الإتمام ──
-                  _SectionTitle(title: 'نسبة إتمام الطلبات'),
+                  SectionTitle(title: 'نسبة إتمام الطلبات'),
                   const SizedBox(height: 12),
                   Card(
                     elevation: 0,
@@ -304,7 +306,7 @@ class RestaurantStatsScreen extends StatelessWidget {
                   const SizedBox(height: 22),
 
                   // ── آخر الحجوزات ──
-                  _SectionTitle(title: 'آخر الحجوزات'),
+                  SectionTitle(title: 'آخر الحجوزات'),
                   const SizedBox(height: 12),
                   if (reservations.isEmpty)
                     const Center(
@@ -382,99 +384,6 @@ class RestaurantStatsScreen extends StatelessWidget {
             },
           );
         },
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  const _SectionTitle({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-          fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textDark),
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  final String label;
-  final String value;
-  const _MiniStat({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold)),
-        const SizedBox(height: 3),
-        Text(label,
-            style: const TextStyle(color: Colors.white70, fontSize: 11)),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 17),
-          ),
-          const SizedBox(height: 8),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 3),
-          Text(title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: AppColors.textLight,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500)),
-        ],
       ),
     );
   }

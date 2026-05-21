@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
+import 'package:zad_app/services/notification_service.dart';
 
 import '../../theme/app_colors.dart';
 
@@ -121,6 +124,12 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
         'pickupLocation': pickup,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      await NotificationService().sendNotification(
+        userId: FirebaseAuth.instance.currentUser!.uid,
+        title: 'تم تعديل العرض',
+        message: 'تم تحديث بيانات العرض "$title"',
+        type: 'offer',
+      );
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -199,14 +208,14 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _FormField(
+                  FormFieldWidget(
                     controller: _titleController,
                     label: 'اسم الباقة',
                     hint: 'مثال: باقة وجبات مشكّلة',
                     icon: Icons.fastfood_rounded,
                   ),
                   const SizedBox(height: 14),
-                  _FormField(
+                  FormFieldWidget(
                     controller: _imageUrlController,
                     label: 'رابط الصورة (اختياري)',
                     hint: 'https://...',
@@ -216,7 +225,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: _FormField(
+                        child: FormFieldWidget(
                           controller: _originalPriceController,
                           label: 'السعر الأصلي',
                           hint: '0.00',
@@ -226,7 +235,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _FormField(
+                        child: FormFieldWidget(
                           controller: _discountPriceController,
                           label: 'بعد الخصم',
                           hint: '0.00',
@@ -237,7 +246,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  _FormField(
+                  FormFieldWidget(
                     controller: _quantityController,
                     label: 'الكمية المتبقية',
                     hint: 'مثال: 10',
@@ -245,7 +254,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 14),
-                  _FormField(
+                  FormFieldWidget(
                     controller: _pickupController,
                     label: 'مكان الاستلام',
                     hint: 'العنوان أو المنطقة',
@@ -286,35 +295,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FormField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final String hint;
-  final IconData icon;
-  final TextInputType keyboardType;
-
-  const _FormField({
-    required this.controller,
-    required this.label,
-    required this.hint,
-    required this.icon,
-    this.keyboardType = TextInputType.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon),
       ),
     );
   }

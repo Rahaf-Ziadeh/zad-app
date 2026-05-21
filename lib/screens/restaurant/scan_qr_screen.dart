@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:zad_app/services/notification_service.dart';
 
 import '../../theme/app_colors.dart';
 
@@ -120,14 +121,13 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       });
 
       // ── إشعار للمستخدم ──
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'userId': userId,
-        'title': 'تم تأكيد الاستلام ✅',
-        'message': 'تم استلام طلبك "$offerTitle" بنجاح. نتمنى لك وجبة شهية ❤️',
-        'type': 'pickup',
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      await NotificationService().sendNotification(
+        userId: userId,
+        title: 'تم تأكيد الاستلام ✅',
+        message: 'تم استلام طلبك "$offerTitle" بنجاح. نتمنى لك وجبة شهية ❤️',
+        type: 'pickup',
+      );
+      _controller.stop();
 
       _showResult(
         title: 'تم تأكيد الاستلام',

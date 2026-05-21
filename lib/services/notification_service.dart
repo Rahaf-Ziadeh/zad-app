@@ -3,6 +3,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class NotificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  Stream<QuerySnapshot> getUserNotifications(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
   // ── إشعار لمستخدم واحد ──
   Future<void> sendNotification({
     required String userId,
