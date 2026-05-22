@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../common/notifications_screen.dart';
 import '../../theme/app_colors.dart';
+
 // ─────────────────────────────────────────────
 // الشاشة الرئيسية
 // ─────────────────────────────────────────────
@@ -42,32 +43,43 @@ class CharityHomeScreen extends StatelessWidget {
                     color: AppColors.primary, fontWeight: FontWeight.bold)),
           ],
         ),
-       actions: [
-  IconButton(
-    onPressed: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const NotificationsScreen(),
-        ),
-      );
-    },
-    icon: const Icon(Icons.notifications_none_rounded),
-  ),
-],
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationsScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.notifications_none_rounded),
+          ),
+        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('donations').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('donations')
+            .where(
+              'charityUserId',
+              isEqualTo: user.uid,
+            )
+            .snapshots(),
         builder: (context, snapshot) {
           final donations = snapshot.hasData
               ? snapshot.data!.docs
               : <QueryDocumentSnapshot>[];
 
           int pending = 0, approved = 0, redistributed = 0;
+
           for (final doc in donations) {
-            final s = (doc.data() as Map)['status'] ?? 'pending';
-            if (s == 'pending') pending++;
+            final s = (doc.data() as Map<String, dynamic>)['donationStatus'] ??
+                'pending_review';
+
+            if (s == 'pending_review') pending++;
+
             if (s == 'approved') approved++;
+
             if (s == 'redistributed') redistributed++;
           }
 
@@ -147,6 +159,7 @@ class CharityHomeScreen extends StatelessWidget {
     );
   }
 }
+
 class _WelcomeCard extends StatelessWidget {
   final AppUser user;
   const _WelcomeCard({required this.user});
