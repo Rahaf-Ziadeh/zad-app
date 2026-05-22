@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:zad_app/services/notification_service.dart';
 
 import '../models/user.dart';
 
@@ -74,6 +75,13 @@ class AuthService {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      if (role == 'restaurant' || role == 'charity') {
+        await NotificationService().notifyAdmins(
+          title: 'حساب جديد بانتظار الموافقة',
+          message: 'يوجد حساب $role جديد يحتاج مراجعة من الإدارة.',
+          type: 'account',
+        );
+      }
     } on FirebaseAuthException catch (e) {
       throw Exception(_authErrorMessage(e.code));
     } catch (e) {

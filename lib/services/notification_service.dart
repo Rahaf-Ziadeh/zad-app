@@ -77,4 +77,24 @@ class NotificationService {
     }
     await batch.commit();
   }
+
+  Future<void> notifyAdmins({
+    required String title,
+    required String message,
+    String type = 'account',
+  }) async {
+    final admins = await FirebaseFirestore.instance
+        .collection('users')
+        .where('role', isEqualTo: 'admin')
+        .get();
+
+    for (final admin in admins.docs) {
+      await sendNotification(
+        userId: admin.id,
+        title: title,
+        message: message,
+        type: type,
+      );
+    }
+  }
 }

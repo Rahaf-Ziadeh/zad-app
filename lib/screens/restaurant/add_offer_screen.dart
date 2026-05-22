@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +9,8 @@ import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 import 'package:zad_app/services/location_service.dart';
 import 'package:zad_app/services/notification_service.dart';
 import 'package:zad_app/theme/app_colors.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class AddOfferScreen extends StatefulWidget {
   const AddOfferScreen({super.key});
@@ -54,25 +55,53 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     setState(() => _uploadingImage = true);
 
     try {
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/dsu1bewrx/image/upload',
+      );
 
-      final ref =
-          FirebaseStorage.instance.ref().child('offers').child(fileName);
+      final request = http.MultipartRequest('POST', uri);
 
-      if (kIsWeb) {
-        final bytes = await _selectedImage!.readAsBytes();
-        await ref.putData(bytes);
+      request.fields['upload_preset'] = 'zad_upload';
+
+      final bytes = await _selectedImage!.readAsBytes();
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: _selectedImage!.name,
+        ),
+      );
+
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        final responseData = await response.stream.bytesToString();
+        final data = jsonDecode(responseData);
+
+        return data['secure_url'];
       } else {
-        await ref.putFile(File(_selectedImage!.path));
-      }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'فشل رفع الصورة: ${response.statusCode}',
+              ),
+            ),
+          );
+        }
 
-      return await ref.getDownloadURL();
+        return null;
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('فشل رفع الصورة: $e')),
+          SnackBar(
+            content: Text('خطأ: $e'),
+          ),
         );
       }
+
       return null;
     } finally {
       if (mounted) {
