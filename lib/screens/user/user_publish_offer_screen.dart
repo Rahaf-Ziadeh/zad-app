@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import 'package:geocoding/geocoding.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
 
@@ -61,9 +61,19 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
     setState(() => _fetchingLocation = true);
     final position = await LocationService().getCurrentLocation();
     if (position != null) {
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      final place = placemarks.first;
+
       setState(() {
         _latitude = position.latitude;
         _longitude = position.longitude;
+
+        _locationController.text =
+            '${place.locality ?? ''} - ${place.subLocality ?? ''}';
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

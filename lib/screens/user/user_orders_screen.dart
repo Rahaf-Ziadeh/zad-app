@@ -7,15 +7,38 @@ import '../../widgets/offer_widgets.dart';
 import 'qr_code_screen.dart';
 
 class UserOrdersScreen extends StatelessWidget {
-  const UserOrdersScreen({super.key});
+  final String? statusFilter;
+
+  const UserOrdersScreen({
+    super.key,
+    this.statusFilter,
+  });
 
   Stream<QuerySnapshot> _ordersStream() {
     final userId = FirebaseAuth.instance.currentUser!.uid;
-    return FirebaseFirestore.instance
+
+    Query query = FirebaseFirestore.instance
         .collection('reservations')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+        .where('userId', isEqualTo: userId);
+
+    if (statusFilter != null) {
+      query = query.where('status', isEqualTo: statusFilter);
+    }
+
+    return query.orderBy('createdAt', descending: true).snapshots();
+  }
+
+  String get _screenTitle {
+    switch (statusFilter) {
+      case 'reserved':
+        return 'طلباتي النشطة';
+      case 'picked_up':
+        return 'الطلبات المستلمة';
+      case 'cancelled':
+        return 'الطلبات الملغية';
+      default:
+        return 'طلباتي';
+    }
   }
 
   String _statusLabel(String status) {
@@ -111,8 +134,7 @@ class UserOrdersScreen extends StatelessWidget {
             child: const Text('تراجع'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.danger),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             onPressed: () {
               Navigator.pop(context);
               _cancelReservation(
@@ -143,7 +165,7 @@ class UserOrdersScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('طلباتي'),
+        title: Text(_screenTitle),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -151,14 +173,27 @@ class UserOrdersScreen extends StatelessWidget {
         stream: _ordersStream(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const Center(child: Text('حدث خطأ أثناء تحميل الطلبات'));
+            print(snapshot.error);
+
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Text(
+                  snapshot.error.toString(),
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            );
           }
+
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final orders = snapshot.data!.docs;
-          if (orders.isEmpty) return const _EmptyOrders();
+          if (orders.isEmpty) {
+            return _EmptyOrders(statusFilter: statusFilter);
+          }
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -192,7 +227,6 @@ class UserOrdersScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── Header ──
                       Row(
                         children: [
                           Container(
@@ -202,8 +236,11 @@ class UserOrdersScreen extends StatelessWidget {
                               color: AppColors.primary.withOpacity(0.10),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.fastfood_rounded,
-                                color: AppColors.primary, size: 22),
+                            child: const Icon(
+                              Icons.fastfood_rounded,
+                              color: AppColors.primary,
+                              size: 22,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -220,8 +257,7 @@ class UserOrdersScreen extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
-                              color:
-                                  _statusColor(status).withOpacity(0.12),
+                              color: _statusColor(status).withOpacity(0.12),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -235,12 +271,9 @@ class UserOrdersScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 14),
                       const Divider(height: 1),
                       const SizedBox(height: 12),
-
-                      // ── معلومات ──
                       OfferInfoRow(
                         icon: Icons.confirmation_number_outlined,
                         label: 'رقم الحجز',
@@ -257,10 +290,7 @@ class UserOrdersScreen extends StatelessWidget {
                         label: 'مكان الاستلام',
                         value: pickupLocation,
                       ),
-
                       const SizedBox(height: 12),
-
-                      // ── أزرار حسب الحالة ──
                       if (status == 'reserved') ...[
                         Row(
                           children: [
@@ -276,8 +306,8 @@ class UserOrdersScreen extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                icon: const Icon(Icons.qr_code_rounded,
-                                    size: 18),
+                                icon:
+                                    const Icon(Icons.qr_code_rounded, size: 18),
                                 label: const Text('رمز QR'),
                               ),
                             ),
@@ -289,13 +319,13 @@ class UserOrdersScreen extends StatelessWidget {
                                   reservationId: reservationId,
                                   offerId: offerId,
                                 ),
-                                icon: const Icon(Icons.cancel_outlined,
-                                    size: 18),
+                                icon:
+                                    const Icon(Icons.cancel_outlined, size: 18),
                                 label: const Text('إلغاء'),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.danger,
-                                  side: const BorderSide(
-                                      color: AppColors.danger),
+                                  side:
+                                      const BorderSide(color: AppColors.danger),
                                 ),
                               ),
                             ),
@@ -326,7 +356,6 @@ class UserOrdersScreen extends StatelessWidget {
                             ],
                           ),
                         ),
-                        // زر التقييم — FR-23
                         if (!hasRated) ...[
                           const SizedBox(height: 10),
                           SizedBox(
@@ -389,9 +418,6 @@ class UserOrdersScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// Dialog التقييم — FR-23
-// ─────────────────────────────────────────────
 class _RatingDialog extends StatefulWidget {
   final String reservationId;
   const _RatingDialog({required this.reservationId});
@@ -414,6 +440,7 @@ class _RatingDialogState extends State<_RatingDialog> {
     }
 
     setState(() => _loading = true);
+
     try {
       await FirebaseFirestore.instance
           .collection('reservations')
@@ -455,8 +482,10 @@ class _RatingDialogState extends State<_RatingDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('كيف كانت تجربتك مع هذا الطلب؟',
-              style: TextStyle(color: AppColors.textLight, fontSize: 13)),
+          const Text(
+            'كيف كانت تجربتك مع هذا الطلب؟',
+            style: TextStyle(color: AppColors.textLight, fontSize: 13),
+          ),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -467,7 +496,9 @@ class _RatingDialogState extends State<_RatingDialog> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Icon(
-                    star <= _rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                    star <= _rating
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
                     color: Colors.amber,
                     size: 36,
                   ),
@@ -498,7 +529,9 @@ class _RatingDialogState extends State<_RatingDialog> {
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2),
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
                 )
               : const Text('إرسال'),
         ),
@@ -507,11 +540,36 @@ class _RatingDialogState extends State<_RatingDialog> {
   }
 }
 
-// ─────────────────────────────────────────────
-// Empty state
-// ─────────────────────────────────────────────
 class _EmptyOrders extends StatelessWidget {
-  const _EmptyOrders();
+  final String? statusFilter;
+
+  const _EmptyOrders({this.statusFilter});
+
+  String get _message {
+    switch (statusFilter) {
+      case 'reserved':
+        return 'لا توجد طلبات نشطة حالياً';
+      case 'picked_up':
+        return 'لا توجد طلبات مستلمة بعد';
+      case 'cancelled':
+        return 'لا توجد طلبات ملغية';
+      default:
+        return 'لا توجد طلبات بعد';
+    }
+  }
+
+  String get _subtitle {
+    switch (statusFilter) {
+      case 'reserved':
+        return 'عند حجز عرض أو باقة، ستظهر الطلبات النشطة هنا.';
+      case 'picked_up':
+        return 'بعد تأكيد الاستلام، ستظهر الطلبات المستلمة هنا.';
+      case 'cancelled':
+        return 'أي طلب يتم إلغاؤه سيظهر هنا.';
+      default:
+        return 'عند حجز عرض أو باقة، ستظهر تفاصيل الطلب ورمز الاستلام هنا.';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -527,19 +585,19 @@ class _EmptyOrders extends StatelessWidget {
               color: AppColors.primary.withOpacity(0.3),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'لا توجد طلبات بعد',
-              style: TextStyle(
+            Text(
+              _message,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textDark,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'عند حجز عرض أو باقة، ستظهر تفاصيل الطلب ورمز الاستلام هنا.',
+            Text(
+              _subtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textLight, height: 1.6),
+              style: const TextStyle(color: AppColors.textLight, height: 1.6),
             ),
           ],
         ),

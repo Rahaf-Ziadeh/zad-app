@@ -1,9 +1,16 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
+import 'identity_verification_screen.dart';
+import 'verification_pending_screen.dart';
 import 'user_extra_screens.dart';
 import 'user_publish_offer_screen.dart';
 
@@ -19,17 +26,30 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _isEditing = false;
   bool _isSaving = false;
+  bool _uploadingPhoto = false;
 
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _addressController;
 
+  late String _displayName;
+  late String _displayPhone;
+  late String _displayAddress;
+  String? _photoUrl;
+  Uint8List? _photoBytes;
+
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.user.name);
-    _phoneController = TextEditingController(text: widget.user.phone);
-    _addressController = TextEditingController(text: widget.user.address);
+
+    _displayName = widget.user.name;
+    _displayPhone = widget.user.phone;
+    _displayAddress = widget.user.address;
+    _photoUrl = widget.user.photoUrl;
+
+    _nameController = TextEditingController(text: _displayName);
+    _phoneController = TextEditingController(text: _displayPhone);
+    _addressController = TextEditingController(text: _displayAddress);
   }
 
   @override
@@ -38,6 +58,122 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _phoneController.dispose();
     _addressController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openPublishScreen() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('individuals')
+        .doc(uid)
+        .get();
+
+    final status = doc.data()?['verificationStatus'];
+
+    if (!mounted) return;
+
+    if (status == 'approved') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const UserPublishOfferScreen()),
+      );
+    } else if (status == 'pending') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const VerificationPendingScreen()),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const IdentityVerificationScreen()),
+      );
+    }
+  }
+
+  Future<String?> _uploadProfilePhoto(XFile image) async {
+    try {
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/dsu1bewrx/image/upload',
+      );
+
+      final request = http.MultipartRequest('POST', uri);
+      request.fields['upload_preset'] = 'zad_upload';
+
+      final bytes = await image.readAsBytes();
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: image.name,
+        ),
+      );
+
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        final responseData = await response.stream.bytesToString();
+        final data = jsonDecode(responseData);
+        return data['secure_url'];
+      }
+
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+    );
+
+    if (picked == null) return;
+
+    final bytes = await picked.readAsBytes();
+
+    setState(() {
+      _photoBytes = bytes;
+      _uploadingPhoto = true;
+    });
+
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) throw Exception('يجب تسجيل الدخول أولاً');
+
+      final imageUrl = await _uploadProfilePhoto(picked);
+      if (imageUrl == null || imageUrl.isEmpty) {
+        throw Exception('فشل رفع الصورة');
+      }
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .update({
+        'photoUrl': imageUrl,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await currentUser.updatePhotoURL(imageUrl);
+
+      setState(() => _photoUrl = imageUrl);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم تحديث الصورة بنجاح ✅'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
   }
 
   Future<void> _saveChanges() async {
@@ -51,26 +187,36 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'name': _nameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'address': _addressController.text.trim(),
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) throw Exception('يجب تسجيل الدخول أولاً');
+
+      final newName = _nameController.text.trim();
+      final newPhone = _phoneController.text.trim();
+      final newAddress = _addressController.text.trim();
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .update({
+        'name': newName,
+        'phone': newPhone,
+        'address': newAddress,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      setState(() => _isEditing = false);
+      await currentUser.updateDisplayName(newName);
+
+      setState(() {
+        _displayName = newName;
+        _displayPhone = newPhone;
+        _displayAddress = newAddress;
+        _isEditing = false;
+      });
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Text('تم حفظ التغييرات بنجاح'),
-            ],
-          ),
+          content: Text('تم حفظ التغييرات بنجاح ✅'),
           backgroundColor: AppColors.success,
         ),
       );
@@ -87,9 +233,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   void _cancelEdit() {
     setState(() {
       _isEditing = false;
-      _nameController.text = widget.user.name;
-      _phoneController.text = widget.user.phone;
-      _addressController.text = widget.user.address;
+      _nameController.text = _displayName;
+      _phoneController.text = _displayPhone;
+      _addressController.text = _displayAddress;
     });
   }
 
@@ -113,10 +259,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       ),
     );
 
-    if (confirm == true) {
-      await FirebaseAuth.instance.signOut();
-      // التوجيه للـ login يتم عبر StreamBuilder في main.dart
-    }
+    if (confirm != true) return;
+
+    await FirebaseAuth.instance.signOut();
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true)
+        .popUntil((route) => route.isFirst);
   }
 
   String _roleLabel(String role) {
@@ -132,9 +281,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
+  ImageProvider? get _profileImage {
+    if (_photoBytes != null) return MemoryImage(_photoBytes!);
+    if (_photoUrl != null && _photoUrl!.isNotEmpty) {
+      return NetworkImage(_photoUrl!);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = widget.user;
+    final hasPhoto = _profileImage != null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -152,8 +309,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           else ...[
             TextButton(
               onPressed: _cancelEdit,
-              child: const Text('إلغاء',
-                  style: TextStyle(color: AppColors.textLight)),
+              child: const Text(
+                'إلغاء',
+                style: TextStyle(color: AppColors.textLight),
+              ),
             ),
             TextButton(
               onPressed: _isSaving ? null : _saveChanges,
@@ -163,8 +322,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('حفظ',
-                      style: TextStyle(color: AppColors.primary)),
+                  : const Text(
+                      'حفظ',
+                      style: TextStyle(color: AppColors.primary),
+                    ),
             ),
           ],
         ],
@@ -172,7 +333,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          // ── بطاقة الصورة والاسم ──
           Center(
             child: Column(
               children: [
@@ -181,13 +341,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     CircleAvatar(
                       radius: 52,
                       backgroundColor: AppColors.primary.withOpacity(0.15),
-                      backgroundImage: user.photoUrl != null
-                          ? NetworkImage(user.photoUrl!)
-                          : null,
-                      child: user.photoUrl == null
+                      backgroundImage: _profileImage,
+                      child: !hasPhoto
                           ? Text(
-                              user.name.isNotEmpty
-                                  ? user.name[0].toUpperCase()
+                              _displayName.isNotEmpty
+                                  ? _displayName[0].toUpperCase()
                                   : 'م',
                               style: const TextStyle(
                                 fontSize: 36,
@@ -201,13 +359,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       bottom: 0,
                       left: 0,
                       child: GestureDetector(
-                        onTap: () {
-                          // يمكن إضافة image picker لاحقاً
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('ميزة تغيير الصورة قريباً')),
-                          );
-                        },
+                        onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
@@ -215,8 +367,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
                           ),
-                          child: const Icon(Icons.camera_alt_rounded,
-                              color: Colors.white, size: 14),
+                          child: _uploadingPhoto
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.camera_alt_rounded,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
                         ),
                       ),
                     ),
@@ -224,7 +388,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  user.name,
+                  _displayName,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -240,7 +404,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    _roleLabel(user.role),
+                    _roleLabel(widget.user.role),
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontSize: 12,
@@ -251,10 +415,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // ── معلومات الحساب ──
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -275,8 +436,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
-                  // الاسم
                   _ProfileField(
                     icon: Icons.person_outline_rounded,
                     label: 'الاسم الكامل',
@@ -284,18 +443,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     isEditing: _isEditing,
                   ),
                   const Divider(),
-
-                  // البريد — غير قابل للتعديل
                   _ProfileField(
                     icon: Icons.email_outlined,
                     label: 'البريد الإلكتروني',
-                    controller: TextEditingController(text: user.email),
+                    controller: TextEditingController(text: widget.user.email),
                     isEditing: false,
                     readOnly: true,
                   ),
                   const Divider(),
-
-                  // الهاتف
                   _ProfileField(
                     icon: Icons.phone_outlined,
                     label: 'رقم الهاتف',
@@ -304,8 +459,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     keyboardType: TextInputType.phone,
                   ),
                   const Divider(),
-
-                  // العنوان
                   _ProfileField(
                     icon: Icons.location_on_outlined,
                     label: 'العنوان',
@@ -316,10 +469,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // ── روابط إضافية ──
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -332,11 +482,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   icon: Icons.add_box_rounded,
                   title: 'نشر عرض طعام',
                   color: AppColors.primary,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const UserPublishOfferScreen()),
-                  ),
+                  onTap: _openPublishScreen,
                 ),
                 const Divider(height: 1, indent: 56),
                 _MenuTile(
@@ -346,7 +492,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const UserDonationsHistoryScreen()),
+                      builder: (_) => const UserDonationsHistoryScreen(),
+                    ),
                   ),
                 ),
                 const Divider(height: 1, indent: 56),
@@ -357,7 +504,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const UserRatingsScreen()),
+                      builder: (_) => const UserRatingsScreen(),
+                    ),
                   ),
                 ),
                 const Divider(height: 1, indent: 56),
@@ -368,16 +516,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const UserComplaintsScreen()),
+                      builder: (_) => const UserComplaintsScreen(),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // ── زر الخروج ──
           OutlinedButton.icon(
             onPressed: _logout,
             icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
@@ -393,7 +539,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 8),
         ],
       ),
@@ -401,9 +546,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 }
 
-// ─────────────────────────────────────────────
-// حقل معلومة واحدة
-// ─────────────────────────────────────────────
 class _ProfileField extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -448,7 +590,9 @@ class _ProfileField extends StatelessWidget {
                         controller: controller,
                         keyboardType: keyboardType,
                         style: const TextStyle(
-                            fontSize: 14, color: AppColors.textDark),
+                          fontSize: 14,
+                          color: AppColors.textDark,
+                        ),
                         decoration: const InputDecoration(
                           isDense: true,
                           contentPadding: EdgeInsets.symmetric(vertical: 6),
@@ -473,9 +617,6 @@ class _ProfileField extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// سطر قائمة
-// ─────────────────────────────────────────────
 class _MenuTile extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -505,12 +646,16 @@ class _MenuTile extends StatelessWidget {
       title: Text(
         title,
         style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textDark),
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textDark,
+        ),
       ),
-      trailing: const Icon(Icons.arrow_forward_ios_rounded,
-          size: 14, color: AppColors.textLight),
+      trailing: const Icon(
+        Icons.arrow_forward_ios_rounded,
+        size: 14,
+        color: AppColors.textLight,
+      ),
     );
   }
 }

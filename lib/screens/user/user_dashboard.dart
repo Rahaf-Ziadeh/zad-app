@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import 'identity_verification_screen.dart';
+import 'verification_pending_screen.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
 import 'notifications_screen.dart';
@@ -11,6 +12,7 @@ import 'donate_tab.dart';
 import 'user_orders_screen.dart';
 import 'user_profile_screen.dart';
 import 'user_publish_offer_screen.dart';
+import 'offer_details_screen.dart';
 
 // ─────────────────────────────────────────────
 // Dashboard الرئيسي
@@ -25,21 +27,38 @@ class UserDashboard extends StatefulWidget {
 
 class _UserDashboardState extends State<UserDashboard> {
   int _selectedIndex = 0;
-  late final List<Widget> _pages;
+  int _browseTabIndex = 0;
+
+  late List<Widget> _pages;
+
+  void _goToBrowseTab(int tabIndex) {
+    setState(() {
+      _browseTabIndex = tabIndex;
+      _selectedIndex = 1;
+      _buildPages();
+    });
+  }
+
+  void _buildPages() {
+    _pages = [
+      UserHomeScreen(
+        user: widget.user,
+        onNavigate: (index) => setState(() => _selectedIndex = index),
+        onBrowseTab: _goToBrowseTab,
+      ),
+      UserBrowseTabsScreen(
+        key: ValueKey(_browseTabIndex),
+        initialIndex: _browseTabIndex,
+      ),
+      const UserOrdersScreen(),
+      UserProfileScreen(user: widget.user),
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
-    _pages = [
-      UserHomeScreen(
-        user: widget.user,
-        // ✅ الحل — callback عشان الـ onTap يشتغل صح
-        onNavigate: (index) => setState(() => _selectedIndex = index),
-      ),
-      const UserBrowseTabsScreen(),
-      const UserOrdersScreen(),
-      UserProfileScreen(user: widget.user),
-    ];
+    _buildPages();
   }
 
   @override
@@ -80,12 +99,18 @@ class _UserDashboardState extends State<UserDashboard> {
 // شاشة التصفح — Tabs
 // ─────────────────────────────────────────────
 class UserBrowseTabsScreen extends StatelessWidget {
-  const UserBrowseTabsScreen({super.key});
+  final int initialIndex;
+
+  const UserBrowseTabsScreen({
+    super.key,
+    this.initialIndex = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 3,
+      initialIndex: initialIndex,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('تصفح الطعام'),
@@ -111,12 +136,48 @@ class UserBrowseTabsScreen extends StatelessWidget {
 class UserHomeScreen extends StatelessWidget {
   final AppUser user;
   final ValueChanged<int> onNavigate;
-
+  final ValueChanged<int> onBrowseTab;
   const UserHomeScreen({
     super.key,
     required this.user,
     required this.onNavigate,
+    required this.onBrowseTab,
   });
+  Future<void> _openPublishScreen(BuildContext context) async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('individuals')
+        .doc(uid)
+        .get();
+
+    final status = doc.data()?['verificationStatus'];
+
+    if (!context.mounted) return;
+
+    if (status == 'approved') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const UserPublishOfferScreen(),
+        ),
+      );
+    } else if (status == 'pending') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const VerificationPendingScreen(),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const IdentityVerificationScreen(),
+        ),
+      );
+    }
+  }
 
   Stream<int> _activeOrdersStream() => FirebaseFirestore.instance
       .collection('reservations')
@@ -145,7 +206,6 @@ class UserHomeScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // ── AppBar ──
           SliverAppBar(
             floating: true,
             snap: true,
@@ -161,15 +221,21 @@ class UserHomeScreen extends StatelessWidget {
                     color: AppColors.primary.withOpacity(0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.eco_rounded,
-                      color: AppColors.primary, size: 19),
+                  child: const Icon(
+                    Icons.eco_rounded,
+                    color: AppColors.primary,
+                    size: 19,
+                  ),
                 ),
                 const SizedBox(width: 8),
-                const Text('زاد',
-                    style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22)),
+                const Text(
+                  'زاد',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
+                ),
               ],
             ),
             actions: [
@@ -183,7 +249,8 @@ class UserHomeScreen extends StatelessWidget {
                         onPressed: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const NotificationsScreen()),
+                            builder: (_) => const NotificationsScreen(),
+                          ),
                         ),
                         icon: const Icon(Icons.notifications_none_rounded),
                       ),
@@ -195,15 +262,17 @@ class UserHomeScreen extends StatelessWidget {
                             width: 18,
                             height: 18,
                             decoration: const BoxDecoration(
-                                color: AppColors.danger,
-                                shape: BoxShape.circle),
+                              color: AppColors.danger,
+                              shape: BoxShape.circle,
+                            ),
                             child: Center(
                               child: Text(
                                 count > 9 ? '9+' : '$count',
                                 style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold),
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ),
@@ -215,12 +284,10 @@ class UserHomeScreen extends StatelessWidget {
               const SizedBox(width: 4),
             ],
           ),
-
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(18, 4, 18, 100),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── بطاقة الترحيب ──
                 _WelcomeCard(user: user),
                 const SizedBox(height: 20),
 
@@ -235,7 +302,14 @@ class UserHomeScreen extends StatelessWidget {
                           value: snap.hasData ? '${snap.data}' : '...',
                           icon: Icons.shopping_bag_outlined,
                           color: AppColors.primary,
-                          onTap: () => onNavigate(2),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const UserOrdersScreen(
+                                statusFilter: 'reserved',
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -248,7 +322,14 @@ class UserHomeScreen extends StatelessWidget {
                           value: snap.hasData ? '${snap.data}' : '...',
                           icon: Icons.check_circle_outline_rounded,
                           color: AppColors.success,
-                          onTap: () => onNavigate(2),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const UserOrdersScreen(
+                                statusFilter: 'picked_up',
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -257,7 +338,6 @@ class UserHomeScreen extends StatelessWidget {
 
                 const SizedBox(height: 28),
 
-                // ── تصفح سريع ──
                 _SectionHeader(title: 'تصفح'),
                 const SizedBox(height: 12),
                 Row(
@@ -268,7 +348,7 @@ class UserHomeScreen extends StatelessWidget {
                         subtitle: 'مجاني أو مخفّض',
                         icon: Icons.local_offer_rounded,
                         color: AppColors.primary,
-                        onTap: () => onNavigate(1),
+                        onTap: () => onBrowseTab(0),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -278,7 +358,7 @@ class UserHomeScreen extends StatelessWidget {
                         subtitle: 'باقات المطاعم',
                         icon: Icons.card_giftcard_rounded,
                         color: const Color(0xFF7C3AED),
-                        onTap: () => onNavigate(1),
+                        onTap: () => onBrowseTab(1),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -288,7 +368,7 @@ class UserHomeScreen extends StatelessWidget {
                         subtitle: 'شارك الخير',
                         icon: Icons.volunteer_activism_rounded,
                         color: const Color(0xFFE11D48),
-                        onTap: () => onNavigate(1),
+                        onTap: () => onBrowseTab(2),
                       ),
                     ),
                   ],
@@ -296,7 +376,6 @@ class UserHomeScreen extends StatelessWidget {
 
                 const SizedBox(height: 28),
 
-                // ── إجراءات سريعة ──
                 _SectionHeader(title: 'إجراءات سريعة'),
                 const SizedBox(height: 12),
 
@@ -305,11 +384,7 @@ class UserHomeScreen extends StatelessWidget {
                   title: 'نشر عرض طعام',
                   subtitle: 'شارك طعامك الفائض مجاناً أو بسعر رمزي',
                   color: const Color(0xFF7C3AED),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const UserPublishOfferScreen()),
-                  ),
+                  onTap: () => _openPublishScreen(context),
                 ),
                 _ActionTile(
                   icon: Icons.search_rounded,
@@ -317,7 +392,7 @@ class UserHomeScreen extends StatelessWidget {
                   subtitle: 'اعثر على طعام مجاني أو بسعر رمزي قريباً منك',
                   color: AppColors.primary,
                   badge: const _Badge(label: 'جديد', color: AppColors.success),
-                  onTap: () => onNavigate(1),
+                  onTap: () => onBrowseTab(0),
                 ),
                 _ActionTile(
                   icon: Icons.receipt_long_rounded,
@@ -331,7 +406,7 @@ class UserHomeScreen extends StatelessWidget {
                   title: 'تبرع بطعام',
                   subtitle: 'شارك طعامك الفائض ودعم المجتمع',
                   color: const Color(0xFFE11D48),
-                  onTap: () => onNavigate(1),
+                  onTap: () => onBrowseTab(2),
                 ),
                 _ActionTile(
                   icon: Icons.report_problem_outlined,
@@ -339,14 +414,15 @@ class UserHomeScreen extends StatelessWidget {
                   subtitle: 'بلّغ عن مشكلة في طلب أو مزوّد طعام',
                   color: AppColors.secondary,
                   onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const ComplaintScreen())),
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ComplaintScreen(),
+                    ),
+                  ),
                 ),
 
                 const SizedBox(height: 28),
 
-                // ── آخر العروض ──
                 _SectionHeader(
                   title: 'آخر العروض',
                   actionLabel: 'عرض الكل',
@@ -407,9 +483,10 @@ class _WelcomeCard extends StatelessWidget {
                 ? Text(
                     user.name.isNotEmpty ? user.name[0].toUpperCase() : 'م',
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold),
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   )
                 : null,
           ),
@@ -418,17 +495,21 @@ class _WelcomeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_greeting(),
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 13)),
+                Text(
+                  _greeting(),
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
                 const SizedBox(height: 3),
-                Text(user.name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                Text(
+                  user.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 8),
                 Container(
                   padding:
@@ -437,8 +518,10 @@ class _WelcomeCard extends StatelessWidget {
                     color: Colors.white.withOpacity(0.18),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text('🌱 ساهم في تقليل الهدر',
-                      style: TextStyle(color: Colors.white, fontSize: 11)),
+                  child: const Text(
+                    '🌱 ساهم في تقليل الهدر',
+                    style: TextStyle(color: Colors.white, fontSize: 11),
+                  ),
                 ),
               ],
             ),
@@ -479,9 +562,10 @@ class _StatCard extends StatelessWidget {
           border: Border.all(color: AppColors.border),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 4)),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: Column(
@@ -490,20 +574,30 @@ class _StatCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                  color: color.withOpacity(0.10), shape: BoxShape.circle),
+                color: color.withOpacity(0.10),
+                shape: BoxShape.circle,
+              ),
               child: Icon(icon, color: color, size: 22),
             ),
             const SizedBox(height: 10),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 26, fontWeight: FontWeight.bold, color: color)),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: AppColors.textLight,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textLight,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -683,50 +777,79 @@ class _LatestOffersPreview extends StatelessWidget {
 
             return Card(
               margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                leading: Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.restaurant_rounded,
-                      color: AppColors.primary, size: 22),
-                ),
-                title: Text(title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Row(
-                  children: [
-                    const Icon(Icons.location_on_outlined,
-                        size: 12, color: AppColors.textLight),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: Text(location,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.textLight),
-                          overflow: TextOverflow.ellipsis),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OfferDetailsScreen(
+                        docId: doc.id,
+                        data: data,
+                      ),
                     ),
-                  ],
-                ),
-                trailing: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: isFree
-                        ? AppColors.success.withOpacity(0.12)
-                        : AppColors.primary.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(20),
+                  );
+                },
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.restaurant_rounded,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
                   ),
-                  child: Text(
-                    isFree ? 'مجاني' : '$price $currency',
-                    style: TextStyle(
-                      fontSize: 12,
+                  title: Text(
+                    title,
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: isFree ? AppColors.success : AppColors.primaryDark,
+                      fontSize: 14,
+                    ),
+                  ),
+                  subtitle: Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 12,
+                        color: AppColors.textLight,
+                      ),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        child: Text(
+                          location,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textLight,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  trailing: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isFree
+                          ? AppColors.success.withOpacity(0.12)
+                          : AppColors.primary.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      isFree ? 'مجاني' : '$price $currency',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color:
+                            isFree ? AppColors.success : AppColors.primaryDark,
+                      ),
                     ),
                   ),
                 ),

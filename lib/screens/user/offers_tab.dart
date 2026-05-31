@@ -35,7 +35,12 @@ class _OffersTabState extends State<OffersTab> {
 
   Future<void> _loadLocation() async {
     setState(() => _locationLoading = true);
+
     final position = await LocationService().getCurrentLocation();
+
+    print('LAT: ${position?.latitude}');
+    print('LNG: ${position?.longitude}');
+
     setState(() {
       _userPosition = position;
       _locationLoading = false;
@@ -85,7 +90,7 @@ class _OffersTabState extends State<OffersTab> {
       filtered = filtered.where((doc) {
         final data = doc.data() as Map<String, dynamic>;
         final dist = _calcDistance(data);
-        if (dist == null) return true; // العروض بدون موقع تظهر دائماً
+        if (dist == null) return false;
         return dist <= _radiusKm;
       }).toList();
     }
@@ -304,7 +309,17 @@ class _OffersTabState extends State<OffersTab> {
                     whereNotIn: ['restaurant_package']).snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const _ErrorState(message: 'حدث خطأ أثناء تحميل العروض');
+                print(snapshot.error);
+
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      snapshot.error.toString(),
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                );
               }
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());

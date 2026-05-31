@@ -12,6 +12,7 @@ class UserDonationsHistoryScreen extends StatelessWidget {
 
   String _statusLabel(String status) {
     switch (status) {
+      case 'pending_review':
       case 'pending':
         return 'قيد المراجعة';
       case 'approved':
@@ -21,12 +22,13 @@ class UserDonationsHistoryScreen extends StatelessWidget {
       case 'rejected':
         return 'مرفوض';
       default:
-        return status;
+        return status.isEmpty ? 'غير محدد' : status;
     }
   }
 
   Color _statusColor(String status) {
     switch (status) {
+      case 'pending_review':
       case 'pending':
         return Colors.orange;
       case 'approved':
@@ -42,6 +44,7 @@ class UserDonationsHistoryScreen extends StatelessWidget {
 
   IconData _statusIcon(String status) {
     switch (status) {
+      case 'pending_review':
       case 'pending':
         return Icons.pending_actions_rounded;
       case 'approved':
@@ -69,15 +72,28 @@ class UserDonationsHistoryScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('donations')
-            .where('userId', isEqualTo: uid)
-            .orderBy('createdAt', descending: true)
+            .where('donorUserId', isEqualTo: uid)
             .snapshots(),
         builder: (context, snap) {
+          if (snap.hasError) {
+            return Center(child: Text('حدث خطأ: ${snap.error}'));
+          }
+
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final docs = snap.data!.docs;
+
+          docs.sort((a, b) {
+            final ad = (a.data() as Map<String, dynamic>)['createdAt'];
+            final bd = (b.data() as Map<String, dynamic>)['createdAt'];
+
+            if (ad is Timestamp && bd is Timestamp) {
+              return bd.compareTo(ad);
+            }
+            return 0;
+          });
 
           if (docs.isEmpty) {
             return Center(
@@ -87,27 +103,29 @@ class UserDonationsHistoryScreen extends StatelessWidget {
                   Icon(Icons.volunteer_activism_outlined,
                       size: 64, color: AppColors.primary.withOpacity(0.3)),
                   const SizedBox(height: 14),
-                  const Text('لم تقم بأي تبرع بعد',
-                      style:
-                          TextStyle(color: AppColors.textLight, fontSize: 14)),
+                  const Text(
+                    'لم تقم بأي تبرع بعد',
+                    style: TextStyle(color: AppColors.textLight, fontSize: 14),
+                  ),
                 ],
               ),
             );
           }
 
-          // إحصائيات سريعة
-          final pending = docs
-              .where((d) => (d.data() as Map)['status'] == 'pending')
-              .length;
-          final approved = docs
-              .where((d) =>
-                  (d.data() as Map)['status'] == 'approved' ||
-                  (d.data() as Map)['status'] == 'redistributed')
-              .length;
+          final pending = docs.where((d) {
+            final s =
+                (d.data() as Map<String, dynamic>)['donationStatus'] ?? '';
+            return s == 'pending_review' || s == 'pending';
+          }).length;
+
+          final approved = docs.where((d) {
+            final s =
+                (d.data() as Map<String, dynamic>)['donationStatus'] ?? '';
+            return s == 'approved' || s == 'redistributed';
+          }).length;
 
           return Column(
             children: [
-              // شريط الإحصائيات
               Container(
                 color: AppColors.card,
                 padding:
@@ -115,32 +133,45 @@ class UserDonationsHistoryScreen extends StatelessWidget {
                 child: Row(
                   children: [
                     _QuickStat(
-                        label: 'الكل',
-                        value: '${docs.length}',
-                        color: AppColors.primary),
+                      label: 'الكل',
+                      value: '${docs.length}',
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 16),
                     _QuickStat(
-                        label: 'مقبول',
-                        value: '$approved',
-                        color: AppColors.success),
+                      label: 'مقبول',
+                      value: '$approved',
+                      color: AppColors.success,
+                    ),
                     const SizedBox(width: 16),
                     _QuickStat(
-                        label: 'بانتظار',
-                        value: '$pending',
-                        color: Colors.orange),
+                      label: 'بانتظار',
+                      value: '$pending',
+                      color: Colors.orange,
+                    ),
                   ],
                 ),
               ),
               const Divider(height: 1),
-
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: docs.length,
                   itemBuilder: (context, i) {
                     final data = docs[i].data() as Map<String, dynamic>;
-                    final status = data['status'] ?? 'pending';
+                    final status = data['donationStatus'] ??
+                        data['status'] ??
+                        'pending_review';
                     final color = _statusColor(status);
+
+                    final title = data['title'] ??
+                        data['foodName'] ??
+                        data['description'] ??
+                        'تبرع طعام';
+
+                    final quantity = data['quantity'] ?? '';
+                    final unitType = data['unitType'] ?? '';
+                    final category = data['category'] ?? '';
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -160,40 +191,56 @@ class UserDonationsHistoryScreen extends StatelessWidget {
                                 color: color.withOpacity(0.12),
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(_statusIcon(status),
-                                  color: color, size: 22),
+                              child: Icon(
+                                _statusIcon(status),
+                                color: color,
+                                size: 22,
+                              ),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(data['foodName'] ?? 'تبرع طعام',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14)),
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
                                   const SizedBox(height: 3),
                                   Text(
-                                    '${data['quantity']} • ${data['category']}',
+                                    [
+                                      if ('$quantity'.isNotEmpty) '$quantity',
+                                      if ('$unitType'.isNotEmpty) '$unitType',
+                                      if ('$category'.isNotEmpty) '$category',
+                                    ].join(' • '),
                                     style: const TextStyle(
-                                        color: AppColors.textLight,
-                                        fontSize: 12),
+                                      color: AppColors.textLight,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 5),
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
                               decoration: BoxDecoration(
                                 color: color.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: Text(_statusLabel(status),
-                                  style: TextStyle(
-                                      color: color,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold)),
+                              child: Text(
+                                _statusLabel(status),
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -232,14 +279,27 @@ class UserRatingsScreen extends StatelessWidget {
             .collection('reservations')
             .where('userId', isEqualTo: uid)
             .where('hasRated', isEqualTo: true)
-            .orderBy('ratedAt', descending: true)
             .snapshots(),
         builder: (context, snap) {
+          if (snap.hasError) {
+            return Center(child: Text('حدث خطأ: ${snap.error}'));
+          }
+
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final docs = snap.data!.docs;
+
+          docs.sort((a, b) {
+            final ad = (a.data() as Map<String, dynamic>)['ratedAt'];
+            final bd = (b.data() as Map<String, dynamic>)['ratedAt'];
+
+            if (ad is Timestamp && bd is Timestamp) {
+              return bd.compareTo(ad);
+            }
+            return 0;
+          });
 
           if (docs.isEmpty) {
             return Center(
@@ -249,9 +309,10 @@ class UserRatingsScreen extends StatelessWidget {
                   Icon(Icons.star_outline_rounded,
                       size: 64, color: Colors.amber.withOpacity(0.4)),
                   const SizedBox(height: 14),
-                  const Text('لم تقيّم أي طلب بعد',
-                      style:
-                          TextStyle(color: AppColors.textLight, fontSize: 14)),
+                  const Text(
+                    'لم تقيّم أي طلب بعد',
+                    style: TextStyle(color: AppColors.textLight, fontSize: 14),
+                  ),
                   const SizedBox(height: 8),
                   const Text(
                     'بعد استلام أي طلب يمكنك تقييم تجربتك',
@@ -262,27 +323,28 @@ class UserRatingsScreen extends StatelessWidget {
             );
           }
 
-          // متوسط التقييم
           double total = 0;
           for (final d in docs) {
-            total += ((d.data() as Map)['rating'] ?? 0) as num;
+            total += ((d.data() as Map<String, dynamic>)['rating'] ?? 0) as num;
           }
           final avg = total / docs.length;
 
           return Column(
             children: [
-              // بطاقة المتوسط
               Container(
                 color: AppColors.card,
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(avg.toStringAsFixed(1),
-                        style: const TextStyle(
-                            fontSize: 40,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textDark)),
+                    Text(
+                      avg.toStringAsFixed(1),
+                      style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                      ),
+                    ),
                     const SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,16 +362,19 @@ class UserRatingsScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text('${docs.length} تقييم',
-                            style: const TextStyle(
-                                color: AppColors.textLight, fontSize: 12)),
+                        Text(
+                          '${docs.length} تقييم',
+                          style: const TextStyle(
+                            color: AppColors.textLight,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
               const Divider(height: 1),
-
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.all(16),
@@ -335,10 +400,13 @@ class UserRatingsScreen extends StatelessWidget {
                             Row(
                               children: [
                                 Expanded(
-                                  child: Text(offerTitle,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14)),
+                                  child: Text(
+                                    offerTitle,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
                                 ),
                                 Row(
                                   children: List.generate(
@@ -356,11 +424,14 @@ class UserRatingsScreen extends StatelessWidget {
                             ),
                             if (comment.isNotEmpty) ...[
                               const SizedBox(height: 8),
-                              Text(comment,
-                                  style: const TextStyle(
-                                      color: AppColors.textLight,
-                                      fontSize: 13,
-                                      height: 1.4)),
+                              Text(
+                                comment,
+                                style: const TextStyle(
+                                  color: AppColors.textLight,
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                              ),
                             ],
                           ],
                         ),
@@ -401,7 +472,7 @@ class UserComplaintsScreen extends StatelessWidget {
       case 'resolved':
         return 'تم الحل';
       default:
-        return status;
+        return status.isEmpty ? 'غير محدد' : status;
     }
   }
 
@@ -419,15 +490,28 @@ class UserComplaintsScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('complaints')
-            .where('userId', isEqualTo: uid)
-            .orderBy('createdAt', descending: true)
+            .where('reportedByUserId', isEqualTo: uid)
             .snapshots(),
         builder: (context, snap) {
+          if (snap.hasError) {
+            return Center(child: Text('حدث خطأ: ${snap.error}'));
+          }
+
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final docs = snap.data!.docs;
+
+          docs.sort((a, b) {
+            final ad = (a.data() as Map<String, dynamic>)['createdAt'];
+            final bd = (b.data() as Map<String, dynamic>)['createdAt'];
+
+            if (ad is Timestamp && bd is Timestamp) {
+              return bd.compareTo(ad);
+            }
+            return 0;
+          });
 
           if (docs.isEmpty) {
             return Center(
@@ -437,9 +521,10 @@ class UserComplaintsScreen extends StatelessWidget {
                   Icon(Icons.report_problem_outlined,
                       size: 64, color: AppColors.primary.withOpacity(0.3)),
                   const SizedBox(height: 14),
-                  const Text('لا توجد شكاوى مسجّلة',
-                      style:
-                          TextStyle(color: AppColors.textLight, fontSize: 14)),
+                  const Text(
+                    'لا توجد شكاوى مسجّلة',
+                    style: TextStyle(color: AppColors.textLight, fontSize: 14),
+                  ),
                 ],
               ),
             );
@@ -452,9 +537,11 @@ class UserComplaintsScreen extends StatelessWidget {
               final data = docs[i].data() as Map<String, dynamic>;
               final status = data['status'] ?? 'open';
               final color = _statusColor(status);
-              final description = data['description'] ?? '';
+              final description =
+                  data['description'] ?? data['complaintText'] ?? '';
               final type = data['type'] ?? 'مشكلة أخرى';
-              final relatedOffer = data['relatedOfferId'] ?? '';
+              final relatedOffer =
+                  data['relatedOfferId'] ?? data['offerId'] ?? '';
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -490,42 +577,56 @@ class UserComplaintsScreen extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(type,
+                                Text(
+                                  type,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                if ('$relatedOffer'.isNotEmpty)
+                                  Text(
+                                    'رقم العرض: $relatedOffer',
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14)),
-                                if (relatedOffer.isNotEmpty)
-                                  Text('رقم العرض: $relatedOffer',
-                                      style: const TextStyle(
-                                          color: AppColors.textLight,
-                                          fontSize: 11)),
+                                      color: AppColors.textLight,
+                                      fontSize: 11,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
                               color: color.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Text(_statusLabel(status),
-                                style: TextStyle(
-                                    color: color,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold)),
+                            child: Text(
+                              _statusLabel(status),
+                              style: TextStyle(
+                                color: color,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      if (description.isNotEmpty) ...[
+                      if ('$description'.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         const Divider(height: 1),
                         const SizedBox(height: 10),
-                        Text(description,
-                            style: const TextStyle(
-                                color: AppColors.textLight,
-                                fontSize: 13,
-                                height: 1.5)),
+                        Text(
+                          description,
+                          style: const TextStyle(
+                            color: AppColors.textLight,
+                            fontSize: 13,
+                            height: 1.5,
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -557,11 +658,21 @@ class _QuickStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value,
-            style: TextStyle(
-                fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-        Text(label,
-            style: const TextStyle(color: AppColors.textLight, fontSize: 12)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textLight,
+            fontSize: 12,
+          ),
+        ),
       ],
     );
   }

@@ -33,24 +33,24 @@ class _CharityDashboardState extends State<CharityDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
-  index: _selectedIndex,
-  children: [
-    CharityHomeScreen(
-      user: _currentUser,
-      onNavigate: (i) => setState(() => _selectedIndex = i),
-    ),
-    const CharityDonationsScreen(),
-    const CharityHistoryScreen(),
-    CharityProfileScreen(
-      user: _currentUser,
-      onUserUpdated: (updatedUser) {
-        setState(() {
-          _currentUser = updatedUser;
-        });
-      },
-    ),
-  ],
-),
+        index: _selectedIndex,
+        children: [
+          CharityHomeScreen(
+            user: _currentUser,
+            onNavigate: (i) => setState(() => _selectedIndex = i),
+          ),
+          const CharityDonationsScreen(),
+          const CharityHistoryScreen(),
+          CharityProfileScreen(
+            user: _currentUser,
+            onUserUpdated: (updatedUser) {
+              setState(() {
+                _currentUser = updatedUser;
+              });
+            },
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         indicatorColor: AppColors.primaryLight.withOpacity(0.25),
