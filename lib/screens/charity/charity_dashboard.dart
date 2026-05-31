@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
+import 'charity_browse_screen.dart';
 import 'charity_donations_screen.dart';
 import 'charity_history_screen.dart';
 import 'charity_home_screen.dart';
 import 'charity_profile_screen.dart';
 
-// ─────────────────────────────────────────────
-// Dashboard الرئيسي
-// ─────────────────────────────────────────────
 class CharityDashboard extends StatefulWidget {
   final AppUser user;
   const CharityDashboard({super.key, required this.user});
@@ -20,7 +18,6 @@ class CharityDashboard extends StatefulWidget {
 
 class _CharityDashboardState extends State<CharityDashboard> {
   int _selectedIndex = 0;
-  late List<Widget> _pages;
   late AppUser _currentUser;
 
   @override
@@ -40,13 +37,12 @@ class _CharityDashboardState extends State<CharityDashboard> {
             onNavigate: (i) => setState(() => _selectedIndex = i),
           ),
           const CharityDonationsScreen(),
+          const CharityBrowseScreen(),
           const CharityHistoryScreen(),
           CharityProfileScreen(
             user: _currentUser,
             onUserUpdated: (updatedUser) {
-              setState(() {
-                _currentUser = updatedUser;
-              });
+              setState(() => _currentUser = updatedUser);
             },
           ),
         ],
@@ -67,6 +63,11 @@ class _CharityDashboardState extends State<CharityDashboard> {
             icon: Icon(Icons.volunteer_activism_outlined),
             selectedIcon: Icon(Icons.volunteer_activism_rounded),
             label: 'التبرعات',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.search_outlined),
+            selectedIcon: Icon(Icons.search_rounded),
+            label: 'تصفح',
           ),
           NavigationDestination(
             icon: Icon(Icons.history_outlined),

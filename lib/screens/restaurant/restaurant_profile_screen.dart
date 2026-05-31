@@ -1,9 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:zad_app/models/user.dart';
-import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
-import 'package:zad_app/theme/app_colors.dart';
+
+import '../../models/user.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/profile_widgets.dart';
 
 class RestaurantProfileScreen extends StatefulWidget {
   final AppUser user;
@@ -20,7 +21,7 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _addressController;
-  late final TextEditingController _emailController;
+  String? _updatedPhotoUrl;
 
   @override
   void initState() {
@@ -28,7 +29,7 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
     _nameController = TextEditingController(text: widget.user.name);
     _phoneController = TextEditingController(text: widget.user.phone);
     _addressController = TextEditingController(text: widget.user.address);
-    _emailController = TextEditingController(text: widget.user.email);
+    _updatedPhotoUrl = widget.user.photoUrl;
   }
 
   @override
@@ -36,7 +37,6 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 
@@ -138,21 +138,16 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          // ── الصورة والاسم ──
           Center(
             child: Column(
               children: [
-                CircleAvatar(
-                  radius: 52,
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
-                  child: Text(
-                    widget.user.name.isNotEmpty
-                        ? widget.user.name[0].toUpperCase()
-                        : 'م',
-                    style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary),
-                  ),
+                ProfileAvatar(
+                  name: widget.user.name,
+                  photoUrl: _updatedPhotoUrl,
+                  color: AppColors.primary,
+                  onPhotoUpdated: (url) =>
+                      setState(() => _updatedPhotoUrl = url),
                 ),
                 const SizedBox(height: 12),
                 Text(widget.user.name,
@@ -175,7 +170,9 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
               ],
             ),
           ),
+
           const SizedBox(height: 24),
+
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -186,27 +183,28 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  EditableField(
+                  _EditableField(
                       icon: Icons.storefront_outlined,
                       label: 'اسم المطعم',
                       controller: _nameController,
                       isEditing: _isEditing),
                   const Divider(),
-                  EditableField(
+                  _EditableField(
                       icon: Icons.email_outlined,
                       label: 'البريد الإلكتروني',
-                      controller: _emailController,
+                      controller:
+                          TextEditingController(text: widget.user.email),
                       isEditing: false,
                       readOnly: true),
                   const Divider(),
-                  EditableField(
+                  _EditableField(
                       icon: Icons.phone_outlined,
                       label: 'رقم الهاتف',
                       controller: _phoneController,
                       isEditing: _isEditing,
                       keyboardType: TextInputType.phone),
                   const Divider(),
-                  EditableField(
+                  _EditableField(
                       icon: Icons.location_on_outlined,
                       label: 'عنوان المطعم',
                       controller: _addressController,
@@ -215,7 +213,23 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
               ),
             ),
           ),
+
+          const SizedBox(height: 16),
+
+          // ── تغيير كلمة المرور ──
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: AppColors.border),
+            ),
+            child: const Column(
+              children: [ChangePasswordTile()],
+            ),
+          ),
+
           const SizedBox(height: 24),
+
           OutlinedButton.icon(
             onPressed: _logout,
             icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
@@ -226,6 +240,68 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditableField extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final TextEditingController controller;
+  final bool isEditing;
+  final bool readOnly;
+  final TextInputType? keyboardType;
+
+  const _EditableField({
+    required this.icon,
+    required this.label,
+    required this.controller,
+    required this.isEditing,
+    this.readOnly = false,
+    this.keyboardType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textLight,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                isEditing && !readOnly
+                    ? TextField(
+                        controller: controller,
+                        keyboardType: keyboardType,
+                        style: const TextStyle(
+                            fontSize: 14, color: AppColors.textDark),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 6),
+                          border: UnderlineInputBorder(),
+                        ),
+                      )
+                    : Text(controller.text.isEmpty ? '—' : controller.text,
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: readOnly
+                                ? AppColors.textLight
+                                : AppColors.textDark)),
+              ],
             ),
           ),
         ],

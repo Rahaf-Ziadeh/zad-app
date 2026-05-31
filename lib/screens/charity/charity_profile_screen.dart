@@ -4,18 +4,17 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
-// ─────────────────────────────────────────────
-// شاشة البروفايل
-// ─────────────────────────────────────────────
+import '../../widgets/profile_widgets.dart';
+
 class CharityProfileScreen extends StatefulWidget {
   final AppUser user;
-  final Function(AppUser updatedUser) onUserUpdated;
+  final ValueChanged<AppUser>? onUserUpdated; // ← callback للـ dashboard
+
   const CharityProfileScreen({
-  super.key,
-  required this.user,
-  required this.onUserUpdated,
-});
-  
+    super.key,
+    required this.user,
+    this.onUserUpdated,
+  });
 
   @override
   State<CharityProfileScreen> createState() => _CharityProfileScreenState();
@@ -24,6 +23,8 @@ class CharityProfileScreen extends StatefulWidget {
 class _CharityProfileScreenState extends State<CharityProfileScreen> {
   bool _isEditing = false;
   bool _isSaving = false;
+  String? _updatedPhotoUrl;
+
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _addressController;
@@ -34,6 +35,7 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
     _nameController = TextEditingController(text: widget.user.name);
     _phoneController = TextEditingController(text: widget.user.phone);
     _addressController = TextEditingController(text: widget.user.address);
+    _updatedPhotoUrl = widget.user.photoUrl;
   }
 
   @override
@@ -44,66 +46,78 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
     super.dispose();
   }
 
- Future<void> _save() async {
-  if (_nameController.text.trim().isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('الاسم لا يمكن أن يكون فارغاً')),
-    );
-    return;
+  Future<void> _save() async {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الاسم لا يمكن أن يكون فارغاً')),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final newName = _nameController.text.trim();
+      final newPhone = _phoneController.text.trim();
+      final newAddress = _addressController.text.trim();
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'name': newName,
+        'fullName': newName,
+        'phone': newPhone,
+        'address': newAddress,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // ← إبلاغ الـ dashboard بالتحديث
+      widget.onUserUpdated?.call(
+        widget.user.copyWith(
+          name: newName,
+          phone: newPhone,
+          address: newAddress,
+        ),
+      );
+
+      setState(() => _isEditing = false);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم حفظ التغييرات ✅'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('خطأ: $e')));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
-  setState(() => _isSaving = true);
-
-  try {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-
-    await FirebaseFirestore.instance.collection('users').doc(uid).update({
-      'name': _nameController.text.trim(),
-      'fullName': _nameController.text.trim(),
-      'phone': _phoneController.text.trim(),
-      'address': _addressController.text.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
+  void _cancelEdit() {
+    setState(() {
+      _isEditing = false;
+      _nameController.text = widget.user.name;
+      _phoneController.text = widget.user.phone;
+      _addressController.text = widget.user.address;
     });
-
-    widget.onUserUpdated(
-      widget.user.copyWith(
-        name: _nameController.text.trim(),
-        phone: _phoneController.text.trim(),
-        address: _addressController.text.trim(),
-      ),
-    );
-
-    setState(() => _isEditing = false);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم حفظ التغييرات'),
-        backgroundColor: AppColors.success,
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('خطأ: $e')),
-    );
-  } finally {
-    if (mounted) setState(() => _isSaving = false);
   }
-}
 
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('تسجيل الخروج'),
-        content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
+        content: const Text('هل أنت متأكدة من تسجيل الخروج؟'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('إلغاء')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             onPressed: () => Navigator.pop(context, true),
@@ -132,14 +146,7 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
             )
           else ...[
             TextButton(
-              onPressed: () {
-                setState(() {
-                  _isEditing = false;
-                  _nameController.text = widget.user.name;
-                  _phoneController.text = widget.user.phone;
-                  _addressController.text = widget.user.address;
-                });
-              },
+              onPressed: _cancelEdit,
               child: const Text('إلغاء',
                   style: TextStyle(color: AppColors.textLight)),
             ),
@@ -159,44 +166,44 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          // ── صورة واسم ──
           Center(
             child: Column(
               children: [
-                CircleAvatar(
-                  radius: 52,
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
-                  child: Text(
-                    widget.user.name.isNotEmpty
-                        ? widget.user.name[0].toUpperCase()
-                        : 'ج',
-                    style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary),
-                  ),
+                ProfileAvatar(
+                  name: widget.user.name,
+                  photoUrl: _updatedPhotoUrl,
+                  color: const Color(0xFFE11D48),
+                  onPhotoUpdated: (url) =>
+                      setState(() => _updatedPhotoUrl = url),
                 ),
                 const SizedBox(height: 12),
-                Text(widget.user.name,
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(
+                  _isEditing ? _nameController.text : widget.user.name,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 4),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.10),
+                    color: const Color(0xFFE11D48).withOpacity(0.10),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text('جمعية خيرية',
                       style: TextStyle(
-                          color: AppColors.primary,
+                          color: Color(0xFFE11D48),
                           fontWeight: FontWeight.bold,
                           fontSize: 12)),
                 ),
               ],
             ),
           ),
+
           const SizedBox(height: 24),
+
+          // ── معلومات الحساب ──
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -206,38 +213,64 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text('معلومات الجمعية',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark)),
+                  const SizedBox(height: 14),
                   _EditableField(
-                      icon: Icons.volunteer_activism_outlined,
-                      label: 'اسم الجمعية',
-                      controller: _nameController,
-                      isEditing: _isEditing),
+                    icon: Icons.volunteer_activism_outlined,
+                    label: 'اسم الجمعية',
+                    controller: _nameController,
+                    isEditing: _isEditing,
+                  ),
                   const Divider(),
                   _EditableField(
-                      icon: Icons.email_outlined,
-                      label: 'البريد الإلكتروني',
-                      controller:
-                          TextEditingController(text: widget.user.email),
-                      isEditing: false,
-                      readOnly: true),
+                    icon: Icons.email_outlined,
+                    label: 'البريد الإلكتروني',
+                    controller: TextEditingController(text: widget.user.email),
+                    isEditing: false,
+                    readOnly: true,
+                  ),
                   const Divider(),
                   _EditableField(
-                      icon: Icons.phone_outlined,
-                      label: 'رقم الهاتف',
-                      controller: _phoneController,
-                      isEditing: _isEditing,
-                      keyboardType: TextInputType.phone),
+                    icon: Icons.phone_outlined,
+                    label: 'رقم الهاتف',
+                    controller: _phoneController,
+                    isEditing: _isEditing,
+                    keyboardType: TextInputType.phone,
+                  ),
                   const Divider(),
                   _EditableField(
-                      icon: Icons.location_on_outlined,
-                      label: 'العنوان',
-                      controller: _addressController,
-                      isEditing: _isEditing),
+                    icon: Icons.location_on_outlined,
+                    label: 'العنوان',
+                    controller: _addressController,
+                    isEditing: _isEditing,
+                  ),
                 ],
               ),
             ),
           ),
+
+          const SizedBox(height: 16),
+
+          // ── تغيير كلمة المرور ──
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: AppColors.border),
+            ),
+            child: const Column(
+              children: [ChangePasswordTile()],
+            ),
+          ),
+
           const SizedBox(height: 24),
+
           OutlinedButton.icon(
             onPressed: _logout,
             icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
@@ -257,10 +290,8 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
 }
 
 // ─────────────────────────────────────────────
-// Widgets مشتركة
+// حقل قابل للتعديل
 // ─────────────────────────────────────────────
-
-
 class _EditableField extends StatelessWidget {
   final IconData icon;
   final String label;

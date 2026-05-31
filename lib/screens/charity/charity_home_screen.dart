@@ -2,12 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
-import '../common/notifications_screen.dart';
 import '../../theme/app_colors.dart';
+import '../common/notifications_screen.dart';
+import 'charity_publish_surplus_screen.dart';
 
-// ─────────────────────────────────────────────
-// الشاشة الرئيسية
-// ─────────────────────────────────────────────
 class CharityHomeScreen extends StatelessWidget {
   final AppUser user;
   final ValueChanged<int> onNavigate;
@@ -45,26 +43,18 @@ class CharityHomeScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const NotificationsScreen(),
-                ),
-              );
-            },
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
             icon: const Icon(Icons.notifications_none_rounded),
           ),
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('donations')
-            .where(
-              'charityUserId',
-              isEqualTo: user.uid,
-            )
-            .snapshots(),
+        // ✅ إصلاح — نجيب كل التبرعات بدون فلتر charityUserId
+        // لأن التبرعات الجديدة ما عندها charityUserId وقت الإنشاء
+        stream: FirebaseFirestore.instance.collection('donations').snapshots(),
         builder: (context, snapshot) {
           final donations = snapshot.hasData
               ? snapshot.data!.docs
@@ -73,24 +63,19 @@ class CharityHomeScreen extends StatelessWidget {
           int pending = 0, approved = 0, redistributed = 0;
 
           for (final doc in donations) {
-            final s = (doc.data() as Map<String, dynamic>)['donationStatus'] ??
-                'pending_review';
-
-            if (s == 'pending_review') pending++;
-
+            final data = doc.data() as Map<String, dynamic>;
+            // ✅ نستخدم 'status' بدل 'donationStatus'
+            final s = data['status'] ?? 'pending';
+            if (s == 'pending') pending++;
             if (s == 'approved') approved++;
-
             if (s == 'redistributed') redistributed++;
           }
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
             children: [
-              // ── بطاقة الترحيب ──
               _WelcomeCard(user: user),
               const SizedBox(height: 20),
-
-              // ── إحصائيات ──
               Row(
                 children: [
                   Expanded(
@@ -99,6 +84,7 @@ class CharityHomeScreen extends StatelessWidget {
                       value: '$pending',
                       icon: Icons.pending_actions_rounded,
                       color: Colors.orange,
+                      onTap: () => onNavigate(1),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -108,6 +94,7 @@ class CharityHomeScreen extends StatelessWidget {
                       value: '$approved',
                       icon: Icons.check_circle_rounded,
                       color: AppColors.success,
+                      onTap: () => onNavigate(1),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -117,20 +104,18 @@ class CharityHomeScreen extends StatelessWidget {
                       value: '$redistributed',
                       icon: Icons.share_rounded,
                       color: AppColors.primary,
+                      onTap: () => onNavigate(2),
                     ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 24),
-
               const Text('إجراءات سريعة',
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textDark)),
               const SizedBox(height: 12),
-
               _ActionTile(
                 icon: Icons.volunteer_activism_rounded,
                 title: 'مراجعة التبرعات',
@@ -139,18 +124,30 @@ class CharityHomeScreen extends StatelessWidget {
                 onTap: () => onNavigate(1),
               ),
               _ActionTile(
+                icon: Icons.search_rounded,
+                title: 'تصفح العروض',
+                subtitle: 'تصفح عروض المطاعم والأفراد واحجز للجمعية',
+                color: AppColors.primary,
+                onTap: () => onNavigate(2),
+              ),
+              _ActionTile(
                 icon: Icons.history_rounded,
                 title: 'سجل التبرعات',
                 subtitle: 'عرض التبرعات المقبولة والمرفوضة والموزّعة',
-                color: AppColors.primary,
-                onTap: () => onNavigate(2),
+                color: const Color(0xFF7C3AED),
+                onTap: () => onNavigate(3),
               ),
               _ActionTile(
                 icon: Icons.share_rounded,
                 title: 'إعادة توزيع الفائض',
                 subtitle: 'نشر الطعام المتبقي ليستفيد منه المستحقون',
-                color: const Color(0xFF7C3AED),
-                onTap: () => onNavigate(1),
+                color: AppColors.success,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CharityPublishSurplusScreen(),
+                  ),
+                ),
               ),
             ],
           );
@@ -160,6 +157,9 @@ class CharityHomeScreen extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────
+// Widgets
+// ─────────────────────────────────────────────
 class _WelcomeCard extends StatelessWidget {
   final AppUser user;
   const _WelcomeCard({required this.user});
@@ -208,7 +208,9 @@ class _WelcomeCard extends StatelessWidget {
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
-                        fontWeight: FontWeight.bold)),
+                        fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 5),
                 const Text('راجعي التبرعات وساعدي في توزيع الطعام',
                     style: TextStyle(color: Colors.white70, fontSize: 12)),
@@ -226,52 +228,57 @@ class _StatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback onTap;
 
   const _StatCard({
     required this.title,
     required this.value,
     required this.icon,
     required this.color,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 3)),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              shape: BoxShape.circle,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 17),
             ),
-            child: Icon(icon, color: color, size: 17),
-          ),
-          const SizedBox(height: 8),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 3),
-          Text(title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: AppColors.textLight,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500)),
-        ],
+            const SizedBox(height: 8),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 3),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: AppColors.textLight,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500)),
+          ],
+        ),
       ),
     );
   }
