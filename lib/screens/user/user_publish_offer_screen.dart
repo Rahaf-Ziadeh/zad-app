@@ -2,8 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
+import '../../widgets/user_publish_widgets.dart';
+import '../../services/user_offer_service.dart';
 import '../../services/location_service.dart';
+import '../../services/user_service.dart';
 import '../../theme/app_colors.dart';
+import '../../constants/app_constants.dart';
 
 class UserPublishOfferScreen extends StatefulWidget {
   const UserPublishOfferScreen({super.key});
@@ -28,15 +32,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
   double? _latitude;
   double? _longitude;
 
-  final _categories = [
-    'وجبات',
-    'مخبوزات',
-    'خضار وفواكه',
-    'معلبات',
-    'حلويات',
-    'أخرى',
-  ];
-
   @override
   void dispose() {
     _titleController.dispose();
@@ -59,41 +54,74 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
   Future<void> _fetchLocation() async {
     setState(() => _fetchingLocation = true);
-    final position = await LocationService().getCurrentLocation();
-    if (position != null) {
-      final placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
 
-      final place = placemarks.first;
+    try {
+      final position = await LocationService().getCurrentLocation();
+
+      if (position == null) {
+        throw Exception('تعذّر الحصول على الإحداثيات');
+      }
+
+      String locationText = '';
+
+      // ── محاولة جلب اسم المنطقة ──
+      try {
+        final placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        ).timeout(const Duration(seconds: 8));
+
+        if (placemarks.isNotEmpty) {
+          final place = placemarks.first;
+
+          final city = place.locality ?? '';
+          final area = place.subLocality ?? '';
+          final street = place.street ?? '';
+
+          locationText = [
+            if (city.isNotEmpty) city,
+            if (area.isNotEmpty) area,
+            if (street.isNotEmpty) street,
+          ].join(' - ');
+        }
+      } catch (_) {
+        // إذا فشل geocoding
+        locationText = 'يرجى كتابة اسم المنطقة يدوياً';
+      }
+
+      // إذا رجع فاضي
+      if (locationText.trim().isEmpty) {
+        locationText = 'يرجى كتابة اسم المنطقة يدوياً';
+      }
+
+      if (!mounted) return;
 
       setState(() {
         _latitude = position.latitude;
         _longitude = position.longitude;
-
-        _locationController.text =
-            '${place.locality ?? ''} - ${place.subLocality ?? ''}';
+        _locationController.text = locationText;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم تحديد الموقع ✅'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في تحديد الموقع: $e'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    } finally {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم تحديد الموقع ✅'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذّر الحصول على الموقع'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
+        setState(() => _fetchingLocation = false);
       }
     }
-    setState(() => _fetchingLocation = false);
   }
 
   Future<void> _publish() async {
@@ -109,42 +137,24 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final userName = userDoc.data()?['name'] ?? 'فرد';
+      final userName = await UserService().getUserName(uid);
 
       final price =
           _isFree ? 0.0 : (double.tryParse(_priceController.text.trim()) ?? 0);
-
-      final docRef = FirebaseFirestore.instance.collection('offers').doc();
-      await docRef.set({
-        'offerId': docRef.id,
-        'providerUserId': uid,
-        'providerRole': 'individual',
-        'providerName': userName,
-        'offerType': 'individual_offer',
-        'title': _titleController.text.trim(),
-        'description': _descController.text.trim(),
-        'category': _selectedCategory,
-        'imageUrl': '',
-        'quantity': int.tryParse(_quantityController.text.trim()) ?? 1,
-        'remainingQuantity': int.tryParse(_quantityController.text.trim()) ?? 1,
-        'originalPrice': price,
-        'discountPrice': price,
-        'price': price,
-        'currency': 'ILS',
-        'isFree': _isFree,
-        'status': 'available',
-        'pickupLocation': _locationController.text.trim(),
-        'latitude': _latitude,
-        'longitude': _longitude,
-        'hasLocation': _latitude != null,
-        'expiryDate': _expiryDate,
-        'isCash': true,
-        'isOnline': false,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await UserOfferService().publishIndividualOffer(
+        uid: uid,
+        userName: userName,
+        title: _titleController.text.trim(),
+        description: _descController.text.trim(),
+        category: _selectedCategory,
+        quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
+        price: price,
+        isFree: _isFree,
+        pickupLocation: _locationController.text.trim(),
+        latitude: _latitude,
+        longitude: _longitude,
+        expiryDate: _expiryDate!,
+      );
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -217,7 +227,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
             Row(
               children: [
                 Expanded(
-                  child: _TypeCard(
+                  child: TypeCard(
                     icon: Icons.volunteer_activism_rounded,
                     label: 'مجاني',
                     subtitle: 'هدية لمن يحتاج',
@@ -228,7 +238,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _TypeCard(
+                  child: TypeCard(
                     icon: Icons.local_offer_rounded,
                     label: 'بسعر رمزي',
                     subtitle: 'بأقل من التكلفة',
@@ -269,12 +279,12 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                     const SizedBox(height: 14),
 
                     // الفئة
-                    const _SectionLabel(text: 'الفئة'),
+                    const SectionLabel(text: 'الفئة'),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 6,
-                      children: _categories.map((cat) {
+                      children: AppConstants.foodCategories.map((cat) {
                         final selected = _selectedCategory == cat;
                         return GestureDetector(
                           onTap: () => setState(() => _selectedCategory = cat),
@@ -499,72 +509,5 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
         ),
       ),
     );
-  }
-}
-
-class _TypeCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _TypeCard({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.selected,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.10) : AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? color : AppColors.border,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: selected ? color : AppColors.textLight, size: 28),
-            const SizedBox(height: 8),
-            Text(label,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: selected ? color : AppColors.textDark)),
-            const SizedBox(height: 3),
-            Text(subtitle,
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(fontSize: 11, color: AppColors.textLight)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textDark));
   }
 }

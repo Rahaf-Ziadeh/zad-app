@@ -161,12 +161,10 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
         CircleAvatar(
           radius: widget.radius,
           backgroundColor: widget.color.withOpacity(0.15),
-          backgroundImage: _effectiveUrl.isNotEmpty
-              ? NetworkImage(_effectiveUrl)
-              : null,
+          backgroundImage:
+              _effectiveUrl.isNotEmpty ? NetworkImage(_effectiveUrl) : null,
           child: _uploading
-              ? CircularProgressIndicator(
-                  color: widget.color, strokeWidth: 2)
+              ? CircularProgressIndicator(color: widget.color, strokeWidth: 2)
               : _effectiveUrl.isEmpty
                   ? Text(
                       widget.name.isNotEmpty
@@ -305,11 +303,22 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
 
     String label;
     Color color;
-    if (s <= 0.2) { label = 'ضعيفة جداً'; color = AppColors.danger; }
-    else if (s <= 0.4) { label = 'ضعيفة'; color = Colors.orange; }
-    else if (s <= 0.6) { label = 'متوسطة'; color = AppColors.secondary; }
-    else if (s <= 0.8) { label = 'جيدة'; color = AppColors.primary; }
-    else { label = 'قوية جداً ✓'; color = AppColors.success; }
+    if (s <= 0.2) {
+      label = 'ضعيفة جداً';
+      color = AppColors.danger;
+    } else if (s <= 0.4) {
+      label = 'ضعيفة';
+      color = Colors.orange;
+    } else if (s <= 0.6) {
+      label = 'متوسطة';
+      color = AppColors.secondary;
+    } else if (s <= 0.8) {
+      label = 'جيدة';
+      color = AppColors.primary;
+    } else {
+      label = 'قوية جداً ✓';
+      color = AppColors.success;
+    }
 
     setState(() {
       _strength = s;
@@ -361,8 +370,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
         default:
           msg = 'حدث خطأ: ${e.message}';
       }
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -463,8 +471,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                     icon: Icon(_showNew
                         ? Icons.visibility_off_outlined
                         : Icons.visibility_outlined),
-                    onPressed: () =>
-                        setState(() => _showNew = !_showNew),
+                    onPressed: () => setState(() => _showNew = !_showNew),
                   ),
                 ),
               ),
@@ -478,8 +485,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                     value: _strength,
                     minHeight: 5,
                     backgroundColor: AppColors.border,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(_strengthColor),
+                    valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -547,6 +553,105 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class ProfileFieldWidget extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final TextEditingController controller;
+  final bool isEditing;
+  final bool readOnly;
+  final TextInputType? keyboardType;
+
+  const ProfileFieldWidget({
+    required this.icon,
+    required this.label,
+    required this.controller,
+    required this.isEditing,
+    this.readOnly = false,
+    this.keyboardType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 20, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textLight,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                isEditing && !readOnly
+                    ? TextField(
+                        controller: controller,
+                        keyboardType: keyboardType,
+                        style: const TextStyle(
+                            fontSize: 14, color: AppColors.textDark),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 6),
+                          border: UnderlineInputBorder(),
+                        ),
+                      )
+                    : Text(controller.text.isEmpty ? '—' : controller.text,
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: readOnly
+                                ? AppColors.textLight
+                                : AppColors.textDark)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MenuTileWidget extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Color color;
+  final VoidCallback onTap;
+
+  const MenuTileWidget({
+    required this.icon,
+    required this.title,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+            color: color.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      title: Text(title,
+          style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textDark)),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded,
+          size: 14, color: AppColors.textLight),
     );
   }
 }

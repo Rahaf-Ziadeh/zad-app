@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import 'identity_verification_screen.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/profile_widgets.dart';
@@ -228,27 +228,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           fontWeight: FontWeight.bold,
                           color: AppColors.textDark)),
                   const SizedBox(height: 14),
-                  _ProfileField(
+                  ProfileFieldWidget(
                       icon: Icons.person_outline_rounded,
                       label: 'الاسم الكامل',
                       controller: _nameController,
                       isEditing: _isEditing),
                   const Divider(),
-                  _ProfileField(
+                  ProfileFieldWidget(
                       icon: Icons.email_outlined,
                       label: 'البريد الإلكتروني',
                       controller: TextEditingController(text: user.email),
                       isEditing: false,
                       readOnly: true),
                   const Divider(),
-                  _ProfileField(
+                  ProfileFieldWidget(
                       icon: Icons.phone_outlined,
                       label: 'رقم الهاتف',
                       controller: _phoneController,
                       isEditing: _isEditing,
                       keyboardType: TextInputType.phone),
                   const Divider(),
-                  _ProfileField(
+                  ProfileFieldWidget(
                       icon: Icons.location_on_outlined,
                       label: 'العنوان',
                       controller: _addressController,
@@ -269,16 +269,42 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
             child: Column(
               children: [
-                _MenuTile(
-                    icon: Icons.add_box_rounded,
-                    title: 'نشر عرض طعام',
-                    color: AppColors.primary,
-                    onTap: () => Navigator.push(
+                MenuTileWidget(
+                  icon: Icons.add_box_rounded,
+                  title: 'نشر عرض طعام',
+                  color: AppColors.primary,
+                  onTap: () async {
+                    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+                    final doc = await FirebaseFirestore.instance
+                        .collection('individuals')
+                        .doc(uid)
+                        .get();
+
+                    if (!context.mounted) return;
+
+                    if (!doc.exists ||
+                        doc.data()?['identityImageUrl'] == null ||
+                        doc.data()?['identityImageUrl'] == '') {
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => const UserPublishOfferScreen()))),
+                          builder: (_) => const IdentityVerificationScreen(),
+                        ),
+                      );
+                      return;
+                    }
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const UserPublishOfferScreen(),
+                      ),
+                    );
+                  },
+                ),
                 const Divider(height: 1, indent: 56),
-                _MenuTile(
+                MenuTileWidget(
                     icon: Icons.history_rounded,
                     title: 'سجل التبرعات',
                     color: const Color(0xFFE11D48),
@@ -288,7 +314,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             builder: (_) =>
                                 const UserDonationsHistoryScreen()))),
                 const Divider(height: 1, indent: 56),
-                _MenuTile(
+                MenuTileWidget(
                     icon: Icons.star_outline_rounded,
                     title: 'تقييماتي',
                     color: Colors.amber,
@@ -297,7 +323,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         MaterialPageRoute(
                             builder: (_) => const UserRatingsScreen()))),
                 const Divider(height: 1, indent: 56),
-                _MenuTile(
+                MenuTileWidget(
                     icon: Icons.report_problem_outlined,
                     title: 'شكاواي',
                     color: AppColors.secondary,
@@ -328,105 +354,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           const SizedBox(height: 8),
         ],
       ),
-    );
-  }
-}
-
-class _ProfileField extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final TextEditingController controller;
-  final bool isEditing;
-  final bool readOnly;
-  final TextInputType? keyboardType;
-
-  const _ProfileField({
-    required this.icon,
-    required this.label,
-    required this.controller,
-    required this.isEditing,
-    this.readOnly = false,
-    this.keyboardType,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(icon, size: 20, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textLight,
-                        fontWeight: FontWeight.w500)),
-                const SizedBox(height: 2),
-                isEditing && !readOnly
-                    ? TextField(
-                        controller: controller,
-                        keyboardType: keyboardType,
-                        style: const TextStyle(
-                            fontSize: 14, color: AppColors.textDark),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 6),
-                          border: UnderlineInputBorder(),
-                        ),
-                      )
-                    : Text(controller.text.isEmpty ? '—' : controller.text,
-                        style: TextStyle(
-                            fontSize: 14,
-                            color: readOnly
-                                ? AppColors.textLight
-                                : AppColors.textDark)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MenuTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _MenuTile({
-    required this.icon,
-    required this.title,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-            color: color.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(10)),
-        child: Icon(icon, color: color, size: 18),
-      ),
-      title: Text(title,
-          style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textDark)),
-      trailing: const Icon(Icons.arrow_forward_ios_rounded,
-          size: 14, color: AppColors.textLight),
     );
   }
 }
