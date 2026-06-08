@@ -39,6 +39,7 @@ class OfferDetailsScreen extends StatelessWidget {
     final title = data['title'] ?? 'عرض طعام';
     final description = data['description'] ?? '';
     final pickupLocation = data['pickupLocation'] ?? 'غير محدد';
+    final pickupTime = data['pickupTime'] ?? '';
     final remainingQuantity = data['remainingQuantity'] ?? 0;
     final currency = data['currency'] ?? 'ILS';
     final imageUrl = data['imageUrl'] ?? '';
@@ -185,6 +186,12 @@ class OfferDetailsScreen extends StatelessWidget {
                       label: 'مكان الاستلام',
                       value: pickupLocation,
                     ),
+                    if (pickupTime.toString().isNotEmpty)
+                      OfferInfoRow(
+                        icon: Icons.access_time_outlined,
+                        label: 'وقت الاستلام',
+                        value: pickupTime.toString(),
+                      ),
                     OfferInfoRow(
                       icon: Icons.inventory_2_outlined,
                       label: 'الكمية المتاحة',

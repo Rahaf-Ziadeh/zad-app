@@ -19,6 +19,7 @@ class OffersTab extends StatefulWidget {
 
 class _OffersTabState extends State<OffersTab> {
   String _filterType = 'all';
+  String _providerTypeFilter = 'all';
   Position? _userPosition;
   bool _locationLoading = true;
   bool _sortByDistance = true;
@@ -69,7 +70,13 @@ class _OffersTabState extends State<OffersTab> {
       if (_filterType == 'paid') return data['isFree'] != true;
       return true;
     }).toList();
+    filtered = filtered.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final providerRole = data['providerRole'] ?? '';
 
+      if (_providerTypeFilter == 'all') return true;
+      return providerRole == _providerTypeFilter;
+    }).toList();
     // ترتيب بالمسافة لو عندنا موقع
     if (_userPosition != null && _sortByDistance) {
       filtered.sort((a, b) {
@@ -183,7 +190,29 @@ class _OffersTabState extends State<OffersTab> {
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
 
+              Row(
+                children: [
+                  const Icon(Icons.storefront_outlined,
+                      size: 18, color: AppColors.textLight),
+                  const SizedBox(width: 8),
+                  ...[
+                    ('كل المزودين', 'all'),
+                    ('مطعم', 'restaurant'),
+                    ('جمعية', 'charity'),
+                    ('فرد', 'individual'),
+                  ].map((e) => Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: _FilterChip(
+                          label: e.$1,
+                          selected: _providerTypeFilter == e.$2,
+                          onTap: () =>
+                              setState(() => _providerTypeFilter = e.$2),
+                        ),
+                      )),
+                ],
+              ),
               // ── شريط النطاق (يظهر فقط لو الترتيب بالمسافة مفعّل) ──
               if (_sortByDistance && _userPosition != null) ...[
                 const SizedBox(height: 10),
@@ -382,6 +411,7 @@ class _OfferCard extends StatelessWidget {
     final title = data['title'] ?? 'عرض طعام';
     final description = data['description'] ?? '';
     final pickupLocation = data['pickupLocation'] ?? 'غير محدد';
+    final pickupTime = data['pickupTime'] ?? '';
     final remainingQuantity = data['remainingQuantity'] ?? 0;
     final currency = data['currency'] ?? 'ILS';
     final imageUrl = data['imageUrl'] ?? '';
@@ -546,6 +576,12 @@ class _OfferCard extends StatelessWidget {
                         ? '$pickupLocation  •  ${LocationService().formatDistance(distance!)}'
                         : pickupLocation,
                   ),
+                  if (pickupTime.toString().isNotEmpty)
+                    OfferInfoRow(
+                      icon: Icons.access_time_outlined,
+                      label: 'وقت الاستلام',
+                      value: pickupTime.toString(),
+                    ),
                   OfferInfoRow(
                     icon: Icons.inventory_2_outlined,
                     label: 'الكمية المتاحة',

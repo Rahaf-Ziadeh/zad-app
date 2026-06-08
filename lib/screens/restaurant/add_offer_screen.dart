@@ -20,6 +20,8 @@ class AddOfferScreen extends StatefulWidget {
 }
 
 class _AddOfferScreenState extends State<AddOfferScreen> {
+  final _pickupStartTimeController = TextEditingController();
+  final _pickupEndTimeController = TextEditingController();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   XFile? _selectedImage;
@@ -142,6 +144,8 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
 
   @override
   void dispose() {
+    _pickupStartTimeController.dispose();
+    _pickupEndTimeController.dispose();
     _titleController.dispose();
     _descController.dispose();
     _quantityController.dispose();
@@ -154,6 +158,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   Future<void> _addOffer() async {
     final title = _titleController.text.trim();
     final desc = _descController.text.trim();
+
     if (_selectedImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى إضافة صورة للعرض')),
@@ -171,9 +176,18 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     final originalStr = _originalPriceController.text.trim();
     final discountStr = _discountPriceController.text.trim();
     final pickup = _pickupController.text.trim();
+    final pickupStartTime = _pickupStartTimeController.text.trim();
+    final pickupEndTime = _pickupEndTimeController.text.trim();
 
-    if ([title, quantityStr, originalStr, discountStr, pickup]
-            .any((s) => s.isEmpty) ||
+    if ([
+          title,
+          quantityStr,
+          originalStr,
+          discountStr,
+          pickup,
+          pickupStartTime,
+          pickupEndTime
+        ].any((s) => s.isEmpty) ||
         (!_isMysteryPackage && desc.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى تعبئة جميع الحقول المطلوبة')),
@@ -237,6 +251,9 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         'isFree': discountPrice == 0,
         'status': 'available',
         'pickupLocation': pickup,
+        'pickupStartTime': pickupStartTime,
+        'pickupEndTime': pickupEndTime,
+        'pickupTime': '$pickupStartTime - $pickupEndTime',
         'latitude': _latitude,
         'longitude': _longitude,
         'hasLocation': _latitude != null && _longitude != null,
@@ -258,6 +275,8 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         _originalPriceController.clear();
         _discountPriceController.clear();
         _pickupController.clear();
+        _pickupStartTimeController.clear();
+        _pickupEndTimeController.clear();
         _isMysteryPackage = false;
       });
 
@@ -433,7 +452,44 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                       hint: 'العنوان أو المنطقة',
                       icon: Icons.location_on_outlined),
                   const SizedBox(height: 10),
+                  TextField(
+                    controller: _pickupStartTimeController,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Pickup start time',
+                      prefixIcon: Icon(Icons.access_time),
+                    ),
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        _pickupStartTimeController.text =
+                            picked.format(context);
+                      }
+                    },
+                  ),
 
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: _pickupEndTimeController,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Pickup end time',
+                      prefixIcon: Icon(Icons.access_time_filled),
+                    ),
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        _pickupEndTimeController.text = picked.format(context);
+                      }
+                    },
+                  ),
                   // ── زر تحديد الموقع ──
                   GestureDetector(
                     onTap: _fetchingLocation ? null : _fetchLocation,

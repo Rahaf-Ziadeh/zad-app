@@ -6,7 +6,10 @@ class AppUser {
   final String phone;
   final String address;
   final String? photoUrl;
-  final String? nationalId; // رقم الهوية الوطنية — للمساءلة القانونية
+  final String? nationalId;
+  final String status;
+  final bool isApproved;
+  final bool isSuspended; // رقم الهوية الوطنية — للمساءلة القانونية
 
   AppUser({
     required this.uid,
@@ -15,11 +18,20 @@ class AppUser {
     required this.role,
     required this.phone,
     required this.address,
+    required this.status,
+    required this.isApproved,
+    required this.isSuspended,
     this.photoUrl,
     this.nationalId,
   });
 
   factory AppUser.fromMap(String uid, Map<String, dynamic> map) {
+    final status = map['status'] ?? 'active';
+    final isSuspended = status == 'suspended' || map['isSuspended'] == true;
+
+    if (isSuspended) {
+      throw Exception('تم تعليق هذا الحساب من قبل الإدارة');
+    }
     return AppUser(
       uid: uid,
       name: map['name'] ?? map['fullName'] ?? '',
@@ -29,6 +41,9 @@ class AppUser {
       address: map['address'] ?? '',
       photoUrl: map['photoUrl'],
       nationalId: map['nationalId'],
+      status: status,
+      isApproved: map['isApproved'] ?? false,
+      isSuspended: isSuspended,
     );
   }
 
@@ -41,6 +56,9 @@ class AppUser {
       'address': address,
       'photoUrl': photoUrl,
       'nationalId': nationalId,
+      'status': status,
+      'isApproved': isApproved,
+      'isSuspended': isSuspended,
     };
   }
 
@@ -50,6 +68,9 @@ class AppUser {
     String? address,
     String? photoUrl,
     String? nationalId,
+    String? status,
+    bool? isApproved,
+    bool? isSuspended,
   }) {
     return AppUser(
       uid: uid,
@@ -60,6 +81,9 @@ class AppUser {
       address: address ?? this.address,
       photoUrl: photoUrl ?? this.photoUrl,
       nationalId: nationalId ?? this.nationalId,
+      status: status ?? this.status,
+      isApproved: isApproved ?? this.isApproved,
+      isSuspended: isSuspended ?? this.isSuspended,
     );
   }
 }

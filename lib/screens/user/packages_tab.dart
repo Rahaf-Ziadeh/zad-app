@@ -74,6 +74,10 @@ class _PackageCard extends StatelessWidget {
     final title = data['title'] ?? 'باقة غامضة';
     final description =
         data['description'] ?? 'باقة طعام فائض من المطعم بسعر مخفّض.';
+    final isMysteryPackage =
+        data['isMysteryPackage'] == true || data['packageType'] == 'mystery';
+
+    final packageLabel = isMysteryPackage ? 'باقة غامضة' : 'باقة واضحة';
     final imageUrl = data['imageUrl'] ?? '';
     final currency = data['currency'] ?? 'ILS';
     final pickupLocation = data['pickupLocation'] ?? 'غير محدد';
@@ -134,15 +138,15 @@ class _PackageCard extends StatelessWidget {
                       color: Colors.black.withOpacity(0.55),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.card_giftcard_rounded,
+                        const Icon(Icons.card_giftcard_rounded,
                             color: Colors.white, size: 14),
-                        SizedBox(width: 5),
+                        const SizedBox(width: 5),
                         Text(
-                          'باقة غامضة',
-                          style: TextStyle(
+                          packageLabel,
+                          style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 12),

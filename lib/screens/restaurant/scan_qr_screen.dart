@@ -69,57 +69,43 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
           .collection('reservations')
           .doc(reservationId);
 
-      final reservationDoc = await reservationRef.get();
+      String offerTitle = 'طلب طعام';
+      String userName = 'مستخدم';
 
-      if (!reservationDoc.exists) {
-        _showResult(
-          title: 'الحجز غير موجود',
-          message: 'لم يتم العثور على هذا الحجز في النظام.',
-          isSuccess: false,
-        );
-        return;
-      }
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final reservationDoc = await transaction.get(reservationRef);
 
-      final data = reservationDoc.data() as Map<String, dynamic>;
-      final storedOfferId = data['offerId'] ?? '';
-      final storedUserId = data['userId'] ?? '';
-      final status = data['status'] ?? '';
-      final offerTitle = data['offerTitle'] ?? 'طلب طعام';
-      final userName = data['userName'] ?? 'مستخدم';
+        if (!reservationDoc.exists) {
+          throw Exception('RESERVATION_NOT_FOUND');
+        }
 
-      if (storedOfferId != offerId || storedUserId != userId) {
-        _showResult(
-          title: 'بيانات غير متطابقة',
-          message: 'بيانات رمز QR لا تتطابق مع بيانات الحجز.',
-          isSuccess: false,
-        );
-        return;
-      }
+        final data = reservationDoc.data() as Map<String, dynamic>;
+        final storedOfferId = data['offerId'] ?? '';
+        final storedUserId = data['userId'] ?? '';
+        final status = data['status'] ?? '';
 
-      if (status == 'picked_up') {
-        _showResult(
-          title: 'تم الاستلام مسبقاً',
-          message: 'هذا الطلب تم تأكيد استلامه من قبل.',
-          isSuccess: false,
-        );
-        return;
-      }
+        offerTitle = data['offerTitle'] ?? 'طلب طعام';
+        userName = data['userName'] ?? 'مستخدم';
 
-      if (status != 'reserved') {
-        _showResult(
-          title: 'لا يمكن تأكيد الاستلام',
-          message: 'حالة الحجز الحالية لا تسمح بتأكيد الاستلام.',
-          isSuccess: false,
-        );
-        return;
-      }
+        if (storedOfferId != offerId || storedUserId != userId) {
+          throw Exception('QR_MISMATCH');
+        }
 
-      // ── تأكيد الاستلام ──
-      await reservationRef.update({
-        'status': 'picked_up',
-        'pickedAt': FieldValue.serverTimestamp(),
+        if (status == 'picked_up') {
+          throw Exception('ALREADY_PICKED_UP');
+        }
+
+        if (status != 'reserved') {
+          throw Exception('INVALID_STATUS');
+        }
+
+        transaction.update(reservationRef, {
+          'status': 'picked_up',
+          'pickedAt': FieldValue.serverTimestamp(),
+          'qrValidatedAt': FieldValue.serverTimestamp(),
+          'qrValidationMethod': 'firestore_transaction',
+        });
       });
-
       // ── إشعار للمستخدم ──
       await NotificationService().sendNotification(
         userId: userId,
@@ -135,11 +121,39 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
         isSuccess: true,
       );
     } catch (e) {
-      _showResult(
-        title: 'حدث خطأ',
-        message: 'تعذر تأكيد الاستلام: $e',
-        isSuccess: false,
-      );
+      final error = e.toString();
+
+      if (error.contains('RESERVATION_NOT_FOUND')) {
+        _showResult(
+          title: 'الحجز غير موجود',
+          message: 'لم يتم العثور على هذا الحجز في النظام.',
+          isSuccess: false,
+        );
+      } else if (error.contains('QR_MISMATCH')) {
+        _showResult(
+          title: 'بيانات غير متطابقة',
+          message: 'بيانات رمز QR لا تتطابق مع بيانات الحجز.',
+          isSuccess: false,
+        );
+      } else if (error.contains('ALREADY_PICKED_UP')) {
+        _showResult(
+          title: 'تم الاستلام مسبقاً',
+          message: 'هذا الطلب تم تأكيد استلامه من قبل.',
+          isSuccess: false,
+        );
+      } else if (error.contains('INVALID_STATUS')) {
+        _showResult(
+          title: 'لا يمكن تأكيد الاستلام',
+          message: 'حالة الحجز الحالية لا تسمح بتأكيد الاستلام.',
+          isSuccess: false,
+        );
+      } else {
+        _showResult(
+          title: 'حدث خطأ',
+          message: 'تعذر تأكيد الاستلام: $e',
+          isSuccess: false,
+        );
+      }
     }
   }
 
