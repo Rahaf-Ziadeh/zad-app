@@ -232,6 +232,14 @@ class _ReserveButtonState extends State<_ReserveButton> {
   bool _loading = false;
 
   Future<void> _reserve() async {
+    if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('يجب تسجيل الدخول أولاً للحجز'),
+    ),
+  );
+  return;
+}
     setState(() => _loading = true);
     try {
       final reservationId = await ReservationService().reserveOffer(

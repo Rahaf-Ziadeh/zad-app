@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
+import '../../models/user.dart';
+import '../user/user_dashboard.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../admin/admin_dashboard.dart';
@@ -38,8 +39,8 @@ class _LoginScreenState extends State<LoginScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _fadeAnim = Tween<double>(begin: 0, end: 1)
-        .animate(CurvedAnimation(parent: _animController, curve: Curves.easeIn));
+    _fadeAnim = Tween<double>(begin: 0, end: 1).animate(
+        CurvedAnimation(parent: _animController, curve: Curves.easeIn));
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.12),
       end: Offset.zero,
@@ -118,8 +119,8 @@ class _LoginScreenState extends State<LoginScreen>
     final email = _emailController.text.trim();
 
     if (email.isEmpty) {
-      setState(() =>
-          _errorMessage = 'أدخل بريدك الإلكتروني أولاً ثم اضغط "نسيت كلمة المرور"');
+      setState(() => _errorMessage =
+          'أدخل بريدك الإلكتروني أولاً ثم اضغط "نسيت كلمة المرور"');
       return;
     }
 
@@ -148,19 +149,40 @@ class _LoginScreenState extends State<LoginScreen>
   // ── الدخول كزائر ──
   Future<void> _continueAsGuest() async {
     setState(() => _isLoading = true);
+
     try {
-      await FirebaseAuth.instance.signInAnonymously();
+      final credential = await FirebaseAuth.instance.signInAnonymously();
+
       if (!mounted) return;
-      // الزائر يرى واجهة المستخدم بدون بيانات شخصية
-      // يمكن تعديلها لاحقاً حسب منطق التطبيق
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('أنت تتصفح كزائر — بعض الميزات غير متاحة')),
+
+      final guestUser = AppUser(
+        uid: credential.user!.uid,
+        name: 'زائر',
+        email: '',
+        role: 'guest',
+        phone: '',
+        address: '',
+        status: 'active',
+        isApproved: true,
+        isSuspended: false,
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UserDashboard(user: guestUser),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _errorMessage = 'تعذر الدخول كزائر');
+
+      setState(() {
+        _errorMessage = e.toString();
+      });
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -209,7 +231,8 @@ class _LoginScreenState extends State<LoginScreen>
                     const SizedBox(height: 6),
                     const Text(
                       'سجّل دخولك للمتابعة في زاد',
-                      style: TextStyle(color: AppColors.textLight, fontSize: 14),
+                      style:
+                          TextStyle(color: AppColors.textLight, fontSize: 14),
                     ),
 
                     const SizedBox(height: 32),
@@ -325,7 +348,8 @@ class _LoginScreenState extends State<LoginScreen>
                       height: 52,
                       child: OutlinedButton.icon(
                         onPressed: _isLoading ? null : _continueAsGuest,
-                        icon: const Icon(Icons.person_outline_rounded, size: 20),
+                        icon:
+                            const Icon(Icons.person_outline_rounded, size: 20),
                         label: const Text('المتابعة كزائر',
                             style: TextStyle(fontSize: 15)),
                         style: OutlinedButton.styleFrom(

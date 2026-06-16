@@ -25,6 +25,14 @@ class UserHomeScreen extends StatelessWidget {
   });
 
   Future<void> _openPublishScreen(BuildContext context) async {
+    if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يجب تسجيل الدخول أولاً لاستخدام هذه الميزة'),
+        ),
+      );
+      return;
+    }
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     final doc = await FirebaseFirestore.instance

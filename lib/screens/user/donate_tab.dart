@@ -107,6 +107,14 @@ class _DonateTabState extends State<DonateTab> {
   }
 
   Future<void> _donateFood() async {
+    if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يجب تسجيل الدخول أولاً للتبرع'),
+        ),
+      );
+      return;
+    }
     if (_foodNameController.text.trim().isEmpty ||
         _quantityController.text.trim().isEmpty ||
         _locationController.text.trim().isEmpty ||

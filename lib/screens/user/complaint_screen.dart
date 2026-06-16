@@ -37,11 +37,21 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
   }
 
   Future<void> _submit() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null || currentUser.isAnonymous) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يجب تسجيل الدخول أولاً لتقديم شكوى'),
+        ),
+      );
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isLoading = true);
     try {
-      final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final userId = currentUser.uid;
       await FirebaseFirestore.instance.collection('complaints').add({
         'userId': userId,
         'type': _selectedType ?? 'مشكلة أخرى',
