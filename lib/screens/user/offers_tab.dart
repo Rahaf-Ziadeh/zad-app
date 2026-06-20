@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
-
+import 'payment_method_screen.dart';
 import '../../services/reservation_service.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
@@ -625,22 +625,40 @@ class _ReserveButtonState extends State<_ReserveButton> {
   Future<void> _reserve() async {
     if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يجب تسجيل الدخول أولاً للحجز'),
+        const SnackBar(content: Text('يجب تسجيل الدخول أولاً للحجز')),
+      );
+      return;
+    }
+
+    final discountPrice =
+        widget.data['discountPrice'] ?? widget.data['price'] ?? 0;
+    final isFree = widget.data['isFree'] == true || discountPrice == 0;
+
+    if (!isFree) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaymentMethodScreen(
+            docId: widget.docId,
+            data: widget.data,
+          ),
         ),
       );
       return;
     }
 
-    
     setState(() => _loading = true);
+
     try {
       final reservationId = await ReservationService().reserveOffer(
         offerId: widget.docId,
         offerData: widget.data,
       );
+
       final userId = FirebaseAuth.instance.currentUser!.uid;
+
       if (!mounted) return;
+
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -663,6 +681,10 @@ class _ReserveButtonState extends State<_ReserveButton> {
 
   @override
   Widget build(BuildContext context) {
+    final discountPrice =
+        widget.data['discountPrice'] ?? widget.data['price'] ?? 0;
+    final isFree = widget.data['isFree'] == true || discountPrice == 0;
+
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
@@ -672,9 +694,22 @@ class _ReserveButtonState extends State<_ReserveButton> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2))
-            : const Icon(Icons.shopping_bag_outlined),
-        label: Text(_loading ? 'جاري الحجز...' : 'حجز العرض'),
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : Icon(
+                isFree
+                    ? Icons.volunteer_activism_rounded
+                    : Icons.payment_rounded,
+              ),
+        label: Text(
+          _loading
+              ? 'جاري الحجز...'
+              : isFree
+                  ? 'حجز مجاني'
+                  : 'احجز وادفع',
+        ),
       ),
     );
   }

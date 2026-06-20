@@ -66,6 +66,7 @@ class ReservationService {
         'providerUserId': data['providerUserId'] ?? '',
         'providerRole': data['providerRole'] ?? '',
         'pickupLocation': data['pickupLocation'] ?? '',
+        'pickupTime': data['pickupTime'] ?? '',
         'price': data['discountPrice'] ?? data['price'] ?? 0,
         'currency': data['currency'] ?? 'ILS',
         'status': 'reserved',

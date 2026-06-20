@@ -68,14 +68,23 @@ class UserHomeScreen extends StatelessWidget {
       .where('status', isEqualTo: 'reserved')
       .snapshots()
       .map((s) => s.docs.length);
-
+  Stream<int> _reviewsCountStream() => FirebaseFirestore.instance
+      .collection('reviews')
+      .where('userId', isEqualTo: user.uid)
+      .snapshots()
+      .map((s) => s.docs.length);
   Stream<int> _completedOrdersStream() => FirebaseFirestore.instance
       .collection('reservations')
       .where('userId', isEqualTo: user.uid)
       .where('status', isEqualTo: 'picked_up')
       .snapshots()
       .map((s) => s.docs.length);
-
+  Stream<int> _savedMealsStream() => FirebaseFirestore.instance
+      .collection('reservations')
+      .where('userId', isEqualTo: user.uid)
+      .where('status', isEqualTo: 'picked_up')
+      .snapshots()
+      .map((s) => s.docs.length);
   Stream<int> _unreadStream() => FirebaseFirestore.instance
       .collection('notifications')
       .where('userId', isEqualTo: user.uid)
@@ -123,45 +132,52 @@ class UserHomeScreen extends StatelessWidget {
             const SizedBox(height: 22),
             _UrgentCharitiesSection(onDonate: () => onBrowseTab(2)),
             const SizedBox(height: 24),
-            Row(
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.05,
               children: [
-                Expanded(
-                  child: StreamBuilder<int>(
-                    stream: _activeOrdersStream(),
-                    builder: (_, snap) => StatCard(
-                      title: 'طلبات نشطة',
-                      value: snap.hasData ? '${snap.data}' : '...',
-                      icon: Icons.shopping_bag_outlined,
-                      color: AppColors.primary,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const UserOrdersScreen(
-                            statusFilter: 'reserved',
-                          ),
-                        ),
-                      ),
-                    ),
+                StreamBuilder<int>(
+                  stream: _activeOrdersStream(),
+                  builder: (_, snap) => StatCard(
+                    title: 'طلبات نشطة',
+                    value: snap.hasData ? '${snap.data}' : '...',
+                    icon: Icons.shopping_bag_outlined,
+                    color: AppColors.primary,
+                    onTap: () {},
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: StreamBuilder<int>(
-                    stream: _completedOrdersStream(),
-                    builder: (_, snap) => StatCard(
-                      title: 'تم استلامها',
-                      value: snap.hasData ? '${snap.data}' : '...',
-                      icon: Icons.check_circle_outline_rounded,
-                      color: AppColors.success,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const UserOrdersScreen(
-                            statusFilter: 'picked_up',
-                          ),
-                        ),
-                      ),
-                    ),
+                StreamBuilder<int>(
+                  stream: _completedOrdersStream(),
+                  builder: (_, snap) => StatCard(
+                    title: 'تم استلامها',
+                    value: snap.hasData ? '${snap.data}' : '...',
+                    icon: Icons.check_circle_outline_rounded,
+                    color: AppColors.success,
+                    onTap: () {},
+                  ),
+                ),
+                StreamBuilder<int>(
+                  stream: _savedMealsStream(),
+                  builder: (_, snap) => StatCard(
+                    title: 'وجبات منقذة',
+                    value: snap.hasData ? '${snap.data}' : '...',
+                    icon: Icons.eco_rounded,
+                    color: Colors.green,
+                    onTap: () {},
+                  ),
+                ),
+                StreamBuilder<int>(
+                  stream: _reviewsCountStream(),
+                  builder: (_, snap) => StatCard(
+                    title: 'تقييماتي',
+                    value: snap.hasData ? '${snap.data}' : '...',
+                    icon: Icons.star_rounded,
+                    color: Colors.amber,
+                    onTap: () {},
                   ),
                 ),
               ],

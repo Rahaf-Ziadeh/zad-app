@@ -138,6 +138,81 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = widget.user;
+    final isGuest = user.role == 'guest' ||
+        (FirebaseAuth.instance.currentUser?.isAnonymous ?? false);
+
+    if (isGuest) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('حسابي'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 110,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.person_outline_rounded,
+                    size: 58,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const Text(
+                  'أنت تتصفح كزائر',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'سجّل الدخول أو أنشئ حساباً للوصول إلى الطلبات، التبرعات، الشكاوى، وتعديل الملف الشخصي.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.textLight,
+                    height: 1.6,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _logout,
+                    icon: const Icon(Icons.login_rounded),
+                    label: const Text('تسجيل الدخول'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _logout,
+                    icon: const Icon(Icons.logout_rounded),
+                    label: const Text('إنهاء التصفح كزائر'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(

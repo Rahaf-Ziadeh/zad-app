@@ -63,7 +63,7 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
           NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long_rounded),
-            label: 'الطلبات',
+            label: 'حجوزاتي',
           ),
           NavigationDestination(
             icon: Icon(Icons.add_circle_outline),

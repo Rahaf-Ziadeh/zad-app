@@ -4,7 +4,7 @@ import 'package:zad_app/theme/app_colors.dart';
 
 class WelcomeCard extends StatelessWidget {
   final AppUser user;
-  const WelcomeCard({required this.user});
+  const WelcomeCard({super.key, required this.user});
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +19,7 @@ class WelcomeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.25),
+            color: AppColors.primary.withValues(alpha: 0.25),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -29,7 +29,7 @@ class WelcomeCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundColor: Colors.white.withOpacity(0.2),
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
             child: Text(
               user.name.isNotEmpty ? user.name[0].toUpperCase() : 'م',
               style: const TextStyle(
@@ -65,7 +65,7 @@ class WelcomeCard extends StatelessWidget {
 
 class SectionTitle extends StatelessWidget {
   final String title;
-  const SectionTitle({required this.title});
+  const SectionTitle({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +80,7 @@ class SectionTitle extends StatelessWidget {
 class MiniStat extends StatelessWidget {
   final String label;
   final String value;
-  const MiniStat({required this.label, required this.value});
+  const MiniStat({super.key, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +106,7 @@ class StatCard extends StatelessWidget {
   final Color color;
 
   const StatCard({
+    super.key,
     required this.title,
     required this.value,
     required this.icon,
@@ -122,7 +123,7 @@ class StatCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -134,7 +135,7 @@ class StatCard extends StatelessWidget {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 17),
@@ -160,7 +161,7 @@ class QuantityBar extends StatelessWidget {
   final int remaining;
   final int total;
 
-  const QuantityBar({required this.remaining, required this.total});
+  const QuantityBar({super.key, required this.remaining, required this.total});
 
   @override
   Widget build(BuildContext context) {
@@ -207,6 +208,7 @@ class ActionTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const ActionTile({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -234,7 +236,7 @@ class ActionTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.10),
+                  color: color.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 22),
@@ -276,6 +278,7 @@ class FormFieldWidget extends StatelessWidget {
   final TextInputType keyboardType;
 
   const FormFieldWidget({
+    super.key,
     required this.controller,
     required this.label,
     required this.hint,
@@ -306,6 +309,7 @@ class EditableField extends StatelessWidget {
   final TextInputType? keyboardType;
 
   const EditableField({
+    super.key,
     required this.icon,
     required this.label,
     required this.controller,

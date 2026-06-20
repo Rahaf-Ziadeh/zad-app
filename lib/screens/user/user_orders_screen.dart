@@ -442,14 +442,35 @@ class _RatingDialogState extends State<_RatingDialog> {
     setState(() => _loading = true);
 
     try {
-      await FirebaseFirestore.instance
+      final reservationRef = FirebaseFirestore.instance
           .collection('reservations')
-          .doc(widget.reservationId)
-          .update({
+          .doc(widget.reservationId);
+
+      final reservationDoc = await reservationRef.get();
+      final reservationData = reservationDoc.data() ?? {};
+
+      final reviewRef = FirebaseFirestore.instance.collection('reviews').doc();
+
+      await reservationRef.update({
         'rating': _rating,
         'ratingComment': _commentController.text.trim(),
         'hasRated': true,
         'ratedAt': FieldValue.serverTimestamp(),
+        'reviewId': reviewRef.id,
+      });
+
+      await reviewRef.set({
+        'reviewId': reviewRef.id,
+        'reservationId': widget.reservationId,
+        'offerId': reservationData['offerId'] ?? '',
+        'offerTitle': reservationData['offerTitle'] ?? 'طلب طعام',
+        'providerUserId': reservationData['providerUserId'] ?? '',
+        'providerName': reservationData['providerName'] ?? '',
+        'userId': FirebaseAuth.instance.currentUser!.uid,
+        'userName': reservationData['userName'] ?? '',
+        'rating': _rating,
+        'comment': _commentController.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
