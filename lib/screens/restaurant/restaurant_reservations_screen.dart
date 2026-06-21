@@ -223,9 +223,6 @@ class _RestaurantReservationsScreenState
 
           final all = snapshot.data!.docs;
 
-          // [DEBUG] طباعة UID الحالي وعدد الوثائق لتشخيص مشاكل الاستعلام
-          debugPrint('[Reservations] UID: $_uid | total docs from Firestore: ${all.length}');
-
           // مساعد آمن: يُعيد قيمة حقل status دون أي استثناء
           String safeStatus(QueryDocumentSnapshot d) {
             try {
@@ -243,9 +240,6 @@ class _RestaurantReservationsScreenState
               all.where((d) => safeStatus(d) == 'picked_up').toList();
           final cancelled =
               all.where((d) => safeStatus(d) == 'cancelled').toList();
-
-          // [DEBUG] نتائج تصفية الحالة
-          debugPrint('[Reservations] filter → reserved: ${reserved.length}, picked_up: ${pickedUp.length}, cancelled: ${cancelled.length}');
 
           return Column(
             children: [
@@ -401,12 +395,8 @@ class _ReservationList extends StatelessWidget {
         try {
           final doc = docs[index];
           final raw = doc.data();
-          if (raw == null) {
-            debugPrint('[Reservations] doc ${doc.id} returned null data — skipped');
-            return const SizedBox.shrink();
-          }
+          if (raw == null) return const SizedBox.shrink();
           final data = raw as Map<String, dynamic>;
-          debugPrint('[Reservations] doc ${doc.id}: $data');
 
           final status = data['status']?.toString() ?? 'reserved';
 
@@ -456,7 +446,6 @@ class _ReservationCard extends StatelessWidget {
   }
 
   Widget _buildCard(BuildContext context) {
-    debugPrint('[ReservationCard] _buildCard start: doc=${doc.id}');
     // _safeStr: يعالج null وأنواع غير String بأمان كامل
     final offerTitle = _safeStr(data['offerTitle'], 'طلب طعام');
     final userName = _safeStr(data['userName'], 'مستخدم');
@@ -476,7 +465,6 @@ class _ReservationCard extends StatelessWidget {
     final rawQty = data['quantity'];
     final quantity = rawQty is num ? rawQty.toInt() : 1;
     final statusColor = _statusColor(status);
-    debugPrint('[ReservationCard] fields extracted: offerTitle=$offerTitle status=$status price=$price paymentStatus=$paymentStatus onConfirm=${onConfirm != null}');
 
     final card = Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -740,7 +728,6 @@ class _ReservationCard extends StatelessWidget {
         ),
       ),
     );
-    debugPrint('[ReservationCard] widget tree created ok: doc=${doc.id}');
     return card;
   }
 }

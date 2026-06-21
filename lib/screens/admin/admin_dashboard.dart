@@ -3,6 +3,7 @@ import 'package:zad_app/screens/admin/admin_complaints_screen.dart';
 import 'package:zad_app/screens/admin/admin_home_screen.dart';
 import 'package:zad_app/screens/admin/admin_profile_screen.dart';
 import 'package:zad_app/screens/admin/admin_reports_screen.dart';
+import 'package:zad_app/screens/admin/admin_support_panel.dart';
 import 'package:zad_app/screens/admin/admin_users_screen.dart';
 
 import '../../models/user.dart';
@@ -38,13 +39,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ];
   }
 
+  void _openSupportPanel() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminSupportPanel(user: widget.user),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _pages),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openSupportPanel,
+        backgroundColor: AppColors.danger,
+        tooltip: 'دعم المستخدمين',
+        child: const Icon(Icons.support_agent_rounded, color: Colors.white),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        indicatorColor: AppColors.primaryLight.withOpacity(0.25),
+        indicatorColor: AppColors.primaryLight.withValues(alpha: 0.25),
         backgroundColor: AppColors.card,
         elevation: 0,
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),

@@ -39,8 +39,8 @@ class _OffersTabState extends State<OffersTab> {
 
     final position = await LocationService().getCurrentLocation();
 
-    print('LAT: ${position?.latitude}');
-    print('LNG: ${position?.longitude}');
+    debugPrint('LAT: ${position?.latitude}');
+    debugPrint('LNG: ${position?.longitude}');
 
     setState(() {
       _userPosition = position;
@@ -237,7 +237,7 @@ class _OffersTabState extends State<OffersTab> {
                                   horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 color: _radiusKm == r
-                                    ? AppColors.primary.withOpacity(0.12)
+                                    ? AppColors.primary.withValues(alpha: 0.12)
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
@@ -288,10 +288,10 @@ class _OffersTabState extends State<OffersTab> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                     decoration: BoxDecoration(
-                      color: AppColors.secondary.withOpacity(0.08),
+                      color: AppColors.secondary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: AppColors.secondary.withOpacity(0.3)),
+                          color: AppColors.secondary.withValues(alpha: 0.3)),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
@@ -334,12 +334,13 @@ class _OffersTabState extends State<OffersTab> {
             stream: FirebaseFirestore.instance
                 .collection('offers')
                 .where('status', isEqualTo: 'available')
-                .where('offerType',
-                    whereNotIn: ['restaurant_package']).snapshots(),
+                .where('offerType', whereNotIn: [
+              'restaurant_package',
+              'mystery_package'
+            ]).snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                print(snapshot.error);
-
+                debugPrint('[OffersTab] stream error: ${snapshot.error}');
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -473,7 +474,7 @@ class _OfferCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.45),
+                      color: Colors.black.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(providerLabel,
@@ -493,7 +494,7 @@ class _OfferCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: _distanceColor(distance!).withOpacity(0.9),
+                        color: _distanceColor(distance!).withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -521,7 +522,7 @@ class _OfferCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.4),
+                        color: Colors.black.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Row(
@@ -622,6 +623,68 @@ class _ReserveButton extends StatefulWidget {
 class _ReserveButtonState extends State<_ReserveButton> {
   bool _loading = false;
 
+  Future<int?> _askQuantity(int maxQty) async {
+    if (maxQty <= 1) return 1;
+    final qty = [1];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setQtyState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          backgroundColor: AppColors.card,
+          title: const Text('اختر الكمية',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark)),
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: qty[0] > 1
+                    ? () => setQtyState(() => qty[0]--)
+                    : null,
+                icon: const Icon(
+                    Icons.remove_circle_outline_rounded,
+                    size: 28),
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 12),
+              Text('${qty[0]}',
+                  style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark)),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: qty[0] < maxQty
+                    ? () => setQtyState(() => qty[0]++)
+                    : null,
+                icon: const Icon(
+                    Icons.add_circle_outline_rounded,
+                    size: 28),
+                color: AppColors.primary,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء',
+                  style: TextStyle(color: AppColors.textLight)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('تأكيد'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return null;
+    return qty[0];
+  }
+
   Future<void> _reserve() async {
     if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -629,6 +692,11 @@ class _ReserveButtonState extends State<_ReserveButton> {
       );
       return;
     }
+
+    final maxQty =
+        (widget.data['remainingQuantity'] as num?)?.toInt() ?? 1;
+    final selectedQty = await _askQuantity(maxQty);
+    if (selectedQty == null || !mounted) return;
 
     final discountPrice =
         widget.data['discountPrice'] ?? widget.data['price'] ?? 0;
@@ -641,6 +709,7 @@ class _ReserveButtonState extends State<_ReserveButton> {
           builder: (_) => PaymentMethodScreen(
             docId: widget.docId,
             data: widget.data,
+            selectedQuantity: selectedQty,
           ),
         ),
       );
@@ -653,6 +722,7 @@ class _ReserveButtonState extends State<_ReserveButton> {
       final reservationId = await ReservationService().reserveOffer(
         offerId: widget.docId,
         offerData: widget.data,
+        selectedQuantity: selectedQty,
       );
 
       final userId = FirebaseAuth.instance.currentUser!.uid;
@@ -752,27 +822,6 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _ErrorState extends StatelessWidget {
-  final String message;
-  const _ErrorState({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline_rounded,
-              size: 48, color: AppColors.danger),
-          const SizedBox(height: 12),
-          Text(message,
-              style: const TextStyle(color: AppColors.textLight, fontSize: 14)),
-        ],
-      ),
-    );
-  }
-}
-
 class _EmptyState extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
@@ -788,7 +837,7 @@ class _EmptyState extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.no_food_rounded,
-                size: 60, color: AppColors.primary.withOpacity(0.3)),
+                size: 60, color: AppColors.primary.withValues(alpha: 0.3)),
             const SizedBox(height: 14),
             Text(message,
                 textAlign: TextAlign.center,

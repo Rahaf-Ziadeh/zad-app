@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import 'notification_service.dart';
 
@@ -10,7 +11,10 @@ class ReservationService {
   Future<String> reserveOffer({
     required String offerId,
     required Map<String, dynamic> offerData,
+    int selectedQuantity = 1,
   }) async {
+    if (selectedQuantity < 1) selectedQuantity = 1;
+
     final user = _auth.currentUser;
     if (user == null) throw Exception('يجب تسجيل الدخول أولاً');
 
@@ -41,16 +45,25 @@ class ReservationService {
       if (!offerSnapshot.exists) throw Exception('العرض غير موجود');
 
       final data = offerSnapshot.data() as Map<String, dynamic>;
-      final remaining = data['remainingQuantity'] ?? 0;
-      final status = data['status'] ?? '';
+      final rawQty = data['remainingQuantity'];
+      final remaining = rawQty is num ? rawQty.toInt() : 0;
+      final status = (data['status'] as String?) ?? '';
 
       if (status != 'available') throw Exception('العرض غير متاح حالياً');
       if (remaining <= 0) throw Exception('نفدت الكمية المتاحة');
 
+      // التحقق من أن الكمية المطلوبة لا تتجاوز المتاح (race-condition guard)
+      if (selectedQuantity > remaining) {
+        throw Exception(
+            'الكمية المطلوبة ($selectedQuantity) تتجاوز المتاح ($remaining)');
+      }
+
+      final afterQty = remaining - selectedQuantity;
+
       // تحديث الكمية وحالة العرض
       transaction.update(offerRef, {
-        'remainingQuantity': remaining - 1,
-        'status': remaining - 1 == 0 ? 'reserved' : 'available',
+        'remainingQuantity': afterQty,
+        'status': afterQty == 0 ? 'reserved' : 'available',
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -69,30 +82,39 @@ class ReservationService {
         'pickupTime': data['pickupTime'] ?? '',
         'price': data['discountPrice'] ?? data['price'] ?? 0,
         'currency': data['currency'] ?? 'ILS',
+        'quantity': selectedQuantity,
         'status': 'reserved',
         'hasRated': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
     });
 
-    // إشعار للمستخدم
-    await NotificationService().sendNotification(
-      userId: user.uid,
-      title: 'تم تأكيد الحجز ✅',
-      message:
-          'تم حجز "${offerData['title'] ?? 'العرض'}" بنجاح. استخدم رمز QR للاستلام.',
-      type: 'reservation',
-    );
-
-    // إشعار لمزوّد الطعام
-    final providerUserId = offerData['providerUserId'] ?? '';
-    if (providerUserId.isNotEmpty) {
+    // إشعار للمستخدم — غير حرج: لا يوقف الحجز عند الفشل
+    try {
       await NotificationService().sendNotification(
-        userId: providerUserId,
-        title: 'حجز جديد 🎉',
-        message: 'قام $userName بحجز "${offerData['title'] ?? 'عرضك'}".',
+        userId: user.uid,
+        title: 'تم تأكيد الحجز ✅',
+        message:
+            'تم حجز "${offerData['title'] ?? 'العرض'}" بنجاح. استخدم رمز QR للاستلام.',
         type: 'reservation',
       );
+    } catch (e) {
+      debugPrint('[ReservationService] user notification failed (non-critical): $e');
+    }
+
+    // إشعار لمزوّد الطعام — غير حرج: لا يوقف الحجز عند الفشل
+    try {
+      final providerUserId = (offerData['providerUserId'] as String?) ?? '';
+      if (providerUserId.isNotEmpty) {
+        await NotificationService().sendNotification(
+          userId: providerUserId,
+          title: 'حجز جديد 🎉',
+          message: 'قام $userName بحجز "${offerData['title'] ?? 'عرضك'}".',
+          type: 'reservation',
+        );
+      }
+    } catch (e) {
+      debugPrint('[ReservationService] provider notification failed (non-critical): $e');
     }
 
     return reservationRef.id;
@@ -118,11 +140,13 @@ class ReservationService {
         throw Exception('لا يمكن إلغاء هذا الطلب');
       }
 
+      final reservedQty = (resData['quantity'] as num?)?.toInt() ?? 1;
+
       if (offerSnap.exists) {
         final offerData = offerSnap.data() as Map<String, dynamic>;
-        final qty = offerData['remainingQuantity'] ?? 0;
+        final qty = (offerData['remainingQuantity'] as num?)?.toInt() ?? 0;
         transaction.update(offerRef, {
-          'remainingQuantity': qty + 1,
+          'remainingQuantity': qty + reservedQty,
           'status': 'available',
           'updatedAt': FieldValue.serverTimestamp(),
         });

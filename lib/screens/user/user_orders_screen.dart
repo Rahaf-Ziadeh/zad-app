@@ -90,11 +90,14 @@ class UserOrdersScreen extends StatelessWidget {
           throw Exception('لا يمكن إلغاء هذا الطلب');
         }
 
+        final cancelQty = (resData['quantity'] as num?)?.toInt() ?? 1;
+
         if (offerSnap.exists) {
           final offerData = offerSnap.data() as Map<String, dynamic>;
-          final qty = offerData['remainingQuantity'] ?? 0;
+          final qty =
+              (offerData['remainingQuantity'] as num?)?.toInt() ?? 0;
           transaction.update(offerRef, {
-            'remainingQuantity': qty + 1,
+            'remainingQuantity': qty + cancelQty,
             'status': 'available',
             'updatedAt': FieldValue.serverTimestamp(),
           });
@@ -173,8 +176,7 @@ class UserOrdersScreen extends StatelessWidget {
         stream: _ordersStream(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            print(snapshot.error);
-
+            debugPrint('[UserOrdersScreen] stream error: ${snapshot.error}');
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(18),
@@ -210,6 +212,8 @@ class UserOrdersScreen extends StatelessWidget {
               final providerRole = data['providerRole'] ?? '';
               final pickupLocation = data['pickupLocation'] ?? 'غير محدد';
               final hasRated = data['hasRated'] ?? false;
+              final reservedQty =
+                  (data['quantity'] as num?)?.toInt() ?? 1;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 14),
@@ -218,7 +222,7 @@ class UserOrdersScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
                     color: status == 'reserved'
-                        ? Colors.orange.withOpacity(0.4)
+                        ? Colors.orange.withValues(alpha: 0.4)
                         : AppColors.border,
                   ),
                 ),
@@ -233,7 +237,7 @@ class UserOrdersScreen extends StatelessWidget {
                             width: 42,
                             height: 42,
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.10),
+                              color: AppColors.primary.withValues(alpha: 0.10),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(
@@ -257,7 +261,7 @@ class UserOrdersScreen extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
-                              color: _statusColor(status).withOpacity(0.12),
+                              color: _statusColor(status).withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -290,6 +294,12 @@ class UserOrdersScreen extends StatelessWidget {
                         label: 'مكان الاستلام',
                         value: pickupLocation,
                       ),
+                      if (reservedQty > 1)
+                        OfferInfoRow(
+                          icon: Icons.inventory_2_outlined,
+                          label: 'الكمية المحجوزة',
+                          value: '$reservedQty وحدات',
+                        ),
                       const SizedBox(height: 12),
                       if (status == 'reserved') ...[
                         Row(
@@ -336,7 +346,7 @@ class UserOrdersScreen extends StatelessWidget {
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.08),
+                            color: AppColors.primary.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Row(
@@ -385,7 +395,7 @@ class UserOrdersScreen extends StatelessWidget {
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.danger.withOpacity(0.07),
+                            color: AppColors.danger.withValues(alpha: 0.07),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Row(
@@ -603,7 +613,7 @@ class _EmptyOrders extends StatelessWidget {
             Icon(
               Icons.receipt_long_outlined,
               size: 72,
-              color: AppColors.primary.withOpacity(0.3),
+              color: AppColors.primary.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(

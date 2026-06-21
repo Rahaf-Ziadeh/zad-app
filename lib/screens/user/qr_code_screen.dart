@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../theme/app_colors.dart';
+import 'user_orders_screen.dart';
 
 class QrCodeScreen extends StatelessWidget {
   final String reservationId;
@@ -41,7 +42,7 @@ class QrCodeScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
+              color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(18),
             ),
             child: const Row(
@@ -82,7 +83,7 @@ class QrCodeScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
+                          color: Colors.black.withValues(alpha: 0.06),
                           blurRadius: 16,
                           offset: const Offset(0, 4),
                         ),
@@ -107,7 +108,7 @@ class QrCodeScreen extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.10),
+                      color: AppColors.primary.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
@@ -147,9 +148,9 @@ class QrCodeScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.danger.withOpacity(0.06),
+              color: AppColors.danger.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.danger.withOpacity(0.2)),
+              border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
             ),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,6 +166,51 @@ class QrCodeScreen extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── عرض حجوزاتي ──
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const UserOrdersScreen()),
+                (route) => route.isFirst,
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.receipt_long_rounded, size: 18),
+                  SizedBox(width: 8),
+                  Text('عرض حجوزاتي',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // ── العودة للرئيسية ──
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () =>
+                  Navigator.popUntil(context, (route) => route.isFirst),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.home_outlined, size: 18),
+                  SizedBox(width: 8),
+                  Text('العودة للرئيسية',
+                      style: TextStyle(fontSize: 15)),
+                ],
+              ),
             ),
           ),
         ],

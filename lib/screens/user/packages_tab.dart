@@ -16,7 +16,8 @@ class PackagesTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('offers')
-          .where('offerType', isEqualTo: 'restaurant_package')
+          .where('offerType',
+              whereIn: ['mystery_package', 'restaurant_package'])
           .where('status', isEqualTo: 'available')
           .snapshots(),
       builder: (context, snapshot) {
@@ -35,7 +36,7 @@ class PackagesTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.card_giftcard_rounded,
-                    size: 60, color: AppColors.primary.withOpacity(0.3)),
+                    size: 60, color: AppColors.primary.withValues(alpha: 0.3)),
                 const SizedBox(height: 14),
                 const Text(
                   'لا توجد باقات متاحة حالياً',
@@ -135,7 +136,7 @@ class _PackageCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.55),
+                      color: Colors.black.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -231,20 +232,82 @@ class _ReserveButton extends StatefulWidget {
 class _ReserveButtonState extends State<_ReserveButton> {
   bool _loading = false;
 
+  Future<int?> _askQuantity(int maxQty) async {
+    if (maxQty <= 1) return 1;
+    final qty = [1];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setQtyState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: AppColors.card,
+          title: const Text('اختر الكمية',
+              style:
+                  TextStyle(fontWeight: FontWeight.bold, color: AppColors.textDark)),
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: qty[0] > 1
+                    ? () => setQtyState(() => qty[0]--)
+                    : null,
+                icon: const Icon(Icons.remove_circle_outline_rounded, size: 28),
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 12),
+              Text('${qty[0]}',
+                  style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark)),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: qty[0] < maxQty
+                    ? () => setQtyState(() => qty[0]++)
+                    : null,
+                icon: const Icon(Icons.add_circle_outline_rounded, size: 28),
+                color: AppColors.primary,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء',
+                  style: TextStyle(color: AppColors.textLight)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('تأكيد'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return null;
+    return qty[0];
+  }
+
   Future<void> _reserve() async {
     if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('يجب تسجيل الدخول أولاً للحجز'),
-    ),
-  );
-  return;
-}
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب تسجيل الدخول أولاً للحجز')),
+      );
+      return;
+    }
+
+    final maxQty =
+        (widget.data['remainingQuantity'] as num?)?.toInt() ?? 1;
+    final selectedQty = await _askQuantity(maxQty);
+    if (selectedQty == null || !mounted) return;
+
     setState(() => _loading = true);
     try {
       final reservationId = await ReservationService().reserveOffer(
         offerId: widget.docId,
         offerData: widget.data,
+        selectedQuantity: selectedQty,
       );
       final userId = FirebaseAuth.instance.currentUser!.uid;
       if (!mounted) return;

@@ -9,11 +9,13 @@ import 'qr_code_screen.dart';
 class PaymentMethodScreen extends StatefulWidget {
   final String docId;
   final Map<String, dynamic> data;
+  final int selectedQuantity;
 
   const PaymentMethodScreen({
     super.key,
     required this.docId,
     required this.data,
+    this.selectedQuantity = 1,
   });
 
   @override
@@ -40,6 +42,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
           ...widget.data,
           'paymentMethod': _selectedMethod,
         },
+        selectedQuantity: widget.selectedQuantity,
       );
 
       // تحديث طريقة الدفع في الحجز
@@ -176,9 +179,9 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.06),
+              color: AppColors.primary.withValues(alpha:0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+              border: Border.all(color: AppColors.primary.withValues(alpha:0.2)),
             ),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,7 +259,7 @@ class _PaymentOption extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.07) : AppColors.card,
+          color: selected ? color.withValues(alpha:0.07) : AppColors.card,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: selected ? color : AppColors.border,
@@ -265,7 +268,7 @@ class _PaymentOption extends StatelessWidget {
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: color.withOpacity(0.12),
+                    color: color.withValues(alpha:0.12),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -278,7 +281,7 @@ class _PaymentOption extends StatelessWidget {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withValues(alpha:0.12),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(icon, color: color, size: 26),
@@ -301,7 +304,7 @@ class _PaymentOption extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: color.withOpacity(0.12),
+                            color: color.withValues(alpha:0.12),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(badge!,
@@ -446,10 +449,10 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF7C3AED).withOpacity(0.08),
+              color: const Color(0xFF7C3AED).withValues(alpha:0.08),
               borderRadius: BorderRadius.circular(16),
               border:
-                  Border.all(color: const Color(0xFF7C3AED).withOpacity(0.25)),
+                  Border.all(color: const Color(0xFF7C3AED).withValues(alpha:0.25)),
             ),
             child: Row(
               children: [

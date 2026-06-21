@@ -87,7 +87,7 @@ class OfferDetailsScreen extends StatelessWidget {
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                           colors: [
-                            Colors.black.withOpacity(0.5),
+                            Colors.black.withValues(alpha: 0.5),
                             Colors.transparent,
                           ],
                         ),
@@ -110,7 +110,7 @@ class OfferDetailsScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.9),
+                          color: AppColors.primary.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -154,7 +154,7 @@ class OfferDetailsScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.10),
+                        color: AppColors.primary.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(_providerLabel(providerRole),
@@ -201,9 +201,12 @@ class OfferDetailsScreen extends StatelessWidget {
                       OfferInfoRow(
                         icon: Icons.category_outlined,
                         label: 'نوع العرض',
-                        value: offerType == 'restaurant_package'
-                            ? 'باقة مطعم'
-                            : 'عرض فردي',
+                        value: (offerType == 'mystery_package' ||
+                                offerType == 'restaurant_package')
+                            ? 'باقة غامضة'
+                            : offerType == 'clear_offer'
+                                ? 'عرض واضح المحتوى'
+                                : 'عرض طعام',
                       ),
                     // طرق الدفع المتاحة
                     if (!isFree)
@@ -240,9 +243,9 @@ class OfferDetailsScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.08),
+                      color: Colors.orange.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       children: [
@@ -279,7 +282,7 @@ class OfferDetailsScreen extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.danger.withOpacity(0.07),
+                      color: AppColors.danger.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Center(
@@ -323,8 +326,9 @@ class _ReserveButtonState extends State<_ReserveButton> {
   bool _loading = false;
 
   Future<void> _proceed() async {
-    // لو مجاني — احجز مباشرة
-    // لو مدفوع — افتح شاشة اختيار طريقة الدفع
+    final (confirmed, qty) = await _showConfirmationDialog();
+    if (!confirmed || !mounted) return;
+
     if (!widget.isFree) {
       final result = await Navigator.push<bool>(
         context,
@@ -332,22 +336,194 @@ class _ReserveButtonState extends State<_ReserveButton> {
           builder: (_) => PaymentMethodScreen(
             docId: widget.docId,
             data: widget.data,
+            selectedQuantity: qty,
           ),
         ),
       );
-      // لو اليوزر ما كمّل الدفع — ما نحجز
       if (result != true) return;
     } else {
-      await _reserve();
+      await _reserve(qty);
     }
   }
 
-  Future<void> _reserve() async {
+  Future<(bool, int)> _showConfirmationDialog() async {
+    final title = (widget.data['title'] as String?) ?? 'عرض طعام';
+    final currency = (widget.data['currency'] as String?) ?? 'ILS';
+    final pickupLocation =
+        (widget.data['pickupLocation'] as String?) ?? 'غير محدد';
+    final pickupTime = (widget.data['pickupTime'] ?? '').toString();
+    final discountPrice =
+        widget.data['discountPrice'] ?? widget.data['price'] ?? 0;
+    final maxQty =
+        (widget.data['remainingQuantity'] as num?)?.toInt() ?? 1;
+
+    // مُغلَّف في قائمة ليكون قابلاً للتعديل داخل StatefulBuilder
+    final qty = [1];
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: AppColors.card,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.bookmark_add_outlined,
+                    color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'تأكيد الحجز',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Divider(height: 1),
+              const SizedBox(height: 16),
+              _DialogRow(
+                icon: Icons.restaurant_menu_rounded,
+                label: 'العرض',
+                value: title,
+              ),
+              const SizedBox(height: 10),
+              _DialogRow(
+                icon: Icons.attach_money_rounded,
+                label: 'السعر',
+                value: widget.isFree ? 'مجاني' : '$discountPrice $currency',
+              ),
+              const SizedBox(height: 10),
+              _DialogRow(
+                icon: Icons.location_on_outlined,
+                label: 'مكان الاستلام',
+                value: pickupLocation,
+              ),
+              if (pickupTime.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _DialogRow(
+                  icon: Icons.access_time_outlined,
+                  label: 'وقت الاستلام',
+                  value: pickupTime,
+                ),
+              ],
+              // ── اختيار الكمية (يظهر فقط لو متاح أكثر من وحدة) ──
+              if (maxQty > 1) ...[
+                const SizedBox(height: 14),
+                const Divider(height: 1),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    const Icon(Icons.inventory_2_outlined,
+                        size: 16, color: AppColors.textLight),
+                    const SizedBox(width: 8),
+                    const Text('الكمية:',
+                        style: TextStyle(
+                            color: AppColors.textLight, fontSize: 13)),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: qty[0] > 1
+                          ? () => setDialogState(() => qty[0]--)
+                          : null,
+                      icon: const Icon(
+                          Icons.remove_circle_outline_rounded,
+                          size: 24),
+                      color: AppColors.primary,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 12),
+                    Text('${qty[0]}',
+                        style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textDark)),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      onPressed: qty[0] < maxQty
+                          ? () => setDialogState(() => qty[0]++)
+                          : null,
+                      icon: const Icon(
+                          Icons.add_circle_outline_rounded,
+                          size: 24),
+                      color: AppColors.primary,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                Text(
+                  'الحد الأقصى: $maxQty وحدة',
+                  style: const TextStyle(
+                      color: AppColors.textLight,
+                      fontSize: 11),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.danger.withValues(alpha: 0.2)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: AppColors.danger, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'لا يمكن تكرار الحجز لنفس العرض. تأكد من رغبتك قبل المتابعة.',
+                        style: TextStyle(
+                            color: AppColors.danger,
+                            fontSize: 12,
+                            height: 1.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء',
+                  style: TextStyle(color: AppColors.textLight)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('تأكيد الحجز'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return (result ?? false, qty[0]);
+  }
+
+  Future<void> _reserve([int quantity = 1]) async {
     setState(() => _loading = true);
     try {
       final reservationId = await ReservationService().reserveOffer(
         offerId: widget.docId,
         offerData: widget.data,
+        selectedQuantity: quantity,
       );
       final userId = FirebaseAuth.instance.currentUser!.uid;
       if (!mounted) return;
@@ -473,7 +649,7 @@ class _OfferRatings extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 16,
-                      backgroundColor: AppColors.primary.withOpacity(0.12),
+                      backgroundColor: AppColors.primary.withValues(alpha: 0.12),
                       child: Text(
                         userName.isNotEmpty ? userName[0].toUpperCase() : 'م',
                         style: const TextStyle(
@@ -523,6 +699,52 @@ class _OfferRatings extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// صف معلومة في نافذة التأكيد
+// ─────────────────────────────────────────────
+class _DialogRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _DialogRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.textLight),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(
+                      color: AppColors.textLight, fontSize: 13),
+                ),
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(
+                      color: AppColors.textDark,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

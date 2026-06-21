@@ -20,53 +20,46 @@ class AddOfferScreen extends StatefulWidget {
 }
 
 class _AddOfferScreenState extends State<AddOfferScreen> {
-  final _pickupStartTimeController = TextEditingController();
-  final _pickupEndTimeController = TextEditingController();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
-  XFile? _selectedImage;
-  bool _uploadingImage = false;
   final _quantityController = TextEditingController();
   final _originalPriceController = TextEditingController();
   final _discountPriceController = TextEditingController();
   final _pickupController = TextEditingController();
+  final _allergyController = TextEditingController();
+  final _pickupStartTimeController = TextEditingController();
+  final _pickupEndTimeController = TextEditingController();
+
+  XFile? _selectedImage;
+  bool _uploadingImage = false;
   bool _isLoading = false;
   bool _isMysteryPackage = false;
+
   // ── إحداثيات مكان الاستلام ──
   double? _latitude;
   double? _longitude;
   bool _fetchingLocation = false;
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 75,
     );
-
     if (pickedFile == null) return;
-
-    setState(() {
-      _selectedImage = pickedFile;
-    });
+    setState(() => _selectedImage = pickedFile);
   }
 
   Future<String?> _uploadImage() async {
     if (_selectedImage == null) return null;
-
     setState(() => _uploadingImage = true);
-
     try {
       final uri = Uri.parse(
         'https://api.cloudinary.com/v1_1/dsu1bewrx/image/upload',
       );
-
       final request = http.MultipartRequest('POST', uri);
-
       request.fields['upload_preset'] = 'zad_upload';
-
       final bytes = await _selectedImage!.readAsBytes();
-
       request.files.add(
         http.MultipartFile.fromBytes(
           'file',
@@ -74,41 +67,27 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
           filename: _selectedImage!.name,
         ),
       );
-
       final response = await request.send();
-
       if (response.statusCode == 200) {
         final responseData = await response.stream.bytesToString();
         final data = jsonDecode(responseData);
-
         return data['secure_url'];
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'فشل رفع الصورة: ${response.statusCode}',
-              ),
-            ),
+            SnackBar(content: Text('فشل رفع الصورة: ${response.statusCode}')),
           );
         }
-
         return null;
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ: $e'),
-          ),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('خطأ: $e')));
       }
-
       return null;
     } finally {
-      if (mounted) {
-        setState(() => _uploadingImage = false);
-      }
+      if (mounted) setState(() => _uploadingImage = false);
     }
   }
 
@@ -144,20 +123,29 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
 
   @override
   void dispose() {
-    _pickupStartTimeController.dispose();
-    _pickupEndTimeController.dispose();
     _titleController.dispose();
     _descController.dispose();
     _quantityController.dispose();
     _originalPriceController.dispose();
     _discountPriceController.dispose();
     _pickupController.dispose();
+    _allergyController.dispose();
+    _pickupStartTimeController.dispose();
+    _pickupEndTimeController.dispose();
     super.dispose();
   }
 
   Future<void> _addOffer() async {
+    // ── جمع قيم الحقول وتحقق منها قبل أي await ──
     final title = _titleController.text.trim();
     final desc = _descController.text.trim();
+    final quantityStr = _quantityController.text.trim();
+    final originalStr = _originalPriceController.text.trim();
+    final discountStr = _discountPriceController.text.trim();
+    final pickup = _pickupController.text.trim();
+    final pickupStartTime = _pickupStartTimeController.text.trim();
+    final pickupEndTime = _pickupEndTimeController.text.trim();
+    final allergyInfo = _allergyController.text.trim();
 
     if (_selectedImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -165,19 +153,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
       );
       return;
     }
-    final imageUrl = await _uploadImage() ?? '';
-    if (imageUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لم يتم رفع الصورة، جرب مرة ثانية')),
-      );
-      return;
-    }
-    final quantityStr = _quantityController.text.trim();
-    final originalStr = _originalPriceController.text.trim();
-    final discountStr = _discountPriceController.text.trim();
-    final pickup = _pickupController.text.trim();
-    final pickupStartTime = _pickupStartTimeController.text.trim();
-    final pickupEndTime = _pickupEndTimeController.text.trim();
 
     if ([
           title,
@@ -186,7 +161,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
           discountStr,
           pickup,
           pickupStartTime,
-          pickupEndTime
+          pickupEndTime,
         ].any((s) => s.isEmpty) ||
         (!_isMysteryPackage && desc.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -221,22 +196,41 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     if (discountPrice > originalPrice) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('السعر بعد الخصم لا يجب أن يتجاوز السعر الأصلي')),
+            content:
+                Text('السعر بعد الخصم لا يجب أن يتجاوز السعر الأصلي')),
       );
       return;
     }
 
+    // التحقق من تسجيل الدخول — قبل أي await
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
+      );
+      return;
+    }
+    final uid = user.uid;
+
     setState(() => _isLoading = true);
 
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-      final docRef = FirebaseFirestore.instance.collection('offers').doc();
+      // ── رفع الصورة — أول await في الدالة ──
+      final imageUrl = await _uploadImage() ?? '';
+      if (!mounted) return;
+      if (imageUrl.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لم يتم رفع الصورة، جرب مرة ثانية')),
+        );
+        return;
+      }
 
+      final docRef = FirebaseFirestore.instance.collection('offers').doc();
       await docRef.set({
         'offerId': docRef.id,
         'providerUserId': uid,
         'providerRole': 'restaurant',
-        'offerType': 'restaurant_package',
+        'offerType': _isMysteryPackage ? 'mystery_package' : 'clear_offer',
         'title': title,
         'description': _isMysteryPackage ? 'محتوى الباقة غير معلن' : desc,
         'isMysteryPackage': _isMysteryPackage,
@@ -257,16 +251,22 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         'latitude': _latitude,
         'longitude': _longitude,
         'hasLocation': _latitude != null && _longitude != null,
+        'allergyInfo': allergyInfo,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      await NotificationService().sendNotification(
-        userId: uid,
-        title: 'تم نشر العرض',
-        message: 'تم نشر الباقة "$title" بنجاح',
-        type: 'offer',
-      );
 
+      // الإشعار غير حرج — لا يوقف تدفق النشر عند الفشل
+      try {
+        await NotificationService().sendNotification(
+          userId: uid,
+          title: 'تم نشر العرض',
+          message: 'تم نشر الباقة "$title" بنجاح',
+          type: 'offer',
+        );
+      } catch (_) {}
+
+      if (!mounted) return;
       setState(() {
         _titleController.clear();
         _descController.clear();
@@ -275,12 +275,13 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         _originalPriceController.clear();
         _discountPriceController.clear();
         _pickupController.clear();
+        _allergyController.clear();
         _pickupStartTimeController.clear();
         _pickupEndTimeController.clear();
         _isMysteryPackage = false;
+        _latitude = null;
+        _longitude = null;
       });
-
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('تم نشر الباقة بنجاح ✅'),
@@ -354,19 +355,23 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 1 ── اسم الباقة ──
                   FormFieldWidget(
-                      controller: _titleController,
-                      label: 'اسم الباقة',
-                      hint: 'مثال: باقة وجبات مشكّلة',
-                      icon: Icons.fastfood_rounded),
+                    controller: _titleController,
+                    label: 'اسم الباقة',
+                    hint: 'مثال: باقة وجبات مشكّلة',
+                    icon: Icons.fastfood_rounded,
+                  ),
                   const SizedBox(height: 14),
+
+                  // 2 ── صورة العرض ──
                   GestureDetector(
                     onTap: _pickImage,
                     child: Container(
                       width: double.infinity,
                       height: 160,
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.06),
+                        color: AppColors.primary.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: AppColors.border),
                         image: _selectedImage != null
@@ -380,117 +385,79 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                             : null,
                       ),
                       child: _selectedImage == null
-                          ? Column(
+                          ? const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(
-                                  Icons.add_a_photo_outlined,
-                                  size: 34,
-                                  color: AppColors.primary,
-                                ),
+                              children: [
+                                Icon(Icons.add_a_photo_outlined,
+                                    size: 34, color: AppColors.primary),
                                 SizedBox(height: 10),
                                 Text(
                                   'إضافة صورة للعرض',
                                   style: TextStyle(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ],
                             )
                           : Align(
                               alignment: Alignment.topLeft,
                               child: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedImage = null;
-                                  });
-                                },
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.white,
-                                ),
+                                onPressed: () =>
+                                    setState(() => _selectedImage = null),
+                                icon: const Icon(Icons.close,
+                                    color: Colors.white),
                               ),
                             ),
                     ),
                   ),
                   const SizedBox(height: 14),
 
-                  // السعر جنباً إلى جنب
+                  // 3 ── السعر الأصلي / بعد الخصم ──
                   Row(
                     children: [
                       Expanded(
                         child: FormFieldWidget(
-                            controller: _originalPriceController,
-                            label: 'السعر الأصلي',
-                            hint: '0.00',
-                            icon: Icons.price_change_outlined,
-                            keyboardType: TextInputType.number),
+                          controller: _originalPriceController,
+                          label: 'السعر الأصلي',
+                          hint: '0.00',
+                          icon: Icons.price_change_outlined,
+                          keyboardType: TextInputType.number,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: FormFieldWidget(
-                            controller: _discountPriceController,
-                            label: 'بعد الخصم',
-                            hint: '0.00',
-                            icon: Icons.local_offer_outlined,
-                            keyboardType: TextInputType.number),
+                          controller: _discountPriceController,
+                          label: 'بعد الخصم',
+                          hint: '0.00',
+                          icon: Icons.local_offer_outlined,
+                          keyboardType: TextInputType.number,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 14),
+
+                  // 4 ── عدد الباقات ──
                   FormFieldWidget(
-                      controller: _quantityController,
-                      label: 'عدد الباقات',
-                      hint: 'مثال: 10',
-                      icon: Icons.numbers_rounded,
-                      keyboardType: TextInputType.number),
+                    controller: _quantityController,
+                    label: 'عدد الباقات',
+                    hint: 'مثال: 10',
+                    icon: Icons.numbers_rounded,
+                    keyboardType: TextInputType.number,
+                  ),
                   const SizedBox(height: 14),
+
+                  // 5 ── مكان الاستلام (نص) ──
                   FormFieldWidget(
-                      controller: _pickupController,
-                      label: 'مكان الاستلام',
-                      hint: 'العنوان أو المنطقة',
-                      icon: Icons.location_on_outlined),
+                    controller: _pickupController,
+                    label: 'مكان الاستلام',
+                    hint: 'العنوان أو المنطقة',
+                    icon: Icons.location_on_outlined,
+                  ),
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: _pickupStartTimeController,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Pickup start time',
-                      prefixIcon: Icon(Icons.access_time),
-                    ),
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (picked != null) {
-                        _pickupStartTimeController.text =
-                            picked.format(context);
-                      }
-                    },
-                  ),
 
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: _pickupEndTimeController,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Pickup end time',
-                      prefixIcon: Icon(Icons.access_time_filled),
-                    ),
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (picked != null) {
-                        _pickupEndTimeController.text = picked.format(context);
-                      }
-                    },
-                  ),
-                  // ── زر تحديد الموقع ──
+                  // 6 ── تحديد موقع الاستلام (GPS) ──
                   GestureDetector(
                     onTap: _fetchingLocation ? null : _fetchLocation,
                     child: Container(
@@ -498,13 +465,13 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                           horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
                         color: _latitude != null
-                            ? AppColors.success.withOpacity(0.08)
-                            : AppColors.primary.withOpacity(0.07),
+                            ? AppColors.success.withValues(alpha: 0.08)
+                            : AppColors.primary.withValues(alpha: 0.07),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: _latitude != null
-                              ? AppColors.success.withOpacity(0.4)
-                              : AppColors.primary.withOpacity(0.3),
+                              ? AppColors.success.withValues(alpha: 0.4)
+                              : AppColors.primary.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Row(
@@ -514,7 +481,9 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                                   width: 20,
                                   height: 20,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: AppColors.primary))
+                                      strokeWidth: 2,
+                                      color: AppColors.primary),
+                                )
                               : Icon(
                                   _latitude != null
                                       ? Icons.my_location_rounded
@@ -529,7 +498,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                             child: Text(
                               _latitude != null
                                   ? 'تم تحديد الموقع ✓ (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})'
-                                  : 'تحديد موقع الاستلام (اختياري لكن مهم)',
+                                  : 'تحديد موقع الاستلام ',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: _latitude != null
@@ -553,13 +522,57 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
+
+                  // 7 ── بداية وقت الاستلام ──
+                  TextField(
+                    controller: _pickupStartTimeController,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'بداية وقت الاستلام',
+                      prefixIcon: Icon(Icons.access_time),
+                    ),
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        _pickupStartTimeController.text =
+                            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 8 ── نهاية وقت الاستلام ──
+                  TextField(
+                    controller: _pickupEndTimeController,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'نهاية وقت الاستلام',
+                      prefixIcon: Icon(Icons.access_time_filled),
+                    ),
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        _pickupEndTimeController.text =
+                            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 9 ── نوع الباقة ──
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.06),
+                      color: AppColors.primary.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                          color: AppColors.primary.withOpacity(0.20)),
+                          color: AppColors.primary.withValues(alpha: 0.20)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,35 +586,37 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        RadioListTile<bool>(
-                          value: false,
+                        RadioGroup<bool>(
                           groupValue: _isMysteryPackage,
-                          activeColor: AppColors.primary,
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('عرض واضح المحتوى'),
-                          subtitle:
-                              const Text('سيظهر للمستخدم وصف محتوى الباقة'),
-                          onChanged: (value) {
-                            setState(() => _isMysteryPackage = value ?? false);
-                          },
-                        ),
-                        RadioListTile<bool>(
-                          value: true,
-                          groupValue: _isMysteryPackage,
-                          activeColor: AppColors.primary,
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('باقة غامضة المحتوى 🎁'),
-                          subtitle: const Text(
-                              'لن يظهر للمستخدم محتوى الباقة قبل الاستلام'),
-                          onChanged: (value) {
-                            setState(() => _isMysteryPackage = value ?? false);
-                          },
+                          onChanged: (v) =>
+                              setState(() => _isMysteryPackage = v ?? false),
+                          child: Column(
+                            children: [
+                              RadioListTile<bool>(
+                                value: false,
+                                activeColor: AppColors.primary,
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('عرض واضح المحتوى'),
+                                subtitle: const Text(
+                                    'سيظهر للمستخدم وصف محتوى الباقة'),
+                              ),
+                              RadioListTile<bool>(
+                                value: true,
+                                activeColor: AppColors.primary,
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('باقة غامضة المحتوى 🎁'),
+                                subtitle: const Text(
+                                    'لن يظهر للمستخدم محتوى الباقة قبل الاستلام'),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 14),
+
+                  // 10 ── محتوى العرض ──
                   if (!_isMysteryPackage)
                     TextField(
                       controller: _descController,
@@ -621,10 +636,11 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withOpacity(0.08),
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: const Color(0xFF7C3AED).withOpacity(0.25),
+                          color:
+                              const Color(0xFF7C3AED).withValues(alpha: 0.25),
                         ),
                       ),
                       child: const Text(
@@ -636,7 +652,26 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                         ),
                       ),
                     ),
+                  const SizedBox(height: 14),
+
+                  // 11 ── معلومات الحساسية الغذائية ──
+                  TextField(
+                    controller: _allergyController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'معلومات الحساسية الغذائية',
+                      hintText:
+                          'مثال: يحتوي على مكسرات، لا يحتوي على جلوتين...',
+                      prefixIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 32),
+                        child: Icon(Icons.warning_amber_outlined),
+                      ),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
                   const SizedBox(height: 20),
+
+                  // 12 ── نشر الباقة ──
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -647,7 +682,8 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
+                                  color: Colors.white, strokeWidth: 2),
+                            )
                           : const Icon(Icons.publish_rounded),
                       label: Text(
                         (_isLoading || _uploadingImage)

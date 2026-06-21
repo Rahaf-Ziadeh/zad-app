@@ -1,7 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
+import '../../theme/app_colors.dart';
 
+import 'chatbot_screen.dart';
 import 'donate_tab.dart';
 import 'offers_tab.dart';
 import 'packages_tab.dart';
@@ -56,10 +59,33 @@ class _UserDashboardState extends State<UserDashboard> {
     _buildPages();
   }
 
+  void _openChatbot() {
+    final authUser = FirebaseAuth.instance.currentUser;
+    final isAnonymous = authUser?.isAnonymous ?? true;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatbotScreen(
+          userId: isAnonymous ? null : widget.user.uid,
+          userName: widget.user.name,
+          onGoToOffers: () => _goToBrowseTab(0),
+          onGoToPackages: () => _goToBrowseTab(1),
+          onGoToOrders: () => setState(() => _selectedIndex = 2),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _pages),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openChatbot,
+        backgroundColor: AppColors.primary,
+        tooltip: 'مساعد زاد',
+        child: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) {

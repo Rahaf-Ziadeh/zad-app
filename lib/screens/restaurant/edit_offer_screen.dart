@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 import 'package:zad_app/services/notification_service.dart';
 
@@ -23,11 +28,15 @@ class EditOfferScreen extends StatefulWidget {
 class _EditOfferScreenState extends State<EditOfferScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
-  late final TextEditingController _imageUrlController;
   late final TextEditingController _quantityController;
   late final TextEditingController _originalPriceController;
   late final TextEditingController _discountPriceController;
   late final TextEditingController _pickupController;
+  late final TextEditingController _allergyController;
+
+  XFile? _selectedImage;
+  String _currentImageUrl = '';
+  bool _uploadingImage = false;
   bool _isLoading = false;
 
   @override
@@ -36,7 +45,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     final d = widget.offerData;
     _titleController = TextEditingController(text: d['title'] ?? '');
     _descController = TextEditingController(text: d['description'] ?? '');
-    _imageUrlController = TextEditingController(text: d['imageUrl'] ?? '');
+    _currentImageUrl = (d['imageUrl'] as String?) ?? '';
     _quantityController = TextEditingController(
         text: '${d['remainingQuantity'] ?? d['quantity'] ?? ''}');
     _originalPriceController =
@@ -44,28 +53,83 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     _discountPriceController =
         TextEditingController(text: '${d['discountPrice'] ?? ''}');
     _pickupController = TextEditingController(text: d['pickupLocation'] ?? '');
+    _allergyController =
+        TextEditingController(text: (d['allergyInfo'] as String?) ?? '');
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descController.dispose();
-    _imageUrlController.dispose();
     _quantityController.dispose();
     _originalPriceController.dispose();
     _discountPriceController.dispose();
     _pickupController.dispose();
+    _allergyController.dispose();
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+    );
+    if (pickedFile == null) return;
+    setState(() => _selectedImage = pickedFile);
+  }
+
+  Future<String?> _uploadImage() async {
+    if (_selectedImage == null) return null;
+    setState(() => _uploadingImage = true);
+    try {
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/dsu1bewrx/image/upload',
+      );
+      final request = http.MultipartRequest('POST', uri);
+      request.fields['upload_preset'] = 'zad_upload';
+      final bytes = await _selectedImage!.readAsBytes();
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: _selectedImage!.name,
+        ),
+      );
+      final response = await request.send();
+      if (response.statusCode == 200) {
+        final responseData = await response.stream.bytesToString();
+        final data = jsonDecode(responseData);
+        return data['secure_url'] as String?;
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('فشل رفع الصورة: ${response.statusCode}')),
+          );
+        }
+        return null;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('خطأ في رفع الصورة: $e')));
+      }
+      return null;
+    } finally {
+      if (mounted) setState(() => _uploadingImage = false);
+    }
+  }
+
   Future<void> _saveChanges() async {
+    // ── جمع قيم الحقول والتحقق منها قبل أي await ──
     final title = _titleController.text.trim();
     final desc = _descController.text.trim();
-    final imageUrl = _imageUrlController.text.trim();
     final quantityStr = _quantityController.text.trim();
     final originalStr = _originalPriceController.text.trim();
     final discountStr = _discountPriceController.text.trim();
     final pickup = _pickupController.text.trim();
+    final allergyInfo = _allergyController.text.trim();
 
     if ([title, desc, quantityStr, originalStr, discountStr, pickup]
         .any((s) => s.isEmpty)) {
@@ -101,7 +165,17 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     if (discountPrice > originalPrice) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('السعر بعد الخصم لا يجب أن يتجاوز السعر الأصلي')),
+            content:
+                Text('السعر بعد الخصم لا يجب أن يتجاوز السعر الأصلي')),
+      );
+      return;
+    }
+
+    // التحقق من تسجيل الدخول — قبل أي await
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
       );
       return;
     }
@@ -109,6 +183,21 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // ── تحديد رابط الصورة: رفع الجديدة أو الاحتفاظ بالحالية ──
+      String imageUrl = _currentImageUrl;
+      if (_selectedImage != null) {
+        final uploaded = await _uploadImage();
+        if (!mounted) return;
+        if (uploaded == null || uploaded.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('لم يتم رفع الصورة، جرب مرة ثانية')),
+          );
+          return;
+        }
+        imageUrl = uploaded;
+      }
+
       await FirebaseFirestore.instance
           .collection('offers')
           .doc(widget.offerId)
@@ -122,14 +211,19 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
         'price': discountPrice,
         'isFree': discountPrice == 0,
         'pickupLocation': pickup,
+        'allergyInfo': allergyInfo,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      await NotificationService().sendNotification(
-        userId: FirebaseAuth.instance.currentUser!.uid,
-        title: 'تم تعديل العرض',
-        message: 'تم تحديث بيانات العرض "$title"',
-        type: 'offer',
-      );
+
+      // الإشعار غير حرج — لا يوقف تدفق الحفظ عند الفشل
+      try {
+        await NotificationService().sendNotification(
+          userId: user.uid,
+          title: 'تم تعديل العرض',
+          message: 'تم تحديث بيانات العرض "$title"',
+          type: 'offer',
+        );
+      } catch (_) {}
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -167,19 +261,22 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   )
                 : const Text('حفظ',
                     style: TextStyle(
-                        color: AppColors.primary, fontWeight: FontWeight.bold)),
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold)),
           ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          // ── تنبيه ──
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.secondary.withOpacity(0.08),
+              color: AppColors.secondary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.secondary.withOpacity(0.3)),
+              border: Border.all(
+                  color: AppColors.secondary.withValues(alpha: 0.3)),
             ),
             child: const Row(
               children: [
@@ -190,7 +287,9 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   child: Text(
                     'التعديل لن يؤثر على الحجوزات الموجودة حالياً.',
                     style: TextStyle(
-                        color: AppColors.secondary, fontSize: 13, height: 1.4),
+                        color: AppColors.secondary,
+                        fontSize: 13,
+                        height: 1.4),
                   ),
                 ),
               ],
@@ -208,6 +307,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 1 ── اسم الباقة ──
                   FormFieldWidget(
                     controller: _titleController,
                     label: 'اسم الباقة',
@@ -215,13 +315,17 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                     icon: Icons.fastfood_rounded,
                   ),
                   const SizedBox(height: 14),
-                  FormFieldWidget(
-                    controller: _imageUrlController,
-                    label: 'رابط الصورة (اختياري)',
-                    hint: 'https://...',
-                    icon: Icons.image_outlined,
+
+                  // 2 ── صورة ──
+                  _ImagePickerSection(
+                    selectedImage: _selectedImage,
+                    currentImageUrl: _currentImageUrl,
+                    uploading: _uploadingImage,
+                    onPick: _pickImage,
                   ),
                   const SizedBox(height: 14),
+
+                  // 3 ── السعر الأصلي / بعد الخصم ──
                   Row(
                     children: [
                       Expanded(
@@ -246,6 +350,8 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
+
+                  // 4 ── الكمية ──
                   FormFieldWidget(
                     controller: _quantityController,
                     label: 'الكمية المتبقية',
@@ -254,6 +360,8 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 14),
+
+                  // 5 ── مكان الاستلام ──
                   FormFieldWidget(
                     controller: _pickupController,
                     label: 'مكان الاستلام',
@@ -261,6 +369,8 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                     icon: Icons.location_on_outlined,
                   ),
                   const SizedBox(height: 14),
+
+                  // 6 ── وصف الباقة ──
                   TextField(
                     controller: _descController,
                     maxLines: 3,
@@ -274,7 +384,26 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 14),
+
+                  // 7 ── معلومات الحساسية الغذائية ──
+                  TextField(
+                    controller: _allergyController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'معلومات الحساسية الغذائية',
+                      hintText:
+                          'مثال: يحتوي على مكسرات، خالٍ من الغلوتين...',
+                      alignLabelWithHint: true,
+                      prefixIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 24),
+                        child: Icon(Icons.warning_amber_outlined),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 20),
+
+                  // ── زر الحفظ ──
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -286,8 +415,8 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                               child: CircularProgressIndicator(
                                   color: Colors.white, strokeWidth: 2))
                           : const Icon(Icons.save_rounded),
-                      label:
-                          Text(_isLoading ? 'جاري الحفظ...' : 'حفظ التعديلات'),
+                      label: Text(
+                          _isLoading ? 'جاري الحفظ...' : 'حفظ التعديلات'),
                     ),
                   ),
                 ],
@@ -295,6 +424,92 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ImagePickerSection extends StatelessWidget {
+  final XFile? selectedImage;
+  final String currentImageUrl;
+  final bool uploading;
+  final VoidCallback onPick;
+
+  const _ImagePickerSection({
+    required this.selectedImage,
+    required this.currentImageUrl,
+    required this.uploading,
+    required this.onPick,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget preview;
+    if (selectedImage != null) {
+      preview = ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Image.file(
+          File(selectedImage!.path),
+          height: 160,
+          width: double.infinity,
+          fit: BoxFit.cover,
+        ),
+      );
+    } else if (currentImageUrl.isNotEmpty) {
+      preview = ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Image.network(
+          currentImageUrl,
+          height: 160,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _placeholder(),
+        ),
+      );
+    } else {
+      preview = _placeholder();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        preview,
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: uploading ? null : onPick,
+            icon: uploading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.photo_library_outlined, size: 18),
+            label: Text(
+              selectedImage != null
+                  ? 'تغيير الصورة'
+                  : (currentImageUrl.isNotEmpty
+                      ? 'تغيير الصورة الحالية'
+                      : 'إضافة صورة'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _placeholder() {
+    return Container(
+      height: 160,
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Center(
+        child: Icon(Icons.restaurant_menu_rounded,
+            size: 48, color: AppColors.textLight),
       ),
     );
   }

@@ -39,16 +39,70 @@ class RestaurantOffersScreen extends StatelessWidget {
     if (confirm != true) return;
 
     try {
+      // ── قاعدة أعمال: لا يمكن حذف عرض مرتبط بحجز نشط أو مكتمل ──
+      // يُسمح بالحذف فقط عند عدم وجود حجوزات، أو إذا كانت جميعها ملغاة.
+      final blockingSnap = await FirebaseFirestore.instance
+          .collection('reservations')
+          .where('offerId', isEqualTo: offerId)
+          .where('status', whereIn: ['reserved', 'picked_up'])
+          .get();
+
+      if (blockingSnap.docs.isNotEmpty) {
+        // تحديد الرسالة — "reserved" لها الأولوية على "picked_up"
+        final hasReserved = blockingSnap.docs.any(
+          (d) => d.data()['status'] == 'reserved',
+        );
+        final message = hasReserved
+            ? 'لا يمكن حذف هذا العرض لأنه محجوز حالياً.'
+            : 'لا يمكن حذف هذا العرض لأنه تم استلامه من قبل أحد المستخدمين.';
+
+        if (!context.mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            title: const Row(
+              children: [
+                Icon(Icons.block_rounded, color: AppColors.danger, size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text('تعذّر الحذف',
+                      style:
+                          TextStyle(color: AppColors.danger, fontSize: 17)),
+                ),
+              ],
+            ),
+            content: Text(message,
+                style: const TextStyle(
+                    color: AppColors.textDark, fontSize: 14, height: 1.6)),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      // لا توجد حجوزات نشطة — المتابعة بالحذف
       await FirebaseFirestore.instance
           .collection('offers')
           .doc(offerId)
           .delete();
-      await NotificationService().sendNotification(
-        userId: _uid,
-        title: 'تم حذف العرض',
-        message: 'تم حذف العرض بنجاح',
-        type: 'offer',
-      );
+
+      // الإشعار غير حرج — لا يوقف تدفق الحذف عند الفشل
+      try {
+        await NotificationService().sendNotification(
+          userId: _uid,
+          title: 'تم حذف العرض',
+          message: 'تم حذف العرض بنجاح',
+          type: 'offer',
+        );
+      } catch (_) {}
+
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('تم حذف العرض')));
@@ -138,7 +192,7 @@ class RestaurantOffersScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.fastfood_outlined,
-                      size: 64, color: AppColors.primary.withOpacity(0.3)),
+                      size: 64, color: AppColors.primary.withValues(alpha: 0.3)),
                   const SizedBox(height: 14),
                   const Text('لا توجد عروض بعد',
                       style: TextStyle(
@@ -180,7 +234,7 @@ class RestaurantOffersScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
                     color: status == 'available'
-                        ? AppColors.primary.withOpacity(0.3)
+                        ? AppColors.primary.withValues(alpha: 0.3)
                         : AppColors.border,
                   ),
                 ),
@@ -211,7 +265,7 @@ class RestaurantOffersScreen extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
-                              color: _statusColor(status).withOpacity(0.9),
+                              color: _statusColor(status).withValues(alpha: 0.9),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
