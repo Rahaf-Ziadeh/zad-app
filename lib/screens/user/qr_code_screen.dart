@@ -10,12 +10,16 @@ class QrCodeScreen extends StatelessWidget {
   final String reservationId;
   final String offerId;
   final String userId;
+  final String providerName;
+  final String reservationCode;
 
   const QrCodeScreen({
     super.key,
     required this.reservationId,
     required this.offerId,
     required this.userId,
+    this.providerName = '',
+    this.reservationCode = '',
   });
 
   // بيانات QR بصيغة JSON بدل plain text
@@ -130,9 +134,12 @@ class QrCodeScreen extends StatelessWidget {
           // ── تفاصيل الحجز ──
           _InfoBox(
             title: 'رقم الحجز',
-            value: reservationId,
+            value: reservationCode.isNotEmpty ? reservationCode : reservationId,
             icon: Icons.confirmation_number_outlined,
-            onCopy: () => _copyToClipboard(context, reservationId),
+            onCopy: () => _copyToClipboard(
+              context,
+              reservationCode.isNotEmpty ? reservationCode : reservationId,
+            ),
           ),
           const SizedBox(height: 10),
           _InfoBox(
@@ -141,6 +148,15 @@ class QrCodeScreen extends StatelessWidget {
             icon: Icons.restaurant_menu_rounded,
             onCopy: () => _copyToClipboard(context, offerId),
           ),
+          if (providerName.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _InfoBox(
+              title: 'المزوّد',
+              value: providerName,
+              icon: Icons.storefront_outlined,
+              onCopy: () => _copyToClipboard(context, providerName),
+            ),
+          ],
 
           const SizedBox(height: 20),
 

@@ -90,6 +90,13 @@ class UserOrdersScreen extends StatelessWidget {
           throw Exception('لا يمكن إلغاء هذا الطلب');
         }
 
+        // ── قيد الإلغاء: 10 دقائق فقط من وقت الحجز ──
+        final createdAt = resData['createdAt'] as Timestamp?;
+        if (createdAt == null ||
+            DateTime.now().difference(createdAt.toDate()).inMinutes > 10) {
+          throw Exception('لا يمكن إلغاء الحجز بعد مرور 10 دقائق.');
+        }
+
         final cancelQty = (resData['quantity'] as num?)?.toInt() ?? 1;
 
         if (offerSnap.exists) {
@@ -156,10 +163,16 @@ class UserOrdersScreen extends StatelessWidget {
   void _showRatingDialog({
     required BuildContext context,
     required String reservationId,
+    required String offerTitle,
+    required String providerName,
   }) {
     showDialog(
       context: context,
-      builder: (_) => _RatingDialog(reservationId: reservationId),
+      builder: (_) => _RatingDialog(
+        reservationId: reservationId,
+        offerTitle: offerTitle,
+        providerName: providerName,
+      ),
     );
   }
 
@@ -208,8 +221,16 @@ class UserOrdersScreen extends StatelessWidget {
               final status = data['status'] ?? 'reserved';
               final offerId = data['offerId'] ?? '';
               final reservationId = doc.id;
+              final reservationCode =
+                  (data['reservationCode'] as String? ?? '').trim().isNotEmpty
+                      ? data['reservationCode'] as String
+                      : reservationId;
               final userId = FirebaseAuth.instance.currentUser!.uid;
               final providerRole = data['providerRole'] ?? '';
+              final providerName =
+                  (data['providerName'] as String? ?? '').trim();
+              final displayProvider =
+                  providerName.isNotEmpty ? providerName : providerRole;
               final pickupLocation = data['pickupLocation'] ?? 'غير محدد';
               final hasRated = data['hasRated'] ?? false;
               final reservedQty =
@@ -281,13 +302,13 @@ class UserOrdersScreen extends StatelessWidget {
                       OfferInfoRow(
                         icon: Icons.confirmation_number_outlined,
                         label: 'رقم الحجز',
-                        value: reservationId,
+                        value: reservationCode,
                       ),
-                      if (providerRole.isNotEmpty)
+                      if (displayProvider.isNotEmpty)
                         OfferInfoRow(
                           icon: Icons.storefront_outlined,
                           label: 'المزوّد',
-                          value: providerRole,
+                          value: displayProvider,
                         ),
                       OfferInfoRow(
                         icon: Icons.location_on_outlined,
@@ -313,6 +334,8 @@ class UserOrdersScreen extends StatelessWidget {
                                       reservationId: reservationId,
                                       offerId: offerId,
                                       userId: userId,
+                                      providerName: displayProvider,
+                                      reservationCode: reservationCode,
                                     ),
                                   ),
                                 ),
@@ -374,6 +397,8 @@ class UserOrdersScreen extends StatelessWidget {
                               onPressed: () => _showRatingDialog(
                                 context: context,
                                 reservationId: reservationId,
+                                offerTitle: title,
+                                providerName: displayProvider,
                               ),
                               icon: const Icon(Icons.star_outline_rounded,
                                   size: 18),
@@ -430,7 +455,14 @@ class UserOrdersScreen extends StatelessWidget {
 
 class _RatingDialog extends StatefulWidget {
   final String reservationId;
-  const _RatingDialog({required this.reservationId});
+  final String offerTitle;
+  final String providerName;
+
+  const _RatingDialog({
+    required this.reservationId,
+    required this.offerTitle,
+    required this.providerName,
+  });
 
   @override
   State<_RatingDialog> createState() => _RatingDialogState();
@@ -513,6 +545,42 @@ class _RatingDialogState extends State<_RatingDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.offerTitle.isNotEmpty || widget.providerName.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.offerTitle.isNotEmpty)
+                    Text(
+                      widget.offerTitle,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                        fontSize: 13,
+                      ),
+                    ),
+                  if (widget.providerName.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        widget.providerName,
+                        style: const TextStyle(
+                          color: AppColors.textLight,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           const Text(
             'كيف كانت تجربتك مع هذا الطلب؟',
             style: TextStyle(color: AppColors.textLight, fontSize: 13),

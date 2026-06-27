@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
@@ -133,9 +132,41 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
       return;
     }
 
+    // ── تحقق من موقع الاستلام ──
+    final locationText = _locationController.text.trim();
+    if (locationText.isEmpty && _latitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
+      // ── حل موقع الاستلام إذا كان فارغاً مع وجود إحداثيات ──
+      var resolvedLocation = locationText;
+      if (resolvedLocation.isEmpty && _latitude != null) {
+        final address = await LocationService().getAddressFromCoordinates(
+          _latitude!, _longitude!,
+        );
+        if (!mounted) return;
+        if (address.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+            ),
+          );
+          return;
+        }
+        resolvedLocation = address;
+        setState(() => _locationController.text = address);
+      }
+
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final userName = await UserService().getUserName(uid);
 
@@ -150,7 +181,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
         quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
         price: price,
         isFree: _isFree,
-        pickupLocation: _locationController.text.trim(),
+        pickupLocation: resolvedLocation,
         latitude: _latitude,
         longitude: _longitude,
         expiryDate: _expiryDate!,
@@ -295,7 +326,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                             decoration: BoxDecoration(
                               color: selected
                                   ? AppColors.primary
-                                  : AppColors.primary.withOpacity(0.07),
+                                  : AppColors.primary.withValues(alpha:0.07),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(cat,
@@ -399,9 +430,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                     // موقع الاستلام
                     TextFormField(
                       controller: _locationController,
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'يرجى إدخال مكان الاستلام'
-                          : null,
                       decoration: const InputDecoration(
                         labelText: 'مكان الاستلام *',
                         hintText: 'العنوان أو المنطقة',
@@ -419,13 +447,13 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                             horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
                           color: _latitude != null
-                              ? AppColors.success.withOpacity(0.08)
-                              : AppColors.primary.withOpacity(0.07),
+                              ? AppColors.success.withValues(alpha:0.08)
+                              : AppColors.primary.withValues(alpha:0.07),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: _latitude != null
-                                ? AppColors.success.withOpacity(0.4)
-                                : AppColors.primary.withOpacity(0.3),
+                                ? AppColors.success.withValues(alpha:0.4)
+                                : AppColors.primary.withValues(alpha:0.3),
                           ),
                         ),
                         child: Row(

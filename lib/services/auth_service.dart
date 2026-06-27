@@ -15,6 +15,13 @@ class AuthService {
         password: password,
       );
 
+      // ── التحقق من تأكيد البريد الإلكتروني ──
+      await credential.user!.reload();
+      if (!(credential.user!.emailVerified)) {
+        await _auth.signOut();
+        throw Exception('يرجى التحقق من بريدك الإلكتروني أولاً.');
+      }
+
       final uid = credential.user!.uid;
       final userDoc = await _firestore.collection('users').doc(uid).get();
 
@@ -25,13 +32,18 @@ class AuthService {
       final status = data['status'] ?? 'active';
       final isApproved = data['isApproved'] ?? false;
 
-      if (status == 'suspended')
+      if (status == 'suspended') {
         throw Exception('تم تعليق هذا الحساب من قبل الإدارة');
-      if (status == 'rejected')
+      }
+      if (status == 'rejected') {
         throw Exception('تم رفض هذا الحساب من قبل الإدارة');
+      }
       if (status != 'active') throw Exception('هذا الحساب غير نشط حالياً');
-      if ((role == 'restaurant' || role == 'charity') && !isApproved) {
-        throw Exception('حسابك بانتظار موافقة الإدارة');
+      if (role == 'restaurant' && !isApproved) {
+        throw Exception('حساب المطعم بانتظار موافقة الإدارة.');
+      }
+      if (role == 'charity' && !isApproved) {
+        throw Exception('حساب الجمعية بانتظار موافقة الإدارة.');
       }
 
       return AppUser.fromMap(uid, data);
@@ -49,7 +61,20 @@ class AuthService {
     required String phone,
     required String role,
     required String address,
-    String? nationalId, // ← جديد
+    String? nationalId,
+    double? latitude,
+    double? longitude,
+    // Restaurant
+    String? ownerName,
+    String? workingHours,
+    String? licenseNumber,
+    String? description,
+    String? logoUrl,
+    String? businessLicenseUrl,
+    // Charity
+    String? responsiblePerson,
+    String? registrationNumber,
+    String? charityDocumentUrl,
   }) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -59,6 +84,9 @@ class AuthService {
 
       final uid = credential.user!.uid;
 
+      final bool needsVerification =
+          role == 'restaurant' || role == 'charity';
+
       await _firestore.collection('users').doc(uid).set({
         'uid': uid,
         'name': fullName,
@@ -67,14 +95,45 @@ class AuthService {
         'phone': phone,
         'role': role,
         'address': address,
-        'nationalId': nationalId ?? '', // ← يُحفظ في Firestore
+        'nationalId': nationalId ?? '',
+        'latitude': latitude,
+        'longitude': longitude,
+        'hasLocation': latitude != null && longitude != null,
+        'locationSource': latitude != null ? 'gps' : 'manual',
         'status': 'active',
-        'isApproved': role == 'individual' || role == 'admin',
+        'isApproved': !needsVerification,
         'photoUrl': null,
         'points': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        // ── حقول التحقق للمطاعم والجمعيات ──
+        if (needsVerification) ...{
+          'verificationStatus': 'pending',
+          'verificationReviewedBy': null,
+          'verificationReviewedAt': null,
+          'rejectionReason': null,
+        },
+        // ── حقول المطعم ──
+        if (role == 'restaurant') ...{
+          'ownerName': ownerName ?? '',
+          'workingHours': workingHours ?? '',
+          'licenseNumber': licenseNumber ?? '',
+          'description': description ?? '',
+          'logoUrl': logoUrl ?? '',
+          'businessLicenseUrl': businessLicenseUrl ?? '',
+        },
+        // ── حقول الجمعية ──
+        if (role == 'charity') ...{
+          'responsiblePerson': responsiblePerson ?? '',
+          'registrationNumber': registrationNumber ?? '',
+          'description': description ?? '',
+          'logoUrl': logoUrl ?? '',
+          'charityDocumentUrl': charityDocumentUrl ?? '',
+        },
       });
+      // ── إرسال بريد التحقق بعد إنشاء الحساب ──
+      await credential.user?.sendEmailVerification();
+
       if (role == 'restaurant' || role == 'charity') {
         await NotificationService().notifyAdmins(
           title: 'حساب جديد بانتظار الموافقة',

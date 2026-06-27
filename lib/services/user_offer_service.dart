@@ -41,6 +41,7 @@ class UserOfferService {
       'latitude': latitude,
       'longitude': longitude,
       'hasLocation': latitude != null,
+      'locationSource': latitude != null ? 'gps' : 'manual',
       'expiryDate': expiryDate,
       'isCash': true,
       'isOnline': false,

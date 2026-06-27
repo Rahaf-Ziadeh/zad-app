@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../constants/app_constants.dart';
 import '../../services/reservation_service.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
@@ -51,6 +52,7 @@ class OfferDetailsScreen extends StatelessWidget {
     final offerType = data['offerType'] ?? '';
     final isCash = data['isCash'] ?? true;
     final isOnline = data['isOnline'] ?? false;
+    final allergens = AppConstants.parseAllergyInfo(data['allergyInfo']);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -233,6 +235,17 @@ class OfferDetailsScreen extends StatelessWidget {
                               color: AppColors.textLight,
                               height: 1.7,
                               fontSize: 14)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // ── مسببات الحساسية ──
+                if (allergens.isNotEmpty) ...[
+                  _DetailCard(
+                    title: 'مسببات الحساسية الغذائية',
+                    children: [
+                      _AllergyDisplay(allergens: allergens),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -783,6 +796,70 @@ class _DetailCard extends StatelessWidget {
           ...children,
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// عرض مسببات الحساسية
+// ─────────────────────────────────────────────
+class _AllergyDisplay extends StatelessWidget {
+  final List<String> allergens;
+
+  const _AllergyDisplay({required this.allergens});
+
+  @override
+  Widget build(BuildContext context) {
+    final isNoAllergens = allergens.length == 1 &&
+        allergens.first == AppConstants.noKnownAllergens;
+
+    if (isNoAllergens) {
+      return Row(
+        children: const [
+          Icon(Icons.check_circle_outline_rounded,
+              color: AppColors.success, size: 18),
+          SizedBox(width: 8),
+          Text(
+            'لا يحتوي على مسببات حساسية معروفة',
+            style: TextStyle(
+              color: AppColors.success,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: allergens.map((allergen) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.danger.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  size: 13, color: AppColors.danger),
+              const SizedBox(width: 4),
+              Text(
+                allergen,
+                style: const TextStyle(
+                  color: AppColors.danger,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

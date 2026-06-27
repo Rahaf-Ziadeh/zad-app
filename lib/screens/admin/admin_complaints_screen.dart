@@ -116,11 +116,25 @@ class _ComplaintsList extends StatelessWidget {
                 : 'لا توجد شكاوى محلولة',
           );
         }
+        // ── ترتيب الشكاوى: الأحدث أولاً — بدون createdAt في النهاية ──
+        final sortedDocs = List<QueryDocumentSnapshot>.from(docs)
+          ..sort((a, b) {
+            final aTs = ((a.data() as Map<String, dynamic>)['createdAt']
+                    as Timestamp?)
+                ?.millisecondsSinceEpoch;
+            final bTs = ((b.data() as Map<String, dynamic>)['createdAt']
+                    as Timestamp?)
+                ?.millisecondsSinceEpoch;
+            if (aTs == null && bTs == null) return 0;
+            if (aTs == null) return 1;
+            if (bTs == null) return -1;
+            return bTs.compareTo(aTs);
+          });
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
+          itemCount: sortedDocs.length,
           itemBuilder: (context, i) {
-            final doc = docs[i];
+            final doc = sortedDocs[i];
             final data = doc.data() as Map<String, dynamic>;
             final status = data['status'] ?? 'open';
             final description = data['description'] ?? 'لا يوجد وصف';
@@ -131,7 +145,7 @@ class _ComplaintsList extends StatelessWidget {
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: statusColor(status).withOpacity(0.3)),
+                side: BorderSide(color: statusColor(status).withValues(alpha:0.3)),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -144,7 +158,7 @@ class _ComplaintsList extends StatelessWidget {
                           width: 38,
                           height: 38,
                           decoration: BoxDecoration(
-                            color: AppColors.danger.withOpacity(0.10),
+                            color: AppColors.danger.withValues(alpha:0.10),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.report_rounded,
@@ -171,7 +185,7 @@ class _ComplaintsList extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: statusColor(status).withOpacity(0.12),
+                            color: statusColor(status).withValues(alpha:0.12),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(

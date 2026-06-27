@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../services/auth_service.dart';
+import '../../services/cloudinary_service.dart';
+import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
 import 'login_screen.dart';
 
@@ -33,6 +40,26 @@ class _SignupScreenState extends State<SignupScreen> {
   String _passwordStrengthLabel = '';
   Color _passwordStrengthColor = AppColors.danger;
 
+  // ── GPS للعنوان ──
+  double? _registrationLat;
+  double? _registrationLon;
+  bool _fetchingLocation = false;
+
+  // ── حقول إضافية للمطعم ──
+  final _ownerNameController = TextEditingController();
+  final _workingHoursController = TextEditingController();
+  final _licenseNumberController = TextEditingController();
+
+  // ── حقول إضافية للجمعية ──
+  final _responsiblePersonController = TextEditingController();
+  final _regNumberController = TextEditingController();
+
+  // ── مشتركة بين المطعم والجمعية ──
+  final _orgDescController = TextEditingController();
+  _PickedDoc? _logoFile;
+  _PickedDoc? _orgDocFile;
+  bool _uploadingOrgDocs = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +75,12 @@ class _SignupScreenState extends State<SignupScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _nationalIdController.dispose();
+    _ownerNameController.dispose();
+    _workingHoursController.dispose();
+    _licenseNumberController.dispose();
+    _responsiblePersonController.dispose();
+    _regNumberController.dispose();
+    _orgDescController.dispose();
     super.dispose();
   }
 
@@ -101,13 +134,6 @@ class _SignupScreenState extends State<SignupScreen> {
     return null;
   }
 
-  String? _validateNationalId(String? v) {
-    if (v == null || v.trim().isEmpty) return 'رقم الهوية مطلوب';
-    if (v.trim().length < 7) return 'رقم الهوية يجب أن يكون 7 أرقام على الأقل';
-    if (!RegExp(r'^\d+$').hasMatch(v.trim())) return 'رقم الهوية يجب أن يحتوي أرقام فقط';
-    return null;
-  }
-
   String? _validatePassword(String? v) {
     if (v == null || v.trim().isEmpty) return 'يرجى إدخال كلمة المرور';
     if (v.length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
@@ -118,6 +144,135 @@ class _SignupScreenState extends State<SignupScreen> {
     if (v == null || v.trim().isEmpty) return 'يرجى تأكيد كلمة المرور';
     if (v != _passwordController.text) return 'كلمتا المرور غير متطابقتين';
     return null;
+  }
+
+  Future<void> _pickLogo() async {
+    // اختيار المصدر: الكاميرا أو المعرض
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('اختر مصدر الصورة',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: AppColors.textDark)),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded,
+                  color: AppColors.primary),
+              title: const Text('الكاميرا'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded,
+                  color: AppColors.primary),
+              title: const Text('معرض الصور'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    if (!mounted) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 75,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    setState(() => _logoFile = _PickedDoc(bytes: bytes, name: picked.name));
+  }
+
+  Future<void> _pickOrgDoc() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+        withData: true,
+      );
+      if (!mounted) return;
+      if (result == null || result.files.isEmpty) return; // المستخدم ألغى الاختيار
+      final f = result.files.first;
+      if (f.bytes == null || f.bytes!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تعذر قراءة الملف، يرجى المحاولة مجدداً'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+        return;
+      }
+      setState(() => _orgDocFile = _PickedDoc(bytes: f.bytes!, name: f.name));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في اختيار الملف: $e'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _fetchLocationForAddress() async {
+    setState(() => _fetchingLocation = true);
+    final svc = LocationService();
+    final position = await svc.getCurrentLocation();
+    if (!mounted) return;
+
+    if (position == null) {
+      setState(() => _fetchingLocation = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذّر الحصول على الموقع — تحقق من صلاحيات GPS'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
+    }
+
+    final address = await svc.getAddressFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _registrationLat = position.latitude;
+      _registrationLon = position.longitude;
+      _fetchingLocation = false;
+      if (address.isNotEmpty && _addressController.text.trim().isEmpty) {
+        _addressController.text = address;
+      }
+    });
+
+    final msg = address.isNotEmpty
+        ? 'تم تحديد الموقع ✅'
+        : 'تعذر تحديد اسم الموقع، يمكنك إدخاله يدوياً.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor:
+            address.isNotEmpty ? AppColors.success : AppColors.secondary,
+      ),
+    );
   }
 
   Future<void> _handleSignup() async {
@@ -136,6 +291,44 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // ── رفع وثائق المطعم / الجمعية ──
+      String? logoUrl;
+      String? orgDocUrl;
+      if (_selectedRole == 'restaurant' || _selectedRole == 'charity') {
+        final isRestaurant = _selectedRole == 'restaurant';
+        if (isRestaurant &&
+            (_ownerNameController.text.trim().isEmpty ||
+                _workingHoursController.text.trim().isEmpty ||
+                _licenseNumberController.text.trim().isEmpty ||
+                _orgDescController.text.trim().isEmpty)) {
+          throw Exception('يرجى تعبئة جميع حقول المطعم المطلوبة');
+        }
+        if (!isRestaurant &&
+            (_responsiblePersonController.text.trim().isEmpty ||
+                _regNumberController.text.trim().isEmpty ||
+                _orgDescController.text.trim().isEmpty)) {
+          throw Exception('يرجى تعبئة جميع حقول الجمعية المطلوبة');
+        }
+        if (_orgDocFile == null) {
+          throw Exception(isRestaurant
+              ? 'يرجى رفع الرخصة التجارية'
+              : 'يرجى رفع وثيقة تسجيل الجمعية');
+        }
+        setState(() => _uploadingOrgDocs = true);
+        if (_logoFile != null) {
+          logoUrl = await CloudinaryService().uploadBytes(
+              bytes: _logoFile!.bytes, filename: _logoFile!.name);
+          if (!mounted) return;
+        }
+        orgDocUrl = await CloudinaryService().uploadBytes(
+            bytes: _orgDocFile!.bytes, filename: _orgDocFile!.name);
+        if (!mounted) return;
+        if (orgDocUrl == null || orgDocUrl.isEmpty) {
+          throw Exception('فشل رفع المستند، يرجى المحاولة مجدداً');
+        }
+        setState(() => _uploadingOrgDocs = false);
+      }
+
       await AuthService().registerUser(
         fullName: _nameController.text.trim(),
         email: _emailController.text.trim(),
@@ -143,16 +336,59 @@ class _SignupScreenState extends State<SignupScreen> {
         phone: '$_selectedCountryCode${_phoneController.text.trim()}',
         role: _selectedRole,
         address: _addressController.text.trim(),
-        nationalId: _nationalIdController.text.trim(), // ← يُرسل للـ service
+        nationalId: _nationalIdController.text.trim(),
+        latitude: _registrationLat,
+        longitude: _registrationLon,
+        ownerName: _selectedRole == 'restaurant'
+            ? _ownerNameController.text.trim() : null,
+        workingHours: _selectedRole == 'restaurant'
+            ? _workingHoursController.text.trim() : null,
+        licenseNumber: _selectedRole == 'restaurant'
+            ? _licenseNumberController.text.trim() : null,
+        description: _orgDescController.text.trim().isNotEmpty
+            ? _orgDescController.text.trim() : null,
+        logoUrl: logoUrl,
+        businessLicenseUrl:
+            _selectedRole == 'restaurant' ? orgDocUrl : null,
+        responsiblePerson: _selectedRole == 'charity'
+            ? _responsiblePersonController.text.trim() : null,
+        registrationNumber: _selectedRole == 'charity'
+            ? _regNumberController.text.trim() : null,
+        charityDocumentUrl:
+            _selectedRole == 'charity' ? orgDocUrl : null,
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم إنشاء الحساب بنجاح ✅'),
-          backgroundColor: AppColors.success,
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          icon: const Icon(
+            Icons.mark_email_read_rounded,
+            color: AppColors.primary,
+            size: 44,
+          ),
+          title: const Text(
+            'تحقق من بريدك الإلكتروني',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            'تم إرسال رابط التحقق إلى بريدك الإلكتروني.\n'
+            'يرجى التحقق من البريد قبل تسجيل الدخول.',
+            textAlign: TextAlign.center,
+            style: TextStyle(height: 1.6),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('حسناً'),
+            ),
+          ],
         ),
       );
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -230,7 +466,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: selected
-                              ? AppColors.primary.withOpacity(0.10)
+                              ? AppColors.primary.withValues(alpha:0.10)
                               : Colors.white,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
@@ -347,53 +583,146 @@ class _SignupScreenState extends State<SignupScreen> {
                       TextFormField(
                         controller: _addressController,
                         validator: _validateAddress,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'العنوان / الموقع',
-                          prefixIcon: Icon(Icons.location_on_outlined),
+                          prefixIcon: const Icon(Icons.location_on_outlined),
+                          suffixIcon: _fetchingLocation
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: Icon(
+                                    _registrationLat != null
+                                        ? Icons.my_location_rounded
+                                        : Icons.location_searching_rounded,
+                                    color: _registrationLat != null
+                                        ? AppColors.success
+                                        : AppColors.primary,
+                                    size: 20,
+                                  ),
+                                  tooltip: 'تحديد موقعي الحالي',
+                                  onPressed: _fetchingLocation
+                                      ? null
+                                      : _fetchLocationForAddress,
+                                ),
                         ),
                       ),
                       const SizedBox(height: 14),
 
-                      // ── رقم الهوية ── جديد
-                      TextFormField(
-                        controller: _nationalIdController,
-                        keyboardType: TextInputType.number,
-                        validator: _validateNationalId,
-                        decoration: const InputDecoration(
-                          labelText: 'رقم الهوية الوطنية *',
-                          hintText: 'مثال: 123456789',
-                          prefixIcon: Icon(Icons.badge_outlined),
+                      // ── حقول إضافية حسب نوع الحساب ──
+                      if (_selectedRole == 'restaurant') ...[
+                        const SizedBox(height: 6),
+                        const Divider(),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _ownerNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'اسم المالك / صاحب العمل *',
+                            prefixIcon: Icon(Icons.person_outline_rounded),
+                          ),
                         ),
-                      ),
-
-                      // تنبيه رقم الهوية
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.secondary.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: AppColors.secondary.withOpacity(0.3)),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _orgDescController,
+                          maxLines: 2,
+                          decoration: const InputDecoration(
+                            labelText: 'وصف المطعم *',
+                            prefixIcon: Icon(Icons.description_outlined),
+                          ),
                         ),
-                        child: const Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.info_outline_rounded,
-                                color: AppColors.secondary, size: 16),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'رقم هويتك يُستخدم فقط للتحقق من الهوية في حال حدوث أي مشكلة تتعلق بسلامة الغذاء. لن يُشارك مع أي طرف آخر.',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.secondary,
-                                    height: 1.5),
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _workingHoursController,
+                          decoration: const InputDecoration(
+                            labelText: 'ساعات العمل *',
+                            hintText: 'مثال: 8ص - 10م',
+                            prefixIcon: Icon(Icons.access_time_rounded),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _licenseNumberController,
+                          decoration: const InputDecoration(
+                            labelText: 'رقم الرخصة التجارية *',
+                            prefixIcon: Icon(Icons.numbers_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        _FilePickButton(
+                          label: 'شعار المطعم (اختياري)',
+                          file: _logoFile,
+                          icon: Icons.image_rounded,
+                          onPick: _pickLogo,
+                          onClear: () => setState(() => _logoFile = null),
+                          acceptsAll: false,
+                        ),
+                        const SizedBox(height: 10),
+                        _FilePickButton(
+                          label: 'الرخصة التجارية *',
+                          file: _orgDocFile,
+                          icon: Icons.folder_rounded,
+                          onPick: _pickOrgDoc,
+                          onClear: () => setState(() => _orgDocFile = null),
+                          acceptsAll: true,
+                        ),
+                        const SizedBox(height: 6),
+                        const Divider(),
+                      ],
+                      if (_selectedRole == 'charity') ...[
+                        const SizedBox(height: 6),
+                        const Divider(),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _responsiblePersonController,
+                          decoration: const InputDecoration(
+                            labelText: 'اسم المسؤول *',
+                            prefixIcon: Icon(Icons.person_outline_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _orgDescController,
+                          maxLines: 2,
+                          decoration: const InputDecoration(
+                            labelText: 'وصف الجمعية *',
+                            prefixIcon: Icon(Icons.description_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _regNumberController,
+                          decoration: const InputDecoration(
+                            labelText: 'رقم التسجيل الرسمي *',
+                            prefixIcon: Icon(Icons.numbers_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        _FilePickButton(
+                          label: 'شعار الجمعية (اختياري)',
+                          file: _logoFile,
+                          icon: Icons.image_rounded,
+                          onPick: _pickLogo,
+                          onClear: () => setState(() => _logoFile = null),
+                          acceptsAll: false,
+                        ),
+                        const SizedBox(height: 10),
+                        _FilePickButton(
+                          label: 'وثيقة تسجيل الجمعية *',
+                          file: _orgDocFile,
+                          icon: Icons.folder_rounded,
+                          onPick: _pickOrgDoc,
+                          onClear: () => setState(() => _orgDocFile = null),
+                          acceptsAll: true,
+                        ),
+                        const SizedBox(height: 6),
+                        const Divider(),
+                      ],
 
                       const SizedBox(height: 14),
 
@@ -474,9 +803,9 @@ class _SignupScreenState extends State<SignupScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.danger.withOpacity(0.04),
+                  color: AppColors.danger.withValues(alpha:0.04),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.danger.withOpacity(0.2)),
+                  border: Border.all(color: AppColors.danger.withValues(alpha:0.2)),
                 ),
                 child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,7 +836,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: _acceptedTerms
-                        ? AppColors.primary.withOpacity(0.05)
+                        ? AppColors.primary.withValues(alpha:0.05)
                         : Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
@@ -572,11 +901,24 @@ class _SignupScreenState extends State<SignupScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _handleSignup,
                   child: _isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2.5, color: Colors.white),
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2.5, color: Colors.white),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _uploadingOrgDocs
+                                  ? 'جاري رفع الوثائق...'
+                                  : 'جاري إنشاء الحساب...',
+                              style: const TextStyle(
+                                  fontSize: 14, color: Colors.white),
+                            ),
+                          ],
                         )
                       : const Text('إنشاء الحساب',
                           style: TextStyle(
@@ -600,6 +942,133 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── نموذج بيانات الملف المختار ─────────────────────────────────────────────────
+class _PickedDoc {
+  final Uint8List bytes;
+  final String name;
+  const _PickedDoc({required this.bytes, required this.name});
+  bool get isImage => name.toLowerCase().endsWith('.jpg') ||
+      name.toLowerCase().endsWith('.jpeg') ||
+      name.toLowerCase().endsWith('.png');
+}
+
+// ── زر اختيار الملف (شعار أو وثيقة) ──────────────────────────────────────────
+class _FilePickButton extends StatelessWidget {
+  final String label;
+  final _PickedDoc? file;
+  final IconData icon;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+  final bool acceptsAll; // true = صور + PDF، false = صور فقط
+
+  const _FilePickButton({
+    required this.label,
+    required this.file,
+    required this.icon,
+    required this.onPick,
+    required this.onClear,
+    required this.acceptsAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final picked = file != null;
+    final showPreview = picked && file!.isImage;
+    // ── Ink+InkWell بدلاً من GestureDetector لضمان تسجيل النقر ──
+    // GestureDetector يتعارض مع SingleChildScrollView على بعض أجهزة Android.
+    // InkWell (Material) يفوز دائماً على منافسة الإيماءات ويُظهر تموّج اللمس.
+    return Ink(
+      decoration: BoxDecoration(
+        color: picked
+            ? AppColors.success.withValues(alpha: 0.06)
+            : AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: picked ? AppColors.success : AppColors.border,
+          width: picked ? 1.5 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onPick,
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    picked ? Icons.check_circle_rounded : icon,
+                    color: picked ? AppColors.success : AppColors.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: picked
+                                ? AppColors.success
+                                : AppColors.textDark,
+                          ),
+                        ),
+                        if (picked)
+                          Text(
+                            '✔ ${file!.name}',
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.textLight),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        else
+                          Text(
+                            acceptsAll
+                                ? 'jpg  •  png  •  pdf'
+                                : 'jpg  •  png — الكاميرا أو المعرض',
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.textLight),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (picked)
+                    // زر الحذف لا يحتاج InkWell — GestureDetector يكفي لأيقونة صغيرة
+                    GestureDetector(
+                      onTap: onClear,
+                      child: const Icon(Icons.close_rounded,
+                          size: 16, color: AppColors.textLight),
+                    ),
+                ],
+              ),
+            ),
+            // معاينة الصورة للشعار
+            if (showPreview)
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(11),
+                  bottomRight: Radius.circular(11),
+                ),
+                child: Image.memory(
+                  file!.bytes,
+                  width: double.infinity,
+                  height: 120,
+                  fit: BoxFit.cover,
+                ),
+              ),
+          ],
         ),
       ),
     );

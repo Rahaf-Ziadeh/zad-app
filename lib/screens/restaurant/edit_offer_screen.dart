@@ -9,7 +9,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 import 'package:zad_app/services/notification_service.dart';
 
+import '../../constants/app_constants.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/allergy_checkbox_panel.dart';
 
 class EditOfferScreen extends StatefulWidget {
   final String offerId;
@@ -32,7 +34,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
   late final TextEditingController _originalPriceController;
   late final TextEditingController _discountPriceController;
   late final TextEditingController _pickupController;
-  late final TextEditingController _allergyController;
+  Set<String> _selectedAllergens = {};
 
   XFile? _selectedImage;
   String _currentImageUrl = '';
@@ -53,8 +55,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     _discountPriceController =
         TextEditingController(text: '${d['discountPrice'] ?? ''}');
     _pickupController = TextEditingController(text: d['pickupLocation'] ?? '');
-    _allergyController =
-        TextEditingController(text: (d['allergyInfo'] as String?) ?? '');
+    _selectedAllergens = AppConstants.parseAllergyCheckboxes(d['allergyInfo']);
   }
 
   @override
@@ -65,7 +66,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     _originalPriceController.dispose();
     _discountPriceController.dispose();
     _pickupController.dispose();
-    _allergyController.dispose();
     super.dispose();
   }
 
@@ -129,7 +129,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     final originalStr = _originalPriceController.text.trim();
     final discountStr = _discountPriceController.text.trim();
     final pickup = _pickupController.text.trim();
-    final allergyInfo = _allergyController.text.trim();
+    final allergyInfo = _selectedAllergens.toList();
 
     if ([title, desc, quantityStr, originalStr, discountStr, pickup]
         .any((s) => s.isEmpty)) {
@@ -387,19 +387,9 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   const SizedBox(height: 14),
 
                   // 7 ── معلومات الحساسية الغذائية ──
-                  TextField(
-                    controller: _allergyController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'معلومات الحساسية الغذائية',
-                      hintText:
-                          'مثال: يحتوي على مكسرات، خالٍ من الغلوتين...',
-                      alignLabelWithHint: true,
-                      prefixIcon: Padding(
-                        padding: EdgeInsets.only(bottom: 24),
-                        child: Icon(Icons.warning_amber_outlined),
-                      ),
-                    ),
+                  AllergyCheckboxPanel(
+                    selected: _selectedAllergens,
+                    onChanged: (v) => setState(() => _selectedAllergens = v),
                   ),
                   const SizedBox(height: 20),
 

@@ -179,6 +179,44 @@ class AdminService {
     );
   }
 
+  // ── عروض: جلب الكل مرتبة بالأحدث ──
+  Stream<QuerySnapshot> getAllOffersStream() {
+    return _firestore
+        .collection('offers')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  // ── عروض: حذف مع فحص الحجوزات وتسجيل الإجراء ──
+  Future<void> deleteOffer({
+    required String offerId,
+    required String offerTitle,
+    required String providerUserId,
+    required String adminId,
+  }) async {
+    final activeReservations = await _firestore
+        .collection('reservations')
+        .where('offerId', isEqualTo: offerId)
+        .where('status', whereIn: ['reserved', 'picked_up'])
+        .get();
+
+    if (activeReservations.docs.isNotEmpty) {
+      throw Exception('لا يمكن حذف هذا العرض لأنه مرتبط بحجوزات موجودة.');
+    }
+
+    await _firestore.collection('offers').doc(offerId).delete();
+
+    await _firestore.collection('admin_activity_logs').add({
+      'actionType': 'delete_offer',
+      'adminId': adminId,
+      'offerId': offerId,
+      'offerTitle': offerTitle,
+      'providerUserId': providerUserId,
+      'timestamp': FieldValue.serverTimestamp(),
+      'details': 'تم حذف العرض "$offerTitle" من قبل المسؤول',
+    });
+  }
+
   Stream<QuerySnapshot> getRedistributedDonations() {
     return _firestore
         .collection('donations')

@@ -9,6 +9,9 @@ import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 import 'package:zad_app/services/location_service.dart';
 import 'package:zad_app/services/notification_service.dart';
 import 'package:zad_app/theme/app_colors.dart';
+import 'package:zad_app/theme/app_constants.dart';
+import '../../constants/app_constants.dart';
+import '../../widgets/allergy_checkbox_panel.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -26,8 +29,8 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   final _originalPriceController = TextEditingController();
   final _discountPriceController = TextEditingController();
   final _pickupController = TextEditingController();
-  final _allergyController = TextEditingController();
   final _pickupStartTimeController = TextEditingController();
+  Set<String> _selectedAllergens = {};
   final _pickupEndTimeController = TextEditingController();
 
   XFile? _selectedImage;
@@ -91,34 +94,45 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     }
   }
 
-  // ── جلب الموقع الحالي ──
+  // ── جلب الموقع الحالي وعكس ترميزه لاسم منطقة ──
   Future<void> _fetchLocation() async {
     setState(() => _fetchingLocation = true);
-    final position = await LocationService().getCurrentLocation();
-    if (position != null) {
-      setState(() {
-        _latitude = position.latitude;
-        _longitude = position.longitude;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم تحديد الموقع بنجاح ✅'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذّر الحصول على الموقع — تحقق من صلاحيات GPS'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      }
+    final svc = LocationService();
+    final position = await svc.getCurrentLocation();
+    if (!mounted) return;
+
+    if (position == null) {
+      setState(() => _fetchingLocation = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذّر الحصول على الموقع — تحقق من صلاحيات GPS'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
     }
-    setState(() => _fetchingLocation = false);
+
+    final address = await svc.getAddressFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _latitude = position.latitude;
+      _longitude = position.longitude;
+      _fetchingLocation = false;
+      if (address.isNotEmpty && _pickupController.text.trim().isEmpty) {
+        _pickupController.text = address;
+      }
+    });
+
+    final msg = address.isNotEmpty
+        ? 'تم تحديد الموقع ✅'
+        : 'تم تحديد الموقع ✅ — يرجى كتابة اسم المنطقة يدوياً';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.success),
+    );
   }
 
   @override
@@ -129,7 +143,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     _originalPriceController.dispose();
     _discountPriceController.dispose();
     _pickupController.dispose();
-    _allergyController.dispose();
     _pickupStartTimeController.dispose();
     _pickupEndTimeController.dispose();
     super.dispose();
@@ -145,9 +158,9 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     final pickup = _pickupController.text.trim();
     final pickupStartTime = _pickupStartTimeController.text.trim();
     final pickupEndTime = _pickupEndTimeController.text.trim();
-    final allergyInfo = _allergyController.text.trim();
+    final allergyInfo = _selectedAllergens.toList();
 
-    if (_selectedImage == null) {
+    if (!_isMysteryPackage && _selectedImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى إضافة صورة للعرض')),
       );
@@ -159,13 +172,22 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
           quantityStr,
           originalStr,
           discountStr,
-          pickup,
           pickupStartTime,
           pickupEndTime,
         ].any((s) => s.isEmpty) ||
         (!_isMysteryPackage && desc.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى تعبئة جميع الحقول المطلوبة')),
+      );
+      return;
+    }
+
+    if (pickup.isEmpty && _latitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+        ),
       );
       return;
     }
@@ -215,14 +237,41 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ── رفع الصورة — أول await في الدالة ──
-      final imageUrl = await _uploadImage() ?? '';
-      if (!mounted) return;
-      if (imageUrl.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('لم يتم رفع الصورة، جرب مرة ثانية')),
+      // ── حل موقع الاستلام إذا كان فارغاً مع وجود إحداثيات ──
+      var pickupLocation = pickup;
+      if (pickupLocation.isEmpty && _latitude != null) {
+        final address = await LocationService().getAddressFromCoordinates(
+          _latitude!, _longitude!,
         );
-        return;
+        if (!mounted) return;
+        if (address.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+            ),
+          );
+          return;
+        }
+        pickupLocation = address;
+        setState(() => _pickupController.text = address);
+      }
+
+      // ── رفع الصورة أو استخدام الرابط الافتراضي للباقة الغامضة ──
+      final String imageUrl;
+      if (_selectedImage != null) {
+        final uploaded = await _uploadImage();
+        if (!mounted) return;
+        if (uploaded == null || uploaded.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('لم يتم رفع الصورة، جرب مرة ثانية')),
+          );
+          return;
+        }
+        imageUrl = uploaded;
+      } else {
+        // باقة غامضة بدون صورة — رابط افتراضي
+        imageUrl = AppConstants.defaultMysteryPackageImageUrl;
       }
 
       final docRef = FirebaseFirestore.instance.collection('offers').doc();
@@ -244,13 +293,14 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         'currency': 'ILS',
         'isFree': discountPrice == 0,
         'status': 'available',
-        'pickupLocation': pickup,
+        'pickupLocation': pickupLocation,
         'pickupStartTime': pickupStartTime,
         'pickupEndTime': pickupEndTime,
         'pickupTime': '$pickupStartTime - $pickupEndTime',
         'latitude': _latitude,
         'longitude': _longitude,
         'hasLocation': _latitude != null && _longitude != null,
+        'locationSource': _latitude != null ? 'gps' : 'manual',
         'allergyInfo': allergyInfo,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -275,8 +325,8 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         _originalPriceController.clear();
         _discountPriceController.clear();
         _pickupController.clear();
-        _allergyController.clear();
         _pickupStartTimeController.clear();
+        _selectedAllergens = {};
         _pickupEndTimeController.clear();
         _isMysteryPackage = false;
         _latitude = null;
@@ -655,19 +705,9 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   const SizedBox(height: 14),
 
                   // 11 ── معلومات الحساسية الغذائية ──
-                  TextField(
-                    controller: _allergyController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'معلومات الحساسية الغذائية',
-                      hintText:
-                          'مثال: يحتوي على مكسرات، لا يحتوي على جلوتين...',
-                      prefixIcon: Padding(
-                        padding: EdgeInsets.only(bottom: 32),
-                        child: Icon(Icons.warning_amber_outlined),
-                      ),
-                      alignLabelWithHint: true,
-                    ),
+                  AllergyCheckboxPanel(
+                    selected: _selectedAllergens,
+                    onChanged: (v) => setState(() => _selectedAllergens = v),
                   ),
                   const SizedBox(height: 20),
 

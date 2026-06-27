@@ -4,6 +4,8 @@ import 'package:zad_app/models/user.dart';
 import 'package:zad_app/screens/common/notifications_screen.dart';
 import 'package:zad_app/theme/app_colors.dart';
 import '../../services/admin_service.dart';
+import 'admin_offers_screen.dart';
+import 'admin_verification_panel.dart';
 import 'admin_widgets.dart';
 
 class AdminHomeScreen extends StatelessWidget {
@@ -30,7 +32,7 @@ class AdminHomeScreen extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.12),
+                color: AppColors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.eco_rounded,
@@ -208,6 +210,30 @@ class AdminHomeScreen extends StatelessWidget {
             subtitle: 'مراقبة نشاط النظام وسجل الإجراءات',
             color: const Color(0xFF7C3AED),
             onTap: () => onNavigate(3),
+          ),
+          ActionTile(
+            icon: Icons.local_offer_rounded,
+            title: 'إدارة العروض',
+            subtitle: 'عرض وحذف عروض المطاعم والجمعيات والأفراد',
+            color: AppColors.secondary,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AdminOffersScreen(),
+              ),
+            ),
+          ),
+          ActionTile(
+            icon: Icons.verified_user_rounded,
+            title: 'مراجعة التحقق',
+            subtitle: 'الموافقة على حسابات المطاعم والجمعيات وهويات المستخدمين',
+            color: AppColors.primary,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AdminVerificationPanel(),
+              ),
+            ),
           ),
         ],
       ),

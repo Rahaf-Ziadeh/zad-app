@@ -8,6 +8,16 @@ class ReservationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // ── ZAD-YYYYMMDD-XXXXXX from the first 6 chars of the Firestore doc ID ──
+  static String _generateCode(String docId) {
+    final now = DateTime.now();
+    final date = '${now.year}'
+        '${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}';
+    final suffix = docId.substring(0, 6).toUpperCase();
+    return 'ZAD-$date-$suffix';
+  }
+
   Future<String> reserveOffer({
     required String offerId,
     required Map<String, dynamic> offerData,
@@ -24,6 +34,34 @@ class ReservationService {
         ? (userDoc.data()?['name'] ?? userDoc.data()?['fullName'] ?? 'مستخدم')
         : 'مستخدم';
 
+    // ── جلب الاسم الحقيقي للمزوّد ──
+    String providerName = '';
+    final providerUid = (offerData['providerUserId'] as String? ?? '').trim();
+    if (providerUid.isNotEmpty) {
+      try {
+        final providerDoc =
+            await _firestore.collection('users').doc(providerUid).get();
+        if (providerDoc.exists) {
+          final pd = providerDoc.data()!;
+          for (final key in [
+            'name',
+            'fullName',
+            'restaurantName',
+            'charityName',
+          ]) {
+            final v = (pd[key] as String? ?? '').trim();
+            if (v.isNotEmpty) {
+              providerName = v;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+      if (providerName.isEmpty) {
+        providerName = (offerData['providerRole'] as String? ?? '').trim();
+      }
+    }
+
     // ── التحقق من عدم وجود حجز مسبق لنفس العرض ──
     final existing = await _firestore
         .collection('reservations')
@@ -38,6 +76,7 @@ class ReservationService {
 
     final offerRef = _firestore.collection('offers').doc(offerId);
     final reservationRef = _firestore.collection('reservations').doc();
+    final reservationCode = _generateCode(reservationRef.id);
 
     await _firestore.runTransaction((transaction) async {
       final offerSnapshot = await transaction.get(offerRef);
@@ -70,6 +109,7 @@ class ReservationService {
       // إنشاء الحجز
       transaction.set(reservationRef, {
         'reservationId': reservationRef.id,
+        'reservationCode': reservationCode,
         'offerId': offerId,
         'offerTitle': data['title'] ?? '',
         'offerType': data['offerType'] ?? '',
@@ -78,6 +118,7 @@ class ReservationService {
         'userName': userName,
         'providerUserId': data['providerUserId'] ?? '',
         'providerRole': data['providerRole'] ?? '',
+        'providerName': providerName,
         'pickupLocation': data['pickupLocation'] ?? '',
         'pickupTime': data['pickupTime'] ?? '',
         'price': data['discountPrice'] ?? data['price'] ?? 0,
@@ -138,6 +179,13 @@ class ReservationService {
       final resData = resSnap.data() as Map<String, dynamic>;
       if (resData['status'] != 'reserved') {
         throw Exception('لا يمكن إلغاء هذا الطلب');
+      }
+
+      // ── قيد الإلغاء: 10 دقائق فقط من وقت الحجز ──
+      final createdAt = resData['createdAt'] as Timestamp?;
+      if (createdAt == null ||
+          DateTime.now().difference(createdAt.toDate()).inMinutes > 10) {
+        throw Exception('لا يمكن إلغاء الحجز بعد مرور 10 دقائق.');
       }
 
       final reservedQty = (resData['quantity'] as num?)?.toInt() ?? 1;

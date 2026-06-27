@@ -83,7 +83,7 @@ class _AvailableSurplusTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.inventory_2_outlined,
-                    size: 64, color: AppColors.primary.withOpacity(0.3)),
+                    size: 64, color: AppColors.primary.withValues(alpha:0.3)),
                 const SizedBox(height: 14),
                 const Text('لا يوجد فائض جاهز للنشر',
                     style: TextStyle(color: AppColors.textLight, fontSize: 14)),
@@ -145,7 +145,7 @@ class _PublishedSurplusTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.share_outlined,
-                    size: 64, color: AppColors.primary.withOpacity(0.3)),
+                    size: 64, color: AppColors.primary.withValues(alpha:0.3)),
                 const SizedBox(height: 14),
                 const Text('لم تنشري أي عرض بعد',
                     style: TextStyle(color: AppColors.textLight, fontSize: 14)),
@@ -196,7 +196,7 @@ class _SurplusCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: AppColors.success.withOpacity(0.3)),
+        side: BorderSide(color: AppColors.success.withValues(alpha:0.3)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -210,7 +210,7 @@ class _SurplusCard extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: AppColors.success.withOpacity(0.12),
+                    color: AppColors.success.withValues(alpha:0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.volunteer_activism_rounded,
@@ -236,7 +236,7 @@ class _SurplusCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppColors.success.withOpacity(0.12),
+                    color: AppColors.success.withValues(alpha:0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text('جاهز للنشر',
@@ -369,7 +369,7 @@ class _PublishedOfferCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: color.withOpacity(0.3)),
+        side: BorderSide(color: color.withValues(alpha:0.3)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -382,7 +382,7 @@ class _PublishedOfferCard extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.10),
+                    color: AppColors.primary.withValues(alpha:0.10),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.fastfood_rounded,
@@ -406,7 +406,7 @@ class _PublishedOfferCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
+                    color: color.withValues(alpha:0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(_statusLabel(status),
@@ -543,22 +543,42 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
 
   Future<void> _fetchLocation() async {
     setState(() => _fetchingLocation = true);
-    final position = await LocationService().getCurrentLocation();
-    if (position != null) {
-      setState(() {
-        _latitude = position.latitude;
-        _longitude = position.longitude;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم تحديد الموقع ✅'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
+    final svc = LocationService();
+    final position = await svc.getCurrentLocation();
+    if (!mounted) return;
+
+    if (position == null) {
+      setState(() => _fetchingLocation = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذّر الحصول على الموقع — تحقق من صلاحيات GPS'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
     }
-    setState(() => _fetchingLocation = false);
+
+    final address = await svc.getAddressFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _latitude = position.latitude;
+      _longitude = position.longitude;
+      _fetchingLocation = false;
+      if (address.isNotEmpty && _locationController.text.trim().isEmpty) {
+        _locationController.text = address;
+      }
+    });
+
+    final msg = address.isNotEmpty
+        ? 'تم تحديد الموقع ✅'
+        : 'تم تحديد الموقع ✅ — يرجى كتابة اسم المنطقة يدوياً';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.success),
+    );
   }
 
   Future<void> _publish() async {
@@ -570,9 +590,41 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
       return;
     }
 
+    // ── تحقق من موقع الاستلام ──
+    final locationText = _locationController.text.trim();
+    if (locationText.isEmpty && _latitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
+      // ── حل موقع الاستلام إذا كان فارغاً مع وجود إحداثيات ──
+      var resolvedLocation = locationText;
+      if (resolvedLocation.isEmpty && _latitude != null) {
+        final address = await LocationService().getAddressFromCoordinates(
+          _latitude!, _longitude!,
+        );
+        if (!mounted) return;
+        if (address.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+            ),
+          );
+          return;
+        }
+        resolvedLocation = address;
+        setState(() => _locationController.text = address);
+      }
+
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final userDoc =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -599,10 +651,11 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
         'currency': 'ILS',
         'isFree': _isFree,
         'status': 'available',
-        'pickupLocation': _locationController.text.trim(),
+        'pickupLocation': resolvedLocation,
         'latitude': _latitude,
         'longitude': _longitude,
         'hasLocation': _latitude != null,
+        'locationSource': _latitude != null ? 'gps' : 'manual',
         'expiryDate': _expiryDate,
         'sourceDonationId': widget.prefillDonationId ?? '',
         'isCash': false,
@@ -721,9 +774,9 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.success.withOpacity(0.07),
+                  color: AppColors.success.withValues(alpha:0.07),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.success.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.success.withValues(alpha:0.3)),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -857,9 +910,6 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
                     // مكان الاستلام
                     TextFormField(
                       controller: _locationController,
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'يرجى إدخال مكان الاستلام'
-                          : null,
                       decoration: const InputDecoration(
                         labelText: 'مكان الاستلام *',
                         prefixIcon: Icon(Icons.location_on_outlined),
@@ -875,13 +925,13 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
                             horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
                           color: _latitude != null
-                              ? AppColors.success.withOpacity(0.08)
-                              : AppColors.primary.withOpacity(0.07),
+                              ? AppColors.success.withValues(alpha:0.08)
+                              : AppColors.primary.withValues(alpha:0.07),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: _latitude != null
-                                ? AppColors.success.withOpacity(0.4)
-                                : AppColors.primary.withOpacity(0.3),
+                                ? AppColors.success.withValues(alpha:0.4)
+                                : AppColors.primary.withValues(alpha:0.3),
                           ),
                         ),
                         child: Row(
@@ -998,7 +1048,7 @@ class _TypeButton extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.10) : AppColors.card,
+          color: selected ? color.withValues(alpha:0.10) : AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? color : AppColors.border,

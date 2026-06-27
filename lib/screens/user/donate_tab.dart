@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import 'identity_verification_screen.dart';
 
 class DonateTab extends StatefulWidget {
   const DonateTab({super.key});
@@ -48,10 +49,13 @@ class _DonateTabState extends State<DonateTab> {
     if (doc.exists) {
       final data = doc.data()!;
       final nationalId = data['nationalId'] ?? '';
+      // الأولوية لحقول spec الجديدة، ثم القيمة القديمة
+      final idVerified =
+          (data['identityVerificationStatus'] as String? ?? '') == 'approved';
       setState(() {
-        _userNationalId = nationalId;
+        _userNationalId = data['identityNumber'] as String? ?? nationalId.toString();
         _userName = data['name'] ?? data['fullName'] ?? '';
-        _hasNationalId = nationalId.toString().isNotEmpty;
+        _hasNationalId = idVerified || nationalId.toString().isNotEmpty;
         _loadingUser = false;
       });
     } else {
@@ -135,10 +139,38 @@ class _DonateTabState extends State<DonateTab> {
       return;
     }
 
+    // ── التحقق من توثيق الهوية قبل قبول التبرع ──
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final userSnap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    if (!mounted) return;
+    final idStatus =
+        (userSnap.data()?['identityVerificationStatus'] as String? ?? '');
+    if (idStatus != 'approved') {
+      if (idStatus == 'pending') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'طلب توثيق هويتك قيد المراجعة، يرجى الانتظار.'),
+          ),
+        );
+        return;
+      }
+      // لم يتم التوثيق — فتح شاشة التوثيق
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => const IdentityVerificationScreen()),
+      );
+      return; // المستخدم يعيد المحاولة بعد إرسال الطلب
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      final userId = FirebaseAuth.instance.currentUser!.uid;
+      final userId = uid;
 
       await FirebaseFirestore.instance.collection('donations').add({
         'userId': userId,
@@ -253,9 +285,9 @@ class _DonateTabState extends State<DonateTab> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppColors.success.withOpacity(0.07),
+            color: AppColors.success.withValues(alpha:0.07),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.success.withOpacity(0.3)),
+            border: Border.all(color: AppColors.success.withValues(alpha:0.3)),
           ),
           child: Row(
             children: [
@@ -293,12 +325,12 @@ class _DonateTabState extends State<DonateTab> {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: _selectedCharityId != null
-                  ? const Color(0xFFE11D48).withOpacity(0.06)
+                  ? const Color(0xFFE11D48).withValues(alpha:0.06)
                   : AppColors.card,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: _selectedCharityId != null
-                    ? const Color(0xFFE11D48).withOpacity(0.4)
+                    ? const Color(0xFFE11D48).withValues(alpha:0.4)
                     : AppColors.border,
                 width: _selectedCharityId != null ? 1.5 : 1,
               ),
@@ -310,8 +342,8 @@ class _DonateTabState extends State<DonateTab> {
                   height: 42,
                   decoration: BoxDecoration(
                     color: _selectedCharityId != null
-                        ? const Color(0xFFE11D48).withOpacity(0.12)
-                        : AppColors.primary.withOpacity(0.08),
+                        ? const Color(0xFFE11D48).withValues(alpha:0.12)
+                        : AppColors.primary.withValues(alpha:0.08),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -410,7 +442,7 @@ class _DonateTabState extends State<DonateTab> {
                         decoration: BoxDecoration(
                           color: selected
                               ? AppColors.primary
-                              : AppColors.primary.withOpacity(0.07),
+                              : AppColors.primary.withValues(alpha:0.07),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(cat,
@@ -502,7 +534,7 @@ class _DonateTabState extends State<DonateTab> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: _acceptedResponsibility
-                          ? AppColors.danger.withOpacity(0.06)
+                          ? AppColors.danger.withValues(alpha:0.06)
                           : AppColors.background,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
@@ -593,7 +625,7 @@ class _DonateTabState extends State<DonateTab> {
               return Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.05),
+                  color: AppColors.primary.withValues(alpha:0.05),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Center(
@@ -621,7 +653,7 @@ class _DonateTabState extends State<DonateTab> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE11D48).withOpacity(0.10),
+                        color: const Color(0xFFE11D48).withValues(alpha:0.10),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.favorite_rounded,
@@ -739,7 +771,7 @@ class _CharityPickerSheet extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.07),
+                    color: AppColors.primary.withValues(alpha:0.07),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Row(
@@ -787,7 +819,7 @@ class _CharityPickerSheet extends StatelessWidget {
                           children: [
                             Icon(Icons.volunteer_activism_outlined,
                                 size: 48,
-                                color: AppColors.primary.withOpacity(0.3)),
+                                color: AppColors.primary.withValues(alpha:0.3)),
                             const SizedBox(height: 12),
                             const Text(
                               'لا توجد جمعيات مسجّلة حالياً',
@@ -819,7 +851,7 @@ class _CharityPickerSheet extends StatelessWidget {
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? const Color(0xFFE11D48).withOpacity(0.07)
+                                  ? const Color(0xFFE11D48).withValues(alpha:0.07)
                                   : AppColors.card,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
@@ -838,8 +870,8 @@ class _CharityPickerSheet extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: isSelected
                                         ? const Color(0xFFE11D48)
-                                            .withOpacity(0.12)
-                                        : AppColors.primary.withOpacity(0.08),
+                                            .withValues(alpha:0.12)
+                                        : AppColors.primary.withValues(alpha:0.08),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
@@ -1011,7 +1043,7 @@ class _NoNationalIdViewState extends State<_NoNationalIdView> {
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: AppColors.secondary.withOpacity(0.12),
+                color: AppColors.secondary.withValues(alpha:0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.badge_outlined,
@@ -1045,7 +1077,7 @@ class _NoNationalIdViewState extends State<_NoNationalIdView> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.secondary.withOpacity(0.08),
+                color: AppColors.secondary.withValues(alpha:0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
@@ -1127,7 +1159,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha:0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label,

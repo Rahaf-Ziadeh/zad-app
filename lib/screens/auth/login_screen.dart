@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/user.dart';
@@ -7,7 +9,6 @@ import '../../theme/app_colors.dart';
 import '../admin/admin_dashboard.dart';
 import '../charity/charity_dashboard.dart';
 import '../restaurant/restaurant_dashboard.dart';
-import '../user/user_dashboard.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -27,6 +28,11 @@ class _LoginScreenState extends State<LoginScreen>
   bool _isLoading = false;
   bool _rememberMe = true;
   String? _errorMessage;
+
+  // ── إعادة إرسال التحقق ──
+  bool _resendLoading = false;
+  int _resendCooldown = 0;
+  Timer? _cooldownTimer;
 
   late final AnimationController _animController;
   late final Animation<double> _fadeAnim;
@@ -50,6 +56,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _animController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -146,6 +153,92 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  // ── إعادة إرسال رابط التحقق ──
+  Future<void> _resendVerification() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _errorMessage =
+          'أدخل البريد الإلكتروني وكلمة المرور لإعادة إرسال رابط التحقق');
+      return;
+    }
+
+    setState(() {
+      _resendLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final credential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+      final user = credential.user;
+      if (user == null) throw Exception('تعذر تسجيل الدخول');
+
+      await user.reload();
+
+      if (user.emailVerified) {
+        await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        setState(() =>
+            _errorMessage = 'بريدك الإلكتروني مُحقق بالفعل. أعد تسجيل الدخول.');
+        return;
+      }
+
+      await user.sendEmailVerification();
+      await FirebaseAuth.instance.signOut();
+
+      if (!mounted) return;
+      setState(() => _resendCooldown = 60);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم إرسال رابط التحقق ✅ تحقق من بريدك الإلكتروني'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+
+      _cooldownTimer?.cancel();
+      _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+        setState(() {
+          _resendCooldown--;
+          if (_resendCooldown <= 0) t.cancel();
+        });
+      });
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = _resendAuthError(e.code));
+    } catch (e) {
+      if (!mounted) return;
+      setState(
+          () => _errorMessage = e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _resendLoading = false);
+    }
+  }
+
+  String _resendAuthError(String code) {
+    switch (code) {
+      case 'invalid-email':
+        return 'صيغة البريد الإلكتروني غير صحيحة';
+      case 'user-not-found':
+        return 'لا يوجد حساب بهذا البريد الإلكتروني';
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'كلمة المرور غير صحيحة';
+      case 'too-many-requests':
+        return 'محاولات كثيرة، انتظر قليلاً وأعد المحاولة';
+      case 'network-request-failed':
+        return 'تحقق من اتصال الإنترنت';
+      default:
+        return 'حدث خطأ، يرجى المحاولة مرة أخرى';
+    }
+  }
+
   // ── الدخول كزائر ──
   Future<void> _continueAsGuest() async {
     setState(() => _isLoading = true);
@@ -210,7 +303,7 @@ class _LoginScreenState extends State<LoginScreen>
                         width: 80,
                         height: 80,
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.10),
+                          color: AppColors.primary.withValues(alpha: 0.10),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.eco_rounded,
@@ -324,7 +417,37 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                     ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
+
+                    // ── إعادة إرسال رابط التحقق ──
+                    _resendCooldown > 0
+                        ? Text(
+                            'إعادة الإرسال بعد $_resendCooldown ثانية',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textLight,
+                            ),
+                            textAlign: TextAlign.center,
+                          )
+                        : TextButton.icon(
+                            onPressed:
+                                _resendLoading ? null : _resendVerification,
+                            icon: _resendLoading
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.mark_email_unread_outlined,
+                                    size: 16),
+                            label: const Text(
+                              'إعادة إرسال رابط التحقق',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+
+                    const SizedBox(height: 16),
 
                     // ── فاصل ──
                     const Row(

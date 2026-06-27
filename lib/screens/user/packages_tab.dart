@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../services/reservation_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_constants.dart';
 import '../../widgets/offer_widgets.dart';
 import 'offer_details_screen.dart';
 import 'qr_code_screen.dart';
@@ -79,7 +80,12 @@ class _PackageCard extends StatelessWidget {
         data['isMysteryPackage'] == true || data['packageType'] == 'mystery';
 
     final packageLabel = isMysteryPackage ? 'باقة غامضة' : 'باقة واضحة';
-    final imageUrl = data['imageUrl'] ?? '';
+    final rawImageUrl = (data['imageUrl'] as String? ?? '').trim();
+    final imageUrl = rawImageUrl.isNotEmpty
+        ? rawImageUrl
+        : (isMysteryPackage
+            ? AppConstants.defaultMysteryPackageImageUrl
+            : '');
     final currency = data['currency'] ?? 'ILS';
     final pickupLocation = data['pickupLocation'] ?? 'غير محدد';
     final remainingQuantity = data['remainingQuantity'] ?? 0;
