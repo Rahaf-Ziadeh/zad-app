@@ -2515,3 +2515,71 @@ orgDocUrl = await CloudinaryService().uploadBytes(
 flutter analyze lib/screens/auth/signup_screen.dart
 No issues found!
 ```
+
+---
+
+## Interactive Document Upload — Business License Fix (2026-06-27)
+
+### Problem
+
+The Business License (and Charity Registration Document) `_FilePickButton` widget did not respond to taps on some Android devices.
+
+### Root Cause
+
+`_FilePickButton` used `GestureDetector(onTap: ...)`. When a `GestureDetector` is nested inside a `SingleChildScrollView`, Flutter must arbitrate between competing gesture recognizers: the scroll recognizer and the tap recognizer. On some Android builds this arbitration resolves in favour of the scroll, causing the tap callback to never fire. Additionally, `GestureDetector` provides no visual ripple, so even when the tap was registered but `FilePicker` returned null silently, the user had no feedback.
+
+The Restaurant Logo picker was unaffected because it opens a `showModalBottomSheet` immediately — the modal system uses a separate overlay that bypasses the scroll gesture competition.
+
+### Fix Applied
+
+**`_FilePickButton.build()` — `GestureDetector` → `Ink` + `InkWell`**
+
+`Ink` + `InkWell` is the correct Material widget for tap registration inside scrollable widget trees:
+- `Ink` paints the background decoration so the ripple overlay renders correctly on top.
+- `InkWell` registers taps at the Material layer, winning the gesture competition reliably.
+- Ripple feedback confirms to the user that the tap was received.
+
+```dart
+return Ink(
+  decoration: BoxDecoration(
+    color: ..., borderRadius: BorderRadius.circular(12), border: ...,
+  ),
+  child: InkWell(
+    onTap: onPick,
+    borderRadius: BorderRadius.circular(12),
+    child: Column(...),
+  ),
+);
+```
+
+**`_pickOrgDoc()` — added try/catch with SnackBar**
+
+Previously any `FilePicker` failure (permission denial, plugin error, bytes == null) was silently discarded. The method now:
+1. Wraps the picker call in `try/catch`
+2. Checks `if (!mounted) return;` after the `await`
+3. Shows "تعذر قراءة الملف" SnackBar if `f.bytes` is null or empty
+4. Shows a generic Arabic error SnackBar from the catch block
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `lib/screens/auth/signup_screen.dart` | `_FilePickButton`: replaced `GestureDetector` with `Ink`+`InkWell`; `_pickOrgDoc()`: added try/catch with Arabic SnackBar feedback |
+
+### Validation Steps
+
+| Test | Expected |
+|------|----------|
+| Tap Business License card | Ripple visible; system file picker opens |
+| Select a PDF file | `✔ filename.pdf` displayed in the card |
+| Select a JPG file | `✔ filename.jpg` displayed; no image preview (PDF/image both shown as text) |
+| Cancel file picker without selecting | Card unchanged; no error shown |
+| FilePicker fails internally | SnackBar: "خطأ في اختيار الملف: ..." |
+| Submit with no license selected | Blocked: "يرجى رفع الرخصة التجارية" |
+| Submit with license selected | File uploaded to Cloudinary; `businessLicenseUrl` stored |
+| Restaurant Logo unchanged | Still uses ImagePicker + camera/gallery sheet |
+
+```
+flutter analyze lib/screens/auth/signup_screen.dart
+No issues found!
+```

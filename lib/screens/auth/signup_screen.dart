@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../services/auth_service.dart';
@@ -201,30 +200,66 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _pickOrgDoc() async {
+    // نستخدم ImagePicker (مُهيَّأ مسبقاً) بدلاً من FilePicker
+    // لأن FilePicker يحتاج إعداداً إضافياً في AndroidManifest
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('اختر مصدر المستند',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: AppColors.textDark)),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded,
+                  color: AppColors.primary),
+              title: const Text('التقاط صورة للمستند'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded,
+                  color: AppColors.primary),
+              title: const Text('اختيار من المعرض'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    if (!mounted) return;
+
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
-        withData: true,
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 80,
       );
       if (!mounted) return;
-      if (result == null || result.files.isEmpty) return; // المستخدم ألغى الاختيار
-      final f = result.files.first;
-      if (f.bytes == null || f.bytes!.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذر قراءة الملف، يرجى المحاولة مجدداً'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-        return;
-      }
-      setState(() => _orgDocFile = _PickedDoc(bytes: f.bytes!, name: f.name));
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      setState(
+          () => _orgDocFile = _PickedDoc(bytes: bytes, name: picked.name));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('خطأ في اختيار الملف: $e'),
+          content: Text('خطأ في اختيار المستند: $e'),
           backgroundColor: AppColors.danger,
         ),
       );
@@ -660,7 +695,6 @@ class _SignupScreenState extends State<SignupScreen> {
                           icon: Icons.image_rounded,
                           onPick: _pickLogo,
                           onClear: () => setState(() => _logoFile = null),
-                          acceptsAll: false,
                         ),
                         const SizedBox(height: 10),
                         _FilePickButton(
@@ -669,7 +703,6 @@ class _SignupScreenState extends State<SignupScreen> {
                           icon: Icons.folder_rounded,
                           onPick: _pickOrgDoc,
                           onClear: () => setState(() => _orgDocFile = null),
-                          acceptsAll: true,
                         ),
                         const SizedBox(height: 6),
                         const Divider(),
@@ -709,7 +742,6 @@ class _SignupScreenState extends State<SignupScreen> {
                           icon: Icons.image_rounded,
                           onPick: _pickLogo,
                           onClear: () => setState(() => _logoFile = null),
-                          acceptsAll: false,
                         ),
                         const SizedBox(height: 10),
                         _FilePickButton(
@@ -718,7 +750,6 @@ class _SignupScreenState extends State<SignupScreen> {
                           icon: Icons.folder_rounded,
                           onPick: _pickOrgDoc,
                           onClear: () => setState(() => _orgDocFile = null),
-                          acceptsAll: true,
                         ),
                         const SizedBox(height: 6),
                         const Divider(),
@@ -965,15 +996,12 @@ class _FilePickButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPick;
   final VoidCallback onClear;
-  final bool acceptsAll; // true = صور + PDF، false = صور فقط
-
   const _FilePickButton({
     required this.label,
     required this.file,
     required this.icon,
     required this.onPick,
     required this.onClear,
-    required this.acceptsAll,
   });
 
   @override
@@ -1035,9 +1063,7 @@ class _FilePickButton extends StatelessWidget {
                           )
                         else
                           Text(
-                            acceptsAll
-                                ? 'jpg  •  png  •  pdf'
-                                : 'jpg  •  png — الكاميرا أو المعرض',
+                            'jpg  •  png — الكاميرا أو المعرض',
                             style: const TextStyle(
                                 fontSize: 11, color: AppColors.textLight),
                           ),

@@ -123,9 +123,27 @@ class UserOrdersScreen extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+        SnackBar(content: Text(_cancelErrorMessage(e))),
       );
     }
+  }
+
+  // يستخرج رسالة الخطأ العربية المناسبة من أي استثناء
+  // (بما فيها الاستثناءات المغلّفة من Firestore transaction على Android)
+  static String _cancelErrorMessage(Object e) {
+    final raw = e.toString();
+    // ابحث عن النصوص العربية المعروفة أينما كانت في الاستثناء المغلّف
+    if (raw.contains('لا يمكن إلغاء الحجز بعد مرور 10 دقائق')) {
+      return 'لا يمكن إلغاء الحجز بعد مرور 10 دقائق.';
+    }
+    if (raw.contains('لا يمكن إلغاء هذا الطلب')) {
+      return 'لا يمكن إلغاء هذا الطلب.';
+    }
+    if (raw.contains('الحجز غير موجود')) {
+      return 'الحجز غير موجود.';
+    }
+    // fallback: نظّف البادئة الافتراضية
+    return raw.replaceAll('Exception: ', '').trim();
   }
 
   void _confirmCancel({
