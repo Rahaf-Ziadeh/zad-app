@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/location_service.dart';
@@ -15,13 +14,27 @@ class CharityBrowseScreen extends StatefulWidget {
 }
 
 class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
-  String _filterType = 'all'; // all | free | paid
-  bool _locationLoading = true;
-  double? _userLat;
-  double? _userLng;
+  // ── فلاتر ──
+  String _priceFilter = 'all';        // all | free | paid
+  String _providerTypeFilter = 'all'; // all | restaurant | charity | individual
+  String _categoryFilter = 'all';
+  String _sortOrder = 'newest';       // newest | nearest | price_asc
   double _radiusKm = 10.0;
 
-  final _radiusOptions = [2.0, 5.0, 10.0, 20.0, 50.0];
+  // ── موقع ──
+  double? _userLat;
+  double? _userLng;
+  bool _locationLoading = true;
+
+  static const _radiusOptions = [2.0, 5.0, 10.0, 20.0, 50.0];
+
+  static const _knownCats = {
+    'وجبات',
+    'مخبوزات',
+    'خضار وفواكه',
+    'معلبات',
+    'حلويات',
+  };
 
   @override
   void initState() {
@@ -39,8 +52,10 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
     });
   }
 
+  bool get _hasLocation => _userLat != null && _userLng != null;
+
   double? _calcDistance(Map<String, dynamic> data) {
-    if (_userLat == null || _userLng == null) return null;
+    if (!_hasLocation) return null;
     final lat = data['latitude'];
     final lng = data['longitude'];
     if (lat == null || lng == null) return null;
@@ -52,15 +67,305 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
     );
   }
 
-  List<QueryDocumentSnapshot> _filterAndSort(List<QueryDocumentSnapshot> docs) {
-    var filtered = docs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      if (_filterType == 'free') return data['isFree'] == true;
-      if (_filterType == 'paid') return data['isFree'] != true;
-      return true;
-    }).toList();
+  // ── عدد الفلاتر النشطة ──
+  int get _activeFilterCount {
+    int c = 0;
+    if (_priceFilter != 'all') c++;
+    if (_providerTypeFilter != 'all') c++;
+    if (_categoryFilter != 'all') c++;
+    if (_sortOrder != 'newest') c++;
+    return c;
+  }
 
-    if (_userLat != null) {
+  List<(String, VoidCallback)> get _activeChips {
+    final chips = <(String, VoidCallback)>[];
+
+    const priceLabels = {'free': 'مجاني', 'paid': 'مخفّض'};
+    if (_priceFilter != 'all') {
+      chips.add((priceLabels[_priceFilter]!,
+          () => setState(() => _priceFilter = 'all')));
+    }
+
+    const provLabels = {
+      'restaurant': 'مطعم',
+      'charity': 'جمعية',
+      'individual': 'مستخدم',
+    };
+    if (_providerTypeFilter != 'all') {
+      chips.add((provLabels[_providerTypeFilter]!,
+          () => setState(() => _providerTypeFilter = 'all')));
+    }
+
+    if (_categoryFilter != 'all') {
+      chips.add((_categoryFilter,
+          () => setState(() => _categoryFilter = 'all')));
+    }
+
+    if (_sortOrder == 'nearest') {
+      chips.add(('الأقرب (${_radiusKm.round()} كم)',
+          () => setState(() => _sortOrder = 'newest')));
+    } else if (_sortOrder == 'price_asc') {
+      chips.add(
+          ('الأقل سعراً', () => setState(() => _sortOrder = 'newest')));
+    }
+
+    return chips;
+  }
+
+  void _openFilterSheet() {
+    var tempPrice = _priceFilter;
+    var tempProvider = _providerTypeFilter;
+    var tempCategory = _categoryFilter;
+    var tempSort = _sortOrder;
+    var tempRadius = _radiusKm;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, ss) => Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.88,
+          ),
+          decoration: const BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // عنوان + مسح
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
+                child: Row(
+                  children: [
+                    const Text('خيارات الفلترة',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textDark)),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _priceFilter = 'all';
+                          _providerTypeFilter = 'all';
+                          _categoryFilter = 'all';
+                          _sortOrder = 'newest';
+                          _radiusKm = 10.0;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('مسح الفلاتر',
+                          style: TextStyle(color: AppColors.secondary)),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // نوع المزود
+                      _SheetSection(title: 'نوع المزود', chips: [
+                        _SheetChip(
+                            label: 'الكل',
+                            selected: tempProvider == 'all',
+                            onTap: () => ss(() => tempProvider = 'all')),
+                        _SheetChip(
+                            label: 'مطعم',
+                            selected: tempProvider == 'restaurant',
+                            onTap: () =>
+                                ss(() => tempProvider = 'restaurant')),
+                        _SheetChip(
+                            label: 'جمعية',
+                            selected: tempProvider == 'charity',
+                            onTap: () => ss(() => tempProvider = 'charity')),
+                        _SheetChip(
+                            label: 'مستخدم',
+                            selected: tempProvider == 'individual',
+                            onTap: () =>
+                                ss(() => tempProvider = 'individual')),
+                      ]),
+
+                      // السعر
+                      _SheetSection(title: 'السعر', chips: [
+                        _SheetChip(
+                            label: 'الكل',
+                            selected: tempPrice == 'all',
+                            onTap: () => ss(() => tempPrice = 'all')),
+                        _SheetChip(
+                            label: 'مجاني',
+                            selected: tempPrice == 'free',
+                            onTap: () => ss(() => tempPrice = 'free')),
+                        _SheetChip(
+                            label: 'مخفّض',
+                            selected: tempPrice == 'paid',
+                            onTap: () => ss(() => tempPrice = 'paid')),
+                      ]),
+
+                      // الفئة
+                      _SheetSection(title: 'الفئة', chips: [
+                        _SheetChip(
+                            label: 'الكل',
+                            selected: tempCategory == 'all',
+                            onTap: () => ss(() => tempCategory = 'all')),
+                        _SheetChip(
+                            label: 'وجبات',
+                            selected: tempCategory == 'وجبات',
+                            onTap: () => ss(() => tempCategory = 'وجبات')),
+                        _SheetChip(
+                            label: 'مخبوزات',
+                            selected: tempCategory == 'مخبوزات',
+                            onTap: () =>
+                                ss(() => tempCategory = 'مخبوزات')),
+                        _SheetChip(
+                            label: 'خضار وفواكه',
+                            selected: tempCategory == 'خضار وفواكه',
+                            onTap: () =>
+                                ss(() => tempCategory = 'خضار وفواكه')),
+                        _SheetChip(
+                            label: 'حلويات',
+                            selected: tempCategory == 'حلويات',
+                            onTap: () => ss(() => tempCategory = 'حلويات')),
+                        _SheetChip(
+                            label: 'أخرى',
+                            selected: tempCategory == 'أخرى',
+                            onTap: () => ss(() => tempCategory = 'أخرى')),
+                      ]),
+
+                      // الترتيب
+                      _SheetSection(title: 'الترتيب', chips: [
+                        _SheetChip(
+                            label: 'الأحدث',
+                            selected: tempSort == 'newest',
+                            onTap: () => ss(() => tempSort = 'newest')),
+                        _SheetChip(
+                          label: 'الأقرب',
+                          selected: tempSort == 'nearest',
+                          disabled: !_hasLocation,
+                          subtitle: !_hasLocation
+                              ? 'الموقع غير متاح حالياً'
+                              : null,
+                          onTap: () => ss(() => tempSort = 'nearest'),
+                        ),
+                        _SheetChip(
+                            label: 'الأقل سعراً',
+                            selected: tempSort == 'price_asc',
+                            onTap: () => ss(() => tempSort = 'price_asc')),
+                      ]),
+
+                      // النطاق
+                      if (tempSort == 'nearest' && _hasLocation) ...[
+                        const Text('النطاق',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textDark)),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _radiusOptions
+                              .map((r) => _SheetChip(
+                                    label: '${r.round()} كم',
+                                    selected: tempRadius == r,
+                                    onTap: () => ss(() => tempRadius = r),
+                                  ))
+                              .toList(),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _priceFilter = tempPrice;
+                        _providerTypeFilter = tempProvider;
+                        _categoryFilter = tempCategory;
+                        _sortOrder = tempSort;
+                        _radiusKm = tempRadius;
+                      });
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('تطبيق'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<QueryDocumentSnapshot> _filterAndSort(
+      List<QueryDocumentSnapshot> docs) {
+    var filtered = List<QueryDocumentSnapshot>.from(docs);
+
+    if (_priceFilter != 'all') {
+      filtered = filtered.where((doc) {
+        final d = doc.data() as Map<String, dynamic>;
+        return _priceFilter == 'free'
+            ? d['isFree'] == true
+            : d['isFree'] != true;
+      }).toList();
+    }
+
+    if (_providerTypeFilter != 'all') {
+      filtered = filtered.where((doc) {
+        return (doc.data() as Map<String, dynamic>)['providerRole'] ==
+            _providerTypeFilter;
+      }).toList();
+    }
+
+    if (_categoryFilter != 'all') {
+      filtered = filtered.where((doc) {
+        final cat =
+            ((doc.data() as Map<String, dynamic>)['category'] as String? ?? '')
+                .trim();
+        if (_categoryFilter == 'أخرى') {
+          return cat.isEmpty || !_knownCats.contains(cat);
+        }
+        return cat == _categoryFilter;
+      }).toList();
+    }
+
+    if (_sortOrder == 'newest') {
+      filtered.sort((a, b) {
+        final at = (a.data() as Map<String, dynamic>)['createdAt'];
+        final bt = (b.data() as Map<String, dynamic>)['createdAt'];
+        if (at is Timestamp && bt is Timestamp) return bt.compareTo(at);
+        return 0;
+      });
+    } else if (_sortOrder == 'nearest' && _hasLocation) {
       filtered.sort((a, b) {
         final da = _calcDistance(a.data() as Map<String, dynamic>);
         final db = _calcDistance(b.data() as Map<String, dynamic>);
@@ -69,11 +374,20 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
         if (db == null) return -1;
         return da.compareTo(db);
       });
-
       filtered = filtered.where((doc) {
-        final d = _calcDistance(doc.data() as Map<String, dynamic>);
-        return d == null || d <= _radiusKm;
+        final dist = _calcDistance(doc.data() as Map<String, dynamic>);
+        return dist == null || dist <= _radiusKm;
       }).toList();
+    } else if (_sortOrder == 'price_asc') {
+      filtered.sort((a, b) {
+        final pa = ((a.data() as Map<String, dynamic>)['discountPrice'] ??
+            (a.data() as Map<String, dynamic>)['price'] ??
+            0) as num;
+        final pb = ((b.data() as Map<String, dynamic>)['discountPrice'] ??
+            (b.data() as Map<String, dynamic>)['price'] ??
+            0) as num;
+        return pa.compareTo(pb);
+      });
     }
 
     return filtered;
@@ -94,6 +408,8 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final chips = _activeChips;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -103,173 +419,102 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
       ),
       body: Column(
         children: [
-          // ── شريط الفلترة ──
+          // ── شريط الفلاتر ──
           Container(
             color: AppColors.card,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Column(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.filter_list_rounded,
-                        size: 18, color: AppColors.textLight),
-                    const SizedBox(width: 8),
-                    ...[('الكل', 'all'), ('مجاني', 'free'), ('مدفوع', 'paid')]
-                        .map((e) => Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: _FilterChip(
-                                label: e.$1,
-                                selected: _filterType == e.$2,
-                                onTap: () => setState(() => _filterType = e.$2),
-                              ),
-                            )),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: _loadLocation,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _userLat != null
-                              ? AppColors.primary
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: _userLat != null
-                                ? AppColors.primary
-                                : AppColors.border,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.near_me_rounded,
-                                size: 14,
-                                color: _userLat != null
-                                    ? Colors.white
-                                    : AppColors.textLight),
-                            const SizedBox(width: 4),
-                            Text('الأقرب',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: _userLat != null
-                                        ? Colors.white
-                                        : AppColors.textLight)),
-                          ],
-                        ),
+                GestureDetector(
+                  onTap: _openFilterSheet,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _activeFilterCount > 0
+                          ? AppColors.primary
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _activeFilterCount > 0
+                            ? AppColors.primary
+                            : AppColors.border,
                       ),
                     ),
-                  ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.tune_rounded,
+                            size: 16,
+                            color: _activeFilterCount > 0
+                                ? Colors.white
+                                : AppColors.textLight),
+                        const SizedBox(width: 6),
+                        Text('فلترة',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: _activeFilterCount > 0
+                                    ? Colors.white
+                                    : AppColors.textLight)),
+                        if (_activeFilterCount > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 18,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.3),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text('$_activeFilterCount',
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
 
-                // النطاق
-                if (_userLat != null) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(Icons.radar_rounded,
-                          size: 16, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      const Text('النطاق:',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textLight,
-                              fontWeight: FontWeight.w600)),
-                      const SizedBox(width: 8),
-                      ..._radiusOptions.map((r) => Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: GestureDetector(
-                              onTap: () => setState(() => _radiusKm = r),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: _radiusKm == r
-                                      ? AppColors.primary.withOpacity(0.12)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: _radiusKm == r
-                                        ? AppColors.primary
-                                        : AppColors.border,
-                                  ),
-                                ),
-                                child: Text(
-                                  '${r.round()} كم',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _radiusKm == r
-                                        ? AppColors.primary
-                                        : AppColors.textLight,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )),
-                    ],
-                  ),
-                ],
-
-                // حالة الموقع
-                if (_locationLoading) ...[
-                  const SizedBox(height: 8),
-                  const Row(
-                    children: [
-                      SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2)),
-                      SizedBox(width: 8),
-                      Text('جاري تحديد موقعك...',
-                          style: TextStyle(
-                              fontSize: 12, color: AppColors.textLight)),
-                    ],
-                  ),
-                ] else if (_userLat == null) ...[
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: _loadLocation,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondary.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: AppColors.secondary.withOpacity(0.3)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.location_off_rounded,
-                              size: 14, color: AppColors.secondary),
-                          SizedBox(width: 6),
-                          Text('الموقع غير متاح — اضغط للمحاولة',
-                              style: TextStyle(
-                                  fontSize: 11, color: AppColors.secondary)),
-                        ],
+                if (chips.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: chips
+                            .map((c) => Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: _ActiveFilterChip(
+                                      label: c.$1, onClear: c.$2),
+                                ))
+                            .toList(),
                       ),
                     ),
                   ),
-                ] else ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.my_location_rounded,
-                          size: 13, color: AppColors.success),
-                      const SizedBox(width: 5),
-                      Text(
-                        'موقعك محدد — ضمن ${_radiusKm.round()} كم',
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.success),
-                      ),
-                    ],
+                ] else
+                  const Spacer(),
+
+                const SizedBox(width: 8),
+                if (_locationLoading)
+                  const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                else if (_hasLocation)
+                  const Icon(Icons.my_location_rounded,
+                      size: 16, color: AppColors.success)
+                else
+                  GestureDetector(
+                    onTap: _loadLocation,
+                    child: const Icon(Icons.location_off_rounded,
+                        size: 16, color: AppColors.secondary),
                   ),
-                ],
               ],
             ),
           ),
@@ -302,20 +547,22 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                         children: [
                           Icon(Icons.no_food_rounded,
                               size: 60,
-                              color: AppColors.primary.withOpacity(0.3)),
+                              color:
+                                  AppColors.primary.withValues(alpha: 0.3)),
                           const SizedBox(height: 14),
                           Text(
-                            _userLat != null
+                            _sortOrder == 'nearest' && _hasLocation
                                 ? 'لا توجد عروض ضمن ${_radiusKm.round()} كم'
-                                : 'لا توجد عروض متاحة حالياً',
+                                : 'لا توجد عروض تطابق الفلتر الحالي',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                                 color: AppColors.textLight, fontSize: 14),
                           ),
-                          if (_userLat != null) ...[
+                          if (_sortOrder == 'nearest' && _hasLocation) ...[
                             const SizedBox(height: 14),
                             OutlinedButton.icon(
-                              onPressed: () => setState(() => _radiusKm = 50),
+                              onPressed: () =>
+                                  setState(() => _radiusKm = 50),
                               icon: const Icon(Icons.zoom_out_map_rounded,
                                   size: 18),
                               label: const Text('توسيع النطاق'),
@@ -333,11 +580,12 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                   itemBuilder: (context, index) {
                     final doc = sorted[index];
                     final data = doc.data() as Map<String, dynamic>;
-                    final distance = _calcDistance(data);
+                    final distance = _hasLocation ? _calcDistance(data) : null;
                     return _CharityOfferCard(
                       docId: doc.id,
                       data: data,
-                      providerLabel: _providerLabel(data['providerRole'] ?? ''),
+                      providerLabel:
+                          _providerLabel(data['providerRole'] ?? ''),
                       distance: distance,
                     );
                   },
@@ -352,7 +600,7 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
 }
 
 // ─────────────────────────────────────────────
-// بطاقة العرض للجمعية
+// بطاقة العرض
 // ─────────────────────────────────────────────
 class _CharityOfferCard extends StatelessWidget {
   final String docId;
@@ -391,7 +639,6 @@ class _CharityOfferCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── صورة ──
           Stack(
             children: [
               imageUrl.isNotEmpty
@@ -416,7 +663,7 @@ class _CharityOfferCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.45),
+                    color: Colors.black.withValues(alpha: 0.45),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(providerLabel,
@@ -431,10 +678,10 @@ class _CharityOfferCard extends StatelessWidget {
                   bottom: 10,
                   left: 10,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.9),
+                      color: AppColors.primary.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -456,8 +703,6 @@ class _CharityOfferCard extends StatelessWidget {
                 ),
             ],
           ),
-
-          // ── تفاصيل ──
           Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -531,7 +776,6 @@ class _ReserveButtonState extends State<_ReserveButton> {
         offerId: widget.docId,
         offerData: widget.data,
       );
-      final userId = FirebaseAuth.instance.currentUser!.uid;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -576,37 +820,121 @@ class _ReserveButtonState extends State<_ReserveButton> {
 }
 
 // ─────────────────────────────────────────────
-// Filter Chip
+// Bottom-sheet widgets (shared within file)
 // ─────────────────────────────────────────────
-class _FilterChip extends StatelessWidget {
+class _SheetSection extends StatelessWidget {
+  final String title;
+  final List<Widget> chips;
+  const _SheetSection({required this.title, required this.chips});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title,
+            style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textDark)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: chips),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+}
+
+class _SheetChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final bool disabled;
+  final String? subtitle;
 
-  const _FilterChip({
+  const _SheetChip({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.disabled = false,
+    this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final dimColor = AppColors.textLight.withValues(alpha: 0.4);
     return GestureDetector(
-      onTap: onTap,
+      onTap: disabled ? null : onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.transparent,
+          color: selected
+              ? AppColors.primary
+              : (disabled ? AppColors.background : Colors.transparent),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: selected ? AppColors.primary : AppColors.border),
+            color: selected
+                ? AppColors.primary
+                : (disabled
+                    ? AppColors.border.withValues(alpha: 0.5)
+                    : AppColors.border),
+          ),
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppColors.textLight)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? Colors.white
+                        : (disabled ? dimColor : AppColors.textDark))),
+            if (subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(subtitle!,
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: disabled ? dimColor : AppColors.textLight)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveFilterChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onClear;
+  const _ActiveFilterChip({required this.label, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border:
+            Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onClear,
+            child: const Icon(Icons.close_rounded,
+                size: 14, color: AppColors.primary),
+          ),
+        ],
       ),
     );
   }

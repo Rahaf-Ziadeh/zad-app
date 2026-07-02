@@ -6,6 +6,7 @@ import '../../services/location_service.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/offer_widgets.dart';
+import '../common/location_picker_screen.dart';
 
 // ─────────────────────────────────────────────
 // شاشة إعادة نشر الفائض — FR-36
@@ -500,10 +501,10 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
 
   bool _isFree = true;
   bool _isLoading = false;
-  bool _fetchingLocation = false;
   DateTime? _expiryDate;
   double? _latitude;
   double? _longitude;
+  String _locationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
 
   @override
   void initState() {
@@ -541,44 +542,27 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
     if (picked != null) setState(() => _expiryDate = picked);
   }
 
-  Future<void> _fetchLocation() async {
-    setState(() => _fetchingLocation = true);
-    final svc = LocationService();
-    final position = await svc.getCurrentLocation();
-    if (!mounted) return;
-
-    if (position == null) {
-      setState(() => _fetchingLocation = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذّر الحصول على الموقع — تحقق من صلاحيات GPS'),
-          backgroundColor: AppColors.danger,
+  // ── فتح شاشة اختيار الموقع على خريطة OpenStreetMap ──
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLatitude: _latitude,
+          initialLongitude: _longitude,
+          initialAddress: _locationController.text.trim().isNotEmpty
+              ? _locationController.text.trim()
+              : null,
         ),
-      );
-      return;
-    }
-
-    final address = await svc.getAddressFromCoordinates(
-      position.latitude,
-      position.longitude,
+      ),
     );
-    if (!mounted) return;
-
+    if (result == null || !mounted) return;
     setState(() {
-      _latitude = position.latitude;
-      _longitude = position.longitude;
-      _fetchingLocation = false;
-      if (address.isNotEmpty && _locationController.text.trim().isEmpty) {
-        _locationController.text = address;
-      }
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _locationController.text = result.address;
+      _locationSource = result.locationSource;
     });
-
-    final msg = address.isNotEmpty
-        ? 'تم تحديد الموقع ✅'
-        : 'تم تحديد الموقع ✅ — يرجى كتابة اسم المنطقة يدوياً';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppColors.success),
-    );
   }
 
   Future<void> _publish() async {
@@ -655,7 +639,7 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
         'latitude': _latitude,
         'longitude': _longitude,
         'hasLocation': _latitude != null,
-        'locationSource': _latitude != null ? 'gps' : 'manual',
+        'locationSource': _latitude != null ? _locationSource : 'manual',
         'expiryDate': _expiryDate,
         'sourceDonationId': widget.prefillDonationId ?? '',
         'isCash': false,
@@ -917,9 +901,9 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
                     ),
                     const SizedBox(height: 10),
 
-                    // زر GPS
+                    // زر تحديد الموقع على الخريطة
                     GestureDetector(
-                      onTap: _fetchingLocation ? null : _fetchLocation,
+                      onTap: _openLocationPicker,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 12),
@@ -936,27 +920,20 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
                         ),
                         child: Row(
                           children: [
-                            _fetchingLocation
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppColors.primary))
-                                : Icon(
-                                    _latitude != null
-                                        ? Icons.my_location_rounded
-                                        : Icons.location_searching_rounded,
-                                    color: _latitude != null
-                                        ? AppColors.success
-                                        : AppColors.primary,
-                                    size: 20,
-                                  ),
+                            Icon(
+                              _latitude != null
+                                  ? Icons.my_location_rounded
+                                  : Icons.map_outlined,
+                              color: _latitude != null
+                                  ? AppColors.success
+                                  : AppColors.primary,
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
                             Text(
                               _latitude != null
                                   ? 'تم تحديد الموقع ✓'
-                                  : 'تحديد موقعي تلقائياً',
+                                  : 'تحديد الموقع على الخريطة',
                               style: TextStyle(
                                   fontSize: 13,
                                   color: _latitude != null

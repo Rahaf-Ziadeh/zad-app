@@ -6,8 +6,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/cloudinary_service.dart';
-import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
+import '../common/location_picker_screen.dart';
 import 'login_screen.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -39,10 +39,10 @@ class _SignupScreenState extends State<SignupScreen> {
   String _passwordStrengthLabel = '';
   Color _passwordStrengthColor = AppColors.danger;
 
-  // ── GPS للعنوان ──
+  // ── الموقع المسجَّل ──
   double? _registrationLat;
   double? _registrationLon;
-  bool _fetchingLocation = false;
+  String _registrationLocationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
 
   // ── حقول إضافية للمطعم ──
   final _ownerNameController = TextEditingController();
@@ -266,48 +266,27 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  Future<void> _fetchLocationForAddress() async {
-    setState(() => _fetchingLocation = true);
-    final svc = LocationService();
-    final position = await svc.getCurrentLocation();
-    if (!mounted) return;
-
-    if (position == null) {
-      setState(() => _fetchingLocation = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذّر الحصول على الموقع — تحقق من صلاحيات GPS'),
-          backgroundColor: AppColors.danger,
+  // ── فتح شاشة اختيار الموقع على خريطة OpenStreetMap ──
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLatitude: _registrationLat,
+          initialLongitude: _registrationLon,
+          initialAddress: _addressController.text.trim().isNotEmpty
+              ? _addressController.text.trim()
+              : null,
         ),
-      );
-      return;
-    }
-
-    final address = await svc.getAddressFromCoordinates(
-      position.latitude,
-      position.longitude,
-    );
-    if (!mounted) return;
-
-    setState(() {
-      _registrationLat = position.latitude;
-      _registrationLon = position.longitude;
-      _fetchingLocation = false;
-      if (address.isNotEmpty && _addressController.text.trim().isEmpty) {
-        _addressController.text = address;
-      }
-    });
-
-    final msg = address.isNotEmpty
-        ? 'تم تحديد الموقع ✅'
-        : 'تعذر تحديد اسم الموقع، يمكنك إدخاله يدوياً.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor:
-            address.isNotEmpty ? AppColors.success : AppColors.secondary,
       ),
     );
+    if (result == null || !mounted) return;
+    setState(() {
+      _registrationLat = result.latitude;
+      _registrationLon = result.longitude;
+      _addressController.text = result.address;
+      _registrationLocationSource = result.locationSource;
+    });
   }
 
   Future<void> _handleSignup() async {
@@ -374,6 +353,7 @@ class _SignupScreenState extends State<SignupScreen> {
         nationalId: _nationalIdController.text.trim(),
         latitude: _registrationLat,
         longitude: _registrationLon,
+        locationSource: _registrationLocationSource,
         ownerName: _selectedRole == 'restaurant'
             ? _ownerNameController.text.trim() : null,
         workingHours: _selectedRole == 'restaurant'
@@ -621,31 +601,19 @@ class _SignupScreenState extends State<SignupScreen> {
                         decoration: InputDecoration(
                           labelText: 'العنوان / الموقع',
                           prefixIcon: const Icon(Icons.location_on_outlined),
-                          suffixIcon: _fetchingLocation
-                              ? const Padding(
-                                  padding: EdgeInsets.all(12),
-                                  child: SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  ),
-                                )
-                              : IconButton(
-                                  icon: Icon(
-                                    _registrationLat != null
-                                        ? Icons.my_location_rounded
-                                        : Icons.location_searching_rounded,
-                                    color: _registrationLat != null
-                                        ? AppColors.success
-                                        : AppColors.primary,
-                                    size: 20,
-                                  ),
-                                  tooltip: 'تحديد موقعي الحالي',
-                                  onPressed: _fetchingLocation
-                                      ? null
-                                      : _fetchLocationForAddress,
-                                ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _registrationLat != null
+                                  ? Icons.my_location_rounded
+                                  : Icons.map_outlined,
+                              color: _registrationLat != null
+                                  ? AppColors.success
+                                  : AppColors.primary,
+                              size: 20,
+                            ),
+                            tooltip: 'تحديد الموقع على الخريطة',
+                            onPressed: _openLocationPicker,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 14),

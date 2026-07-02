@@ -22,7 +22,7 @@ class WelcomeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.25),
+            color: AppColors.primary.withValues(alpha: 0.25),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -32,7 +32,7 @@ class WelcomeCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundColor: Colors.white.withOpacity(0.2),
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
             child: Text(
               user.name.isNotEmpty ? user.name[0].toUpperCase() : 'أ',
               style: const TextStyle(
@@ -71,6 +71,7 @@ class StatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   const StatCard({
     super.key,
@@ -78,19 +79,24 @@ class StatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: onTap != null
+              ? color.withValues(alpha: 0.35)
+              : AppColors.border,
+        ),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 8,
               offset: const Offset(0, 3)),
         ],
@@ -101,7 +107,7 @@ class StatCard extends StatelessWidget {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 17),
@@ -117,8 +123,19 @@ class StatCard extends StatelessWidget {
                   color: AppColors.textLight,
                   fontSize: 11,
                   fontWeight: FontWeight.w500)),
+          if (onTap != null) ...[
+            const SizedBox(height: 4),
+            Icon(Icons.arrow_forward_ios_rounded,
+                size: 10, color: color.withValues(alpha: 0.5)),
+          ],
         ],
       ),
+    );
+
+    if (onTap == null) return content;
+    return GestureDetector(
+      onTap: onTap,
+      child: content,
     );
   }
 }
@@ -152,7 +169,7 @@ class MiniStatCard extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha:0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 20),
@@ -211,7 +228,7 @@ class ActionTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.10),
+                  color: color.withValues(alpha:0.10),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 22),
@@ -281,7 +298,7 @@ class UserCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: AppColors.primary.withOpacity(0.12),
+                  backgroundColor: AppColors.primary.withValues(alpha:0.12),
                   child: Text(
                     name.isNotEmpty ? name[0].toUpperCase() : '؟',
                     style: const TextStyle(
@@ -306,7 +323,7 @@ class UserCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
+                    color: statusColor.withValues(alpha:0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -417,7 +434,7 @@ class EmptyState extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.inbox_rounded,
-                size: 56, color: AppColors.primary.withOpacity(0.3)),
+                size: 56, color: AppColors.primary.withValues(alpha:0.3)),
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,

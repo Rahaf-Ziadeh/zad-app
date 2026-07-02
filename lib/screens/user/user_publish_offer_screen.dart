@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:geocoding/geocoding.dart';
 import '../../widgets/user_publish_widgets.dart';
 import '../../services/user_offer_service.dart';
 import '../../services/location_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/app_colors.dart';
 import '../../constants/app_constants.dart';
+import '../common/location_picker_screen.dart';
 
 class UserPublishOfferScreen extends StatefulWidget {
   const UserPublishOfferScreen({super.key});
@@ -26,10 +26,10 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
   String _selectedCategory = 'وجبات';
   bool _isFree = true;
   bool _isLoading = false;
-  bool _fetchingLocation = false;
   DateTime? _expiryDate;
   double? _latitude;
   double? _longitude;
+  String _locationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
 
   @override
   void dispose() {
@@ -51,76 +51,27 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
     if (picked != null) setState(() => _expiryDate = picked);
   }
 
-  Future<void> _fetchLocation() async {
-    setState(() => _fetchingLocation = true);
-
-    try {
-      final position = await LocationService().getCurrentLocation();
-
-      if (position == null) {
-        throw Exception('تعذّر الحصول على الإحداثيات');
-      }
-
-      String locationText = '';
-
-      // ── محاولة جلب اسم المنطقة ──
-      try {
-        final placemarks = await placemarkFromCoordinates(
-          position.latitude,
-          position.longitude,
-        ).timeout(const Duration(seconds: 8));
-
-        if (placemarks.isNotEmpty) {
-          final place = placemarks.first;
-
-          final city = place.locality ?? '';
-          final area = place.subLocality ?? '';
-          final street = place.street ?? '';
-
-          locationText = [
-            if (city.isNotEmpty) city,
-            if (area.isNotEmpty) area,
-            if (street.isNotEmpty) street,
-          ].join(' - ');
-        }
-      } catch (_) {
-        // إذا فشل geocoding
-        locationText = 'يرجى كتابة اسم المنطقة يدوياً';
-      }
-
-      // إذا رجع فاضي
-      if (locationText.trim().isEmpty) {
-        locationText = 'يرجى كتابة اسم المنطقة يدوياً';
-      }
-
-      if (!mounted) return;
-
-      setState(() {
-        _latitude = position.latitude;
-        _longitude = position.longitude;
-        _locationController.text = locationText;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم تحديد الموقع ✅'),
-          backgroundColor: AppColors.success,
+  // ── فتح شاشة اختيار الموقع على خريطة OpenStreetMap ──
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLatitude: _latitude,
+          initialLongitude: _longitude,
+          initialAddress: _locationController.text.trim().isNotEmpty
+              ? _locationController.text.trim()
+              : null,
         ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('خطأ في تحديد الموقع: $e'),
-          backgroundColor: AppColors.danger,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _fetchingLocation = false);
-      }
-    }
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _locationController.text = result.address;
+      _locationSource = result.locationSource;
+    });
   }
 
   Future<void> _publish() async {
@@ -185,6 +136,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
         latitude: _latitude,
         longitude: _longitude,
         expiryDate: _expiryDate!,
+        locationSource: _locationSource,
       );
 
       if (!mounted) return;
@@ -439,9 +391,9 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 10),
 
-                    // زر الموقع GPS
+                    // زر تحديد الموقع على الخريطة
                     GestureDetector(
-                      onTap: _fetchingLocation ? null : _fetchLocation,
+                      onTap: _openLocationPicker,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 12),
@@ -458,28 +410,21 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                         ),
                         child: Row(
                           children: [
-                            _fetchingLocation
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppColors.primary))
-                                : Icon(
-                                    _latitude != null
-                                        ? Icons.my_location_rounded
-                                        : Icons.location_searching_rounded,
-                                    color: _latitude != null
-                                        ? AppColors.success
-                                        : AppColors.primary,
-                                    size: 20,
-                                  ),
+                            Icon(
+                              _latitude != null
+                                  ? Icons.my_location_rounded
+                                  : Icons.map_outlined,
+                              color: _latitude != null
+                                  ? AppColors.success
+                                  : AppColors.primary,
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 _latitude != null
                                     ? 'تم تحديد الموقع ✓'
-                                    : 'تحديد موقعي تلقائياً',
+                                    : 'تحديد الموقع على الخريطة',
                                 style: TextStyle(
                                     fontSize: 13,
                                     color: _latitude != null

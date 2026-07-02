@@ -1,16 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'identity_verification_screen.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/profile_widgets.dart';
 import 'user_extra_screens.dart';
-import 'user_publish_offer_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final AppUser user;
-  const UserProfileScreen({super.key, required this.user});
+  final VoidCallback? onGoToDonate;
+  const UserProfileScreen({super.key, required this.user, this.onGoToDonate});
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
@@ -159,7 +158,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   width: 110,
                   height: 110,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.10),
+                    color: AppColors.primary.withValues(alpha:0.10),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -270,7 +269,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.10),
+                    color: AppColors.primary.withValues(alpha:0.10),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(_roleLabel(user.role),
@@ -348,35 +347,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   icon: Icons.add_box_rounded,
                   title: 'نشر عرض طعام',
                   color: AppColors.primary,
-                  onTap: () async {
-                    final uid = FirebaseAuth.instance.currentUser!.uid;
-
-                    final doc = await FirebaseFirestore.instance
-                        .collection('individuals')
-                        .doc(uid)
-                        .get();
-
-                    if (!context.mounted) return;
-
-                    if (!doc.exists ||
-                        doc.data()?['identityImageUrl'] == null ||
-                        doc.data()?['identityImageUrl'] == '') {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const IdentityVerificationScreen(),
-                        ),
-                      );
-                      return;
-                    }
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const UserPublishOfferScreen(),
-                      ),
-                    );
-                  },
+                  onTap: () => widget.onGoToDonate?.call(),
                 ),
                 const Divider(height: 1, indent: 56),
                 MenuTileWidget(

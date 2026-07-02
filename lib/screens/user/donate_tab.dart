@@ -1,8 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../services/cloudinary_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/user_offer_service.dart';
 import '../../theme/app_colors.dart';
+import '../common/location_picker_screen.dart';
 import 'identity_verification_screen.dart';
 
 class DonateTab extends StatefulWidget {
@@ -14,6 +21,7 @@ class DonateTab extends StatefulWidget {
 
 class _DonateTabState extends State<DonateTab> {
   final _foodNameController = TextEditingController();
+  final _descController = TextEditingController();
   final _quantityController = TextEditingController();
   final _locationController = TextEditingController();
   final _notesController = TextEditingController();
@@ -29,9 +37,22 @@ class _DonateTabState extends State<DonateTab> {
   bool _loadingUser = true;
   bool _hasNationalId = false;
 
-  // ← الجمعية المختارة
+  // الجمعية المختارة
   String? _selectedCharityId;
   String? _selectedCharityName;
+
+  // موقع الاستلام
+  double? _latitude;
+  double? _longitude;
+  String _locationSource = 'manual';
+
+  // الصورة
+  Uint8List? _imageBytes;
+  bool _isPickingImage = false;
+
+  // وقت الاستلام
+  TimeOfDay? _pickupStartTime;
+  TimeOfDay? _pickupEndTime;
 
   final _categories = ['وجبات', 'مخبوزات', 'خضار وفواكه', 'معلبات', 'حلويات'];
 
@@ -49,11 +70,11 @@ class _DonateTabState extends State<DonateTab> {
     if (doc.exists) {
       final data = doc.data()!;
       final nationalId = data['nationalId'] ?? '';
-      // الأولوية لحقول spec الجديدة، ثم القيمة القديمة
       final idVerified =
           (data['identityVerificationStatus'] as String? ?? '') == 'approved';
       setState(() {
-        _userNationalId = data['identityNumber'] as String? ?? nationalId.toString();
+        _userNationalId =
+            data['identityNumber'] as String? ?? nationalId.toString();
         _userName = data['name'] ?? data['fullName'] ?? '';
         _hasNationalId = idVerified || nationalId.toString().isNotEmpty;
         _loadingUser = false;
@@ -66,10 +87,105 @@ class _DonateTabState extends State<DonateTab> {
   @override
   void dispose() {
     _foodNameController.dispose();
+    _descController.dispose();
     _quantityController.dispose();
     _locationController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded),
+              title: const Text('التقاط صورة'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('اختيار من المعرض'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            if (_imageBytes != null)
+              ListTile(
+                leading:
+                    const Icon(Icons.delete_rounded, color: AppColors.danger),
+                title: const Text('إزالة الصورة',
+                    style: TextStyle(color: AppColors.danger)),
+                onTap: () {
+                  setState(() => _imageBytes = null);
+                  Navigator.pop(context);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+    setState(() => _isPickingImage = true);
+    try {
+      final file =
+          await ImagePicker().pickImage(source: source, imageQuality: 75);
+      if (file == null || !mounted) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      setState(() => _imageBytes = bytes);
+    } finally {
+      if (mounted) setState(() => _isPickingImage = false);
+    }
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime:
+          (isStart ? _pickupStartTime : _pickupEndTime) ?? TimeOfDay.now(),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isStart) {
+        _pickupStartTime = picked;
+      } else {
+        _pickupEndTime = picked;
+      }
+    });
+  }
+
+  String _formatTime(TimeOfDay t) {
+    final h = t.hour.toString().padLeft(2, '0');
+    final m = t.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLatitude: _latitude,
+          initialLongitude: _longitude,
+          initialAddress: _locationController.text.trim().isNotEmpty
+              ? _locationController.text.trim()
+              : null,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _locationController.text = result.address;
+      _locationSource = result.locationSource;
+    });
   }
 
   Future<void> _pickDate() async {
@@ -82,7 +198,6 @@ class _DonateTabState extends State<DonateTab> {
     if (picked != null) setState(() => _expiryDate = picked);
   }
 
-  // ── اختيار الجمعية ──
   Future<void> _pickCharity() async {
     await showModalBottomSheet(
       context: context,
@@ -111,24 +226,45 @@ class _DonateTabState extends State<DonateTab> {
   }
 
   Future<void> _donateFood() async {
+    // ── التحقق من المصادقة ──
     if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يجب تسجيل الدخول أولاً للتبرع'),
-        ),
-      );
-      return;
-    }
-    if (_foodNameController.text.trim().isEmpty ||
-        _quantityController.text.trim().isEmpty ||
-        _locationController.text.trim().isEmpty ||
-        _expiryDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى تعبئة جميع الحقول المطلوبة')),
+        const SnackBar(content: Text('يجب تسجيل الدخول أولاً للتبرع')),
       );
       return;
     }
 
+    // ── التحقق من الحقول المطلوبة (sync قبل أي await) ──
+    if (_imageBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى إضافة صورة للتبرع')),
+      );
+      return;
+    }
+    if (_foodNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى إدخال اسم الطعام')),
+      );
+      return;
+    }
+    if (_locationController.text.trim().isEmpty && _latitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى تحديد مكان الاستلام')),
+      );
+      return;
+    }
+    if (_pickupStartTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى تحديد وقت بداية الاستلام')),
+      );
+      return;
+    }
+    if (_pickupEndTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى تحديد وقت نهاية الاستلام')),
+      );
+      return;
+    }
     if (!_acceptedResponsibility) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -139,12 +275,10 @@ class _DonateTabState extends State<DonateTab> {
       return;
     }
 
-    // ── التحقق من توثيق الهوية قبل قبول التبرع ──
+    // ── التحقق من توثيق الهوية (يتطلب await) ──
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final userSnap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    final userSnap =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     if (!mounted) return;
     final idStatus =
         (userSnap.data()?['identityVerificationStatus'] as String? ?? '');
@@ -152,67 +286,100 @@ class _DonateTabState extends State<DonateTab> {
       if (idStatus == 'pending') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-                'طلب توثيق هويتك قيد المراجعة، يرجى الانتظار.'),
-          ),
+              content:
+                  Text('طلب توثيق هويتك قيد المراجعة، يرجى الانتظار.')),
         );
         return;
       }
-      // لم يتم التوثيق — فتح شاشة التوثيق
       await Navigator.push(
         context,
         MaterialPageRoute(
             builder: (_) => const IdentityVerificationScreen()),
       );
-      return; // المستخدم يعيد المحاولة بعد إرسال الطلب
+      return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      final userId = uid;
+      // ── رفع الصورة إلى Cloudinary ──
+      final imageUrl = await CloudinaryService().uploadBytes(
+        bytes: _imageBytes!,
+        filename: 'donation_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      if (!mounted) return;
+      if (imageUrl == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('فشل رفع الصورة، يرجى المحاولة مرة أخرى')),
+        );
+        return;
+      }
 
-      await FirebaseFirestore.instance.collection('donations').add({
-        'userId': userId,
+      final startStr = _formatTime(_pickupStartTime!);
+      final endStr = _formatTime(_pickupEndTime!);
+      final pickupTime = '$startStr - $endStr';
+      final locationText = _locationController.text.trim();
+      final title = _foodNameController.text.trim();
+      final charityId = _selectedCharityId ?? '';
+      final charityName = _selectedCharityName ?? '';
+
+      final docRef =
+          await FirebaseFirestore.instance.collection('donations').add({
+        // ── حقول المواصفة الجديدة ──
+        'donorUserId': uid,
+        'donorName': _userName ?? '',
+        'charityId': charityId,
+        'charityName': charityName,
+        'title': title,
+        'description': _descController.text.trim(),
+        'category': _selectedCategory,
+        'imageUrl': imageUrl,
+        'pickupLocation': locationText,
+        'latitude': _latitude,
+        'longitude': _longitude,
+        'hasLocation': _latitude != null,
+        'locationSource': _latitude != null ? _locationSource : 'manual',
+        'pickupStartTime': startStr,
+        'pickupEndTime': endStr,
+        'pickupTime': pickupTime,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        // ── حقول قديمة للتوافق مع السجلات السابقة ──
+        'userId': uid,
         'userName': _userName ?? '',
         'nationalId': _userNationalId ?? '',
-        'foodName': _foodNameController.text.trim(),
-        'category': _selectedCategory,
-        'quantity': _quantityController.text.trim(),
-        'location': _locationController.text.trim(),
-        'expiryDate': _expiryDate,
+        'foodName': title,
+        'quantity': _quantityController.text.trim().isEmpty
+            ? '1'
+            : _quantityController.text.trim(),
+        'location': locationText,
         'notes': _notesController.text.trim(),
-        'status': 'pending',
+        'expiryDate': _expiryDate,
         'acceptedResponsibility': true,
         'responsibilityAcceptedAt': FieldValue.serverTimestamp(),
-        // ← حفظ الجمعية المختارة
-        'targetCharityId': _selectedCharityId ?? '',
-        'targetCharityName': _selectedCharityName ?? '',
-        'isDirectedToCharity': _selectedCharityId != null,
-        'createdAt': FieldValue.serverTimestamp(),
+        'targetCharityId': charityId,
+        'targetCharityName': charityName,
+        'isDirectedToCharity': charityId.isNotEmpty,
       });
 
-      setState(() {
-        _foodNameController.clear();
-        _quantityController.clear();
-        _locationController.clear();
-        _notesController.clear();
-        _expiryDate = null;
-        _selectedCategory = 'وجبات';
-        _acceptedResponsibility = false;
-        _selectedCharityId = null;
-        _selectedCharityName = null;
-      });
-
+      await docRef.update({'donationId': docRef.id});
       if (!mounted) return;
+
+      await _notifyCharity(title, charityId);
+      if (!mounted) return;
+
+      _resetForm();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               const Icon(Icons.favorite_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 8),
-              Text(_selectedCharityName != null
-                  ? 'تم إرسال تبرعك إلى $_selectedCharityName ❤️'
+              Text(charityName.isNotEmpty
+                  ? 'تم إرسال تبرعك إلى $charityName ❤️'
                   : 'تم إضافة تبرعك بنجاح، شكراً لك!'),
             ],
           ),
@@ -228,6 +395,55 @@ class _DonateTabState extends State<DonateTab> {
     }
   }
 
+  Future<void> _notifyCharity(String title, String charityId) async {
+    const notifTitle = 'تبرع طعام جديد';
+    final msg = 'تبرع جديد بانتظار مراجعتك: "$title"';
+    if (charityId.isNotEmpty) {
+      await NotificationService().sendNotification(
+        userId: charityId,
+        title: notifTitle,
+        message: msg,
+        type: 'donation',
+      );
+    } else {
+      final charities = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'charity')
+          .where('isApproved', isEqualTo: true)
+          .get();
+      final ids = charities.docs.map((d) => d.id).toList();
+      if (ids.isNotEmpty) {
+        await NotificationService().sendBulkNotification(
+          userIds: ids,
+          title: notifTitle,
+          message: msg,
+          type: 'donation',
+        );
+      }
+    }
+  }
+
+  void _resetForm() {
+    setState(() {
+      _foodNameController.clear();
+      _descController.clear();
+      _quantityController.clear();
+      _locationController.clear();
+      _notesController.clear();
+      _expiryDate = null;
+      _selectedCategory = 'وجبات';
+      _acceptedResponsibility = false;
+      _selectedCharityId = null;
+      _selectedCharityName = null;
+      _latitude = null;
+      _longitude = null;
+      _locationSource = 'manual';
+      _imageBytes = null;
+      _pickupStartTime = null;
+      _pickupEndTime = null;
+    });
+  }
+
   String _maskNationalId(String id) {
     if (id.length <= 4) return id;
     return '${'*' * (id.length - 4)}${id.substring(id.length - 4)}';
@@ -235,13 +451,8 @@ class _DonateTabState extends State<DonateTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingUser) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (!_hasNationalId) {
-      return _NoNationalIdView(onSaved: _loadUserData);
-    }
+    if (_loadingUser) return const Center(child: CircularProgressIndicator());
+    if (!_hasNationalId) return _NoNationalIdView(onSaved: _loadUserData);
 
     return ListView(
       padding: const EdgeInsets.all(18),
@@ -285,9 +496,9 @@ class _DonateTabState extends State<DonateTab> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppColors.success.withValues(alpha:0.07),
+            color: AppColors.success.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.success.withValues(alpha:0.3)),
+            border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -325,12 +536,12 @@ class _DonateTabState extends State<DonateTab> {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: _selectedCharityId != null
-                  ? const Color(0xFFE11D48).withValues(alpha:0.06)
+                  ? const Color(0xFFE11D48).withValues(alpha: 0.06)
                   : AppColors.card,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: _selectedCharityId != null
-                    ? const Color(0xFFE11D48).withValues(alpha:0.4)
+                    ? const Color(0xFFE11D48).withValues(alpha: 0.4)
                     : AppColors.border,
                 width: _selectedCharityId != null ? 1.5 : 1,
               ),
@@ -342,8 +553,8 @@ class _DonateTabState extends State<DonateTab> {
                   height: 42,
                   decoration: BoxDecoration(
                     color: _selectedCharityId != null
-                        ? const Color(0xFFE11D48).withValues(alpha:0.12)
-                        : AppColors.primary.withValues(alpha:0.08),
+                        ? const Color(0xFFE11D48).withValues(alpha: 0.12)
+                        : AppColors.primary.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -417,7 +628,69 @@ class _DonateTabState extends State<DonateTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionLabel(label: 'اسم الطعام'),
+                // ── صورة التبرع ──
+                _SectionLabel(label: 'صورة التبرع *'),
+                GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    height: 160,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: _imageBytes != null
+                          ? Colors.transparent
+                          : AppColors.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _imageBytes != null
+                            ? AppColors.success.withValues(alpha: 0.4)
+                            : AppColors.border,
+                      ),
+                    ),
+                    clipBehavior: Clip.hardEdge,
+                    child: _isPickingImage
+                        ? const Center(child: CircularProgressIndicator())
+                        : _imageBytes != null
+                            ? Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: Image.memory(_imageBytes!,
+                                        fit: BoxFit.cover),
+                                  ),
+                                  Positioned(
+                                    top: 8,
+                                    right: 8,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Icon(Icons.edit_rounded,
+                                          color: Colors.white, size: 18),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_photo_alternate_rounded,
+                                      size: 42,
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.4)),
+                                  const SizedBox(height: 8),
+                                  const Text('اضغط لإضافة صورة',
+                                      style: TextStyle(
+                                          color: AppColors.textLight,
+                                          fontSize: 13)),
+                                ],
+                              ),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── اسم الطعام ──
+                _SectionLabel(label: 'اسم الطعام *'),
                 TextField(
                   controller: _foodNameController,
                   decoration: const InputDecoration(
@@ -427,6 +700,24 @@ class _DonateTabState extends State<DonateTab> {
                 ),
 
                 const SizedBox(height: 14),
+
+                // ── الوصف ──
+                _SectionLabel(label: 'الوصف (اختياري)'),
+                TextField(
+                  controller: _descController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    hintText: 'وصف مختصر للطعام...',
+                    prefixIcon: Padding(
+                      padding: EdgeInsets.only(bottom: 28),
+                      child: Icon(Icons.description_outlined),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── الفئة ──
                 _SectionLabel(label: 'الفئة'),
                 Wrap(
                   spacing: 8,
@@ -442,7 +733,7 @@ class _DonateTabState extends State<DonateTab> {
                         decoration: BoxDecoration(
                           color: selected
                               ? AppColors.primary
-                              : AppColors.primary.withValues(alpha:0.07),
+                              : AppColors.primary.withValues(alpha: 0.07),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(cat,
@@ -458,6 +749,8 @@ class _DonateTabState extends State<DonateTab> {
                 ),
 
                 const SizedBox(height: 14),
+
+                // ── الكمية ──
                 _SectionLabel(label: 'الكمية'),
                 TextField(
                   controller: _quantityController,
@@ -468,6 +761,8 @@ class _DonateTabState extends State<DonateTab> {
                 ),
 
                 const SizedBox(height: 14),
+
+                // ── تاريخ انتهاء الصلاحية ──
                 _SectionLabel(label: 'تاريخ انتهاء الصلاحية'),
                 InkWell(
                   onTap: _pickDate,
@@ -501,7 +796,9 @@ class _DonateTabState extends State<DonateTab> {
                 ),
 
                 const SizedBox(height: 14),
-                _SectionLabel(label: 'مكان الاستلام'),
+
+                // ── مكان الاستلام ──
+                _SectionLabel(label: 'مكان الاستلام *'),
                 TextField(
                   controller: _locationController,
                   decoration: const InputDecoration(
@@ -509,8 +806,151 @@ class _DonateTabState extends State<DonateTab> {
                     prefixIcon: Icon(Icons.location_on_rounded),
                   ),
                 ),
+                const SizedBox(height: 10),
+
+                // زر خريطة الموقع
+                GestureDetector(
+                  onTap: _openLocationPicker,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _latitude != null
+                          ? AppColors.success.withValues(alpha: 0.08)
+                          : AppColors.primary.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _latitude != null
+                            ? AppColors.success.withValues(alpha: 0.4)
+                            : AppColors.primary.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _latitude != null
+                              ? Icons.my_location_rounded
+                              : Icons.map_outlined,
+                          color: _latitude != null
+                              ? AppColors.success
+                              : AppColors.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _latitude != null
+                                ? 'تم تحديد الموقع ✓'
+                                : 'تحديد الموقع على الخريطة',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _latitude != null
+                                  ? AppColors.success
+                                  : AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
                 const SizedBox(height: 14),
+
+                // ── وقت الاستلام ──
+                _SectionLabel(label: 'وقت الاستلام *'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _pickTime(true),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: _pickupStartTime != null
+                                  ? AppColors.success.withValues(alpha: 0.5)
+                                  : AppColors.border,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.access_time_rounded,
+                                  size: 18,
+                                  color: _pickupStartTime != null
+                                      ? AppColors.success
+                                      : AppColors.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _pickupStartTime != null
+                                      ? _formatTime(_pickupStartTime!)
+                                      : 'وقت البداية',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: _pickupStartTime != null
+                                        ? AppColors.textDark
+                                        : AppColors.textLight,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _pickTime(false),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: _pickupEndTime != null
+                                  ? AppColors.success.withValues(alpha: 0.5)
+                                  : AppColors.border,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.access_time_filled_rounded,
+                                  size: 18,
+                                  color: _pickupEndTime != null
+                                      ? AppColors.success
+                                      : AppColors.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _pickupEndTime != null
+                                      ? _formatTime(_pickupEndTime!)
+                                      : 'وقت النهاية',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: _pickupEndTime != null
+                                        ? AppColors.textDark
+                                        : AppColors.textLight,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── ملاحظات ──
                 _SectionLabel(label: 'ملاحظات (اختياري)'),
                 TextField(
                   controller: _notesController,
@@ -534,7 +974,7 @@ class _DonateTabState extends State<DonateTab> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: _acceptedResponsibility
-                          ? AppColors.danger.withValues(alpha:0.06)
+                          ? AppColors.danger.withValues(alpha: 0.06)
                           : AppColors.background,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
@@ -598,7 +1038,7 @@ class _DonateTabState extends State<DonateTab> {
 
         const SizedBox(height: 24),
 
-        // ── تبرعاتي ──
+        // ── تبرعاتي السابقة ──
         const Text('تبرعاتي السابقة',
             style: TextStyle(
                 fontSize: 17,
@@ -625,7 +1065,7 @@ class _DonateTabState extends State<DonateTab> {
               return Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha:0.05),
+                  color: AppColors.primary.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Center(
@@ -639,7 +1079,13 @@ class _DonateTabState extends State<DonateTab> {
               children: donations.map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 final status = data['status'] ?? 'pending';
-                final charityName = data['targetCharityName'] ?? '';
+                final charityName = data['targetCharityName'] ??
+                    data['charityName'] ??
+                    '';
+                final imageUrl = data['imageUrl'] as String? ?? '';
+                final displayTitle =
+                    data['foodName'] ?? data['title'] ?? '';
+                final pickupTime = data['pickupTime'] as String? ?? '';
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 10),
@@ -649,24 +1095,36 @@ class _DonateTabState extends State<DonateTab> {
                     side: const BorderSide(color: AppColors.border),
                   ),
                   child: ListTile(
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE11D48).withValues(alpha:0.10),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.favorite_rounded,
-                          color: Color(0xFFE11D48), size: 20),
-                    ),
-                    title: Text(data['foodName'] ?? '',
+                    leading: imageUrl.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              imageUrl,
+                              width: 46,
+                              height: 46,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  _defaultLeadingIcon(),
+                            ),
+                          )
+                        : _defaultLeadingIcon(),
+                    title: Text(displayTitle,
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 14)),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${data['quantity']} • ${data['category']}',
-                            style: const TextStyle(fontSize: 12)),
+                        Text(
+                          '${data['quantity'] ?? ''} • ${data['category'] ?? ''}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        if (pickupTime.isNotEmpty)
+                          Text(
+                            pickupTime,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textLight),
+                          ),
                         if (charityName.isNotEmpty)
                           Row(
                             children: [
@@ -682,7 +1140,7 @@ class _DonateTabState extends State<DonateTab> {
                           ),
                       ],
                     ),
-                    isThreeLine: charityName.isNotEmpty,
+                    isThreeLine: true,
                     trailing: _StatusBadge(status: status),
                   ),
                 );
@@ -690,7 +1148,34 @@ class _DonateTabState extends State<DonateTab> {
             );
           },
         ),
+
+        const SizedBox(height: 24),
+
+        // ── عروضي المنشورة ──
+        const Text(
+          'عروضي المنشورة',
+          style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark),
+        ),
+        const SizedBox(height: 10),
+
+        const _MyPublishedOffers(),
       ],
+    );
+  }
+
+  Widget _defaultLeadingIcon() {
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE11D48).withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Icon(Icons.favorite_rounded,
+          color: Color(0xFFE11D48), size: 20),
     );
   }
 }
@@ -724,7 +1209,6 @@ class _CharityPickerSheet extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Handle
               const SizedBox(height: 12),
               Center(
                 child: Container(
@@ -738,7 +1222,6 @@ class _CharityPickerSheet extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Title
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -771,7 +1254,7 @@ class _CharityPickerSheet extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha:0.07),
+                    color: AppColors.primary.withValues(alpha: 0.07),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Row(
@@ -796,7 +1279,6 @@ class _CharityPickerSheet extends StatelessWidget {
               const SizedBox(height: 12),
               const Divider(height: 1),
 
-              // قائمة الجمعيات
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
@@ -819,7 +1301,8 @@ class _CharityPickerSheet extends StatelessWidget {
                           children: [
                             Icon(Icons.volunteer_activism_outlined,
                                 size: 48,
-                                color: AppColors.primary.withValues(alpha:0.3)),
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.3)),
                             const SizedBox(height: 12),
                             const Text(
                               'لا توجد جمعيات مسجّلة حالياً',
@@ -851,7 +1334,8 @@ class _CharityPickerSheet extends StatelessWidget {
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? const Color(0xFFE11D48).withValues(alpha:0.07)
+                                  ? const Color(0xFFE11D48)
+                                      .withValues(alpha: 0.07)
                                   : AppColors.card,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
@@ -863,15 +1347,15 @@ class _CharityPickerSheet extends StatelessWidget {
                             ),
                             child: Row(
                               children: [
-                                // أيقونة الجمعية
                                 Container(
                                   width: 46,
                                   height: 46,
                                   decoration: BoxDecoration(
                                     color: isSelected
                                         ? const Color(0xFFE11D48)
-                                            .withValues(alpha:0.12)
-                                        : AppColors.primary.withValues(alpha:0.08),
+                                            .withValues(alpha: 0.12)
+                                        : AppColors.primary
+                                            .withValues(alpha: 0.08),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
@@ -899,7 +1383,8 @@ class _CharityPickerSheet extends StatelessWidget {
                                         const SizedBox(height: 3),
                                         Row(
                                           children: [
-                                            Icon(Icons.location_on_outlined,
+                                            const Icon(
+                                                Icons.location_on_outlined,
                                                 size: 12,
                                                 color: AppColors.textLight),
                                             const SizedBox(width: 3),
@@ -919,7 +1404,7 @@ class _CharityPickerSheet extends StatelessWidget {
                                         const SizedBox(height: 2),
                                         Row(
                                           children: [
-                                            Icon(Icons.phone_outlined,
+                                            const Icon(Icons.phone_outlined,
                                                 size: 12,
                                                 color: AppColors.textLight),
                                             const SizedBox(width: 3),
@@ -934,7 +1419,6 @@ class _CharityPickerSheet extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                                // علامة الاختيار
                                 AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
                                   width: 24,
@@ -1043,7 +1527,7 @@ class _NoNationalIdViewState extends State<_NoNationalIdView> {
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha:0.12),
+                color: AppColors.secondary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.badge_outlined,
@@ -1077,7 +1561,7 @@ class _NoNationalIdViewState extends State<_NoNationalIdView> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha:0.08),
+                color: AppColors.secondary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
@@ -1159,12 +1643,242 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha:0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label,
           style: TextStyle(
               color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// عروضي المنشورة — قائمة عروض الفرد القابلة لإعادة المشاركة
+// ─────────────────────────────────────────────
+class _MyPublishedOffers extends StatelessWidget {
+  const _MyPublishedOffers();
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const SizedBox.shrink();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('offers')
+          .where('providerUserId', isEqualTo: uid)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+
+        final docs = snap.data!.docs
+            .where((d) =>
+                (d.data() as Map<String, dynamic>)['offerType'] ==
+                'individual_offer')
+            .toList()
+          ..sort((a, b) {
+            final aRaw = (a.data() as Map<String, dynamic>)['updatedAt'];
+            final bRaw = (b.data() as Map<String, dynamic>)['updatedAt'];
+            final aTs = aRaw is Timestamp ? aRaw : null;
+            final bTs = bRaw is Timestamp ? bRaw : null;
+            if (aTs == null && bTs == null) return 0;
+            if (aTs == null) return 1;
+            if (bTs == null) return -1;
+            return bTs.compareTo(aTs);
+          });
+
+        if (docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(
+              child: Text(
+                'لم تنشر أي عرض طعام بعد',
+                style: TextStyle(color: AppColors.textLight),
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          children: docs
+              .map((doc) => _MyOfferCard(
+                    docId: doc.id,
+                    data: doc.data() as Map<String, dynamic>,
+                  ))
+              .toList(),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// بطاقة العرض المنشور مع زر "إعادة مشاركة"
+// ─────────────────────────────────────────────
+class _MyOfferCard extends StatefulWidget {
+  final String docId;
+  final Map<String, dynamic> data;
+
+  const _MyOfferCard({required this.docId, required this.data});
+
+  @override
+  State<_MyOfferCard> createState() => _MyOfferCardState();
+}
+
+class _MyOfferCardState extends State<_MyOfferCard> {
+  bool _loading = false;
+
+  Future<void> _republish() async {
+    setState(() => _loading = true);
+    try {
+      final originalQty = (widget.data['quantity'] as num?)?.toInt() ?? 1;
+      await UserOfferService().republishOffer(
+        offerId: widget.docId,
+        originalQuantity: originalQty,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم إعادة نشر العرض بنجاح ✅'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('خطأ: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.data['title'] ?? 'عرض طعام';
+    final status = widget.data['status'] ?? 'available';
+    final remainingQty =
+        (widget.data['remainingQuantity'] as num?)?.toInt() ?? 0;
+    final originalQty = (widget.data['quantity'] as num?)?.toInt() ?? 1;
+    final isActive = status == 'available' && remainingQty > 0;
+
+    final Color statusColor;
+    final String statusLabel;
+    if (isActive) {
+      statusColor = AppColors.success;
+      statusLabel = 'نشط';
+    } else if (status == 'expired') {
+      statusColor = AppColors.danger;
+      statusLabel = 'منتهي';
+    } else if (remainingQty == 0) {
+      statusColor = AppColors.secondary;
+      statusLabel = 'نفذ';
+    } else {
+      statusColor = AppColors.textLight;
+      statusLabel = status;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.fastfood_rounded,
+                  color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(
+                    'متبقي: $remainingQty / $originalQty',
+                    style: const TextStyle(
+                        color: AppColors.textLight, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(statusLabel,
+                      style: TextStyle(
+                          color: statusColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold)),
+                ),
+                if (!isActive) ...[
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: _loading ? null : _republish,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: _loading
+                            ? AppColors.primary.withValues(alpha: 0.5)
+                            : AppColors.primary,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: _loading
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.refresh_rounded,
+                                    color: Colors.white, size: 12),
+                                SizedBox(width: 4),
+                                Text(
+                                  'إعادة مشاركة',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -178,8 +178,8 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
               height: 64,
               decoration: BoxDecoration(
                 color: isSuccess
-                    ? AppColors.success.withOpacity(0.12)
-                    : AppColors.danger.withOpacity(0.12),
+                    ? AppColors.success.withValues(alpha: 0.12)
+                    : AppColors.danger.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -272,7 +272,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 8),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
+                          color: Colors.black.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Text(
@@ -287,7 +287,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                 // ── Loading overlay ──
                 if (_isLoading)
                   Container(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                     child: const Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -400,7 +400,7 @@ class _QrFrameState extends State<_QrFrame>
                     gradient: LinearGradient(
                       colors: [
                         Colors.transparent,
-                        AppColors.primary.withOpacity(0.8),
+                        AppColors.primary.withValues(alpha: 0.8),
                         Colors.transparent,
                       ],
                     ),

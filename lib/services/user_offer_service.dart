@@ -3,6 +3,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class UserOfferService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  Future<void> republishOffer({
+    required String offerId,
+    required int originalQuantity,
+  }) async {
+    await _firestore.collection('offers').doc(offerId).update({
+      'status': 'available',
+      'remainingQuantity': originalQuantity,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> publishIndividualOffer({
     required String uid,
     required String userName,
@@ -16,6 +27,7 @@ class UserOfferService {
     required double? latitude,
     required double? longitude,
     required DateTime expiryDate,
+    String? locationSource,
   }) async {
     final docRef = _firestore.collection('offers').doc();
 
@@ -41,7 +53,8 @@ class UserOfferService {
       'latitude': latitude,
       'longitude': longitude,
       'hasLocation': latitude != null,
-      'locationSource': latitude != null ? 'gps' : 'manual',
+      'locationSource':
+          latitude != null ? (locationSource ?? 'gps') : 'manual',
       'expiryDate': expiryDate,
       'isCash': true,
       'isOnline': false,

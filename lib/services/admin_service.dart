@@ -217,6 +217,29 @@ class AdminService {
     });
   }
 
+  // ── جميع المستخدمين حسب الدور (بدون فلتر موافقة) ──
+  Stream<QuerySnapshot> getUsersByRole(String role) {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: role)
+        .snapshots();
+  }
+
+  // ── جميع الحجوزات (مرتبة client-side لتجنب الفهرس المركب) ──
+  Stream<QuerySnapshot> getAllReservations() {
+    return _firestore.collection('reservations').snapshots();
+  }
+
+  // ── جميع جلسات الدعم ──
+  Stream<QuerySnapshot> getSupportChats() {
+    return _firestore.collection('support_chats').snapshots();
+  }
+
+  // ── جميع التقييمات ──
+  Stream<QuerySnapshot> getReviews() {
+    return _firestore.collection('reviews').snapshots();
+  }
+
   Stream<QuerySnapshot> getRedistributedDonations() {
     return _firestore
         .collection('donations')

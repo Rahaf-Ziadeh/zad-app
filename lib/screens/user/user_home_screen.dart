@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
@@ -7,10 +6,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/user_home_widgets.dart';
 
 import 'complaint_screen.dart';
-import 'identity_verification_screen.dart';
 import 'notifications_screen.dart';
-import 'user_orders_screen.dart';
-import 'user_publish_offer_screen.dart';
 
 class UserHomeScreen extends StatelessWidget {
   final AppUser user;
@@ -24,43 +20,6 @@ class UserHomeScreen extends StatelessWidget {
     required this.onBrowseTab,
   });
 
-  Future<void> _openPublishScreen(BuildContext context) async {
-    if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يجب تسجيل الدخول أولاً لاستخدام هذه الميزة'),
-        ),
-      );
-      return;
-    }
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-
-    final doc = await FirebaseFirestore.instance
-        .collection('individuals')
-        .doc(uid)
-        .get();
-
-    if (!context.mounted) return;
-
-    if (!doc.exists ||
-        doc.data()?['identityImageUrl'] == null ||
-        doc.data()?['identityImageUrl'] == '') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const IdentityVerificationScreen(),
-        ),
-      );
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const UserPublishOfferScreen(),
-      ),
-    );
-  }
 
   Stream<int> _activeOrdersStream() => FirebaseFirestore.instance
       .collection('reservations')
@@ -190,7 +149,7 @@ class UserHomeScreen extends StatelessWidget {
               title: 'نشر عرض طعام',
               subtitle: 'شارك طعامك الفائض مجاناً أو بسعر رمزي',
               color: const Color(0xFF7C3AED),
-              onTap: () => _openPublishScreen(context),
+              onTap: () => onBrowseTab(2),
             ),
             ActionTile(
               icon: Icons.receipt_long_rounded,
@@ -237,7 +196,7 @@ class _TopHeader extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.12),
+            color: AppColors.primary.withValues(alpha:0.12),
             shape: BoxShape.circle,
           ),
           child: const Icon(
@@ -327,8 +286,8 @@ class _HeroBanner extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           gradient: LinearGradient(
             colors: [
-              Colors.black.withOpacity(0.68),
-              Colors.black.withOpacity(0.18),
+              Colors.black.withValues(alpha:0.68),
+              Colors.black.withValues(alpha:0.18),
             ],
           ),
         ),
@@ -462,7 +421,7 @@ class _CategorySection extends StatelessWidget {
                       width: 58,
                       height: 58,
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.10),
+                        color: AppColors.primary.withValues(alpha:0.10),
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Icon(
@@ -500,9 +459,9 @@ class _ImpactTracker extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.08),
+        color: AppColors.primary.withValues(alpha:0.08),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+        border: Border.all(color: AppColors.primary.withValues(alpha:0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

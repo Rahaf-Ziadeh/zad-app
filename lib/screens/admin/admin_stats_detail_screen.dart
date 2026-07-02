@@ -1,0 +1,299 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
+
+// ─────────────────────────────────────────────
+// تعريف حقل واحد يُعرض في بطاقة الإحصائية
+// ─────────────────────────────────────────────
+class AdminFieldDef {
+  final IconData icon;
+  final String label;
+  final String key;
+  final String fallback;
+
+  const AdminFieldDef({
+    required this.icon,
+    required this.label,
+    required this.key,
+    this.fallback = '—',
+  });
+}
+
+// ─────────────────────────────────────────────
+// شاشة قائمة الإحصائية (عامة وقابلة لإعادة الاستخدام)
+// ─────────────────────────────────────────────
+class AdminStatsDetailScreen extends StatelessWidget {
+  final String title;
+  final String emptyMessage;
+  final Stream<QuerySnapshot> stream;
+  final Color accentColor;
+
+  /// المفتاح الذي تُستخرج منه قيمة العنوان الرئيسي للبطاقة
+  final String titleKey;
+
+  /// مفتاح ثانوي (اختياري) يُعرض أسفل العنوان مباشرةً
+  final String? subtitleKey;
+
+  /// الحقول التفصيلية المعروضة كصفوف داخل كل بطاقة
+  final List<AdminFieldDef> fields;
+
+  const AdminStatsDetailScreen({
+    super.key,
+    required this.title,
+    required this.stream,
+    required this.titleKey,
+    this.subtitleKey,
+    this.fields = const [],
+    this.emptyMessage = 'لا توجد سجلات حالياً',
+    this.accentColor = AppColors.primary,
+  });
+
+  // ── تحويل آمن لأي قيمة Firestore إلى نص مقروء ──
+  String _display(dynamic raw, String fallback) {
+    if (raw == null) return fallback;
+    if (raw is Timestamp) {
+      final dt = raw.toDate().toLocal();
+      final d = dt.day.toString().padLeft(2, '0');
+      final m = dt.month.toString().padLeft(2, '0');
+      final y = dt.year;
+      final h = dt.hour.toString().padLeft(2, '0');
+      final min = dt.minute.toString().padLeft(2, '0');
+      return '$d/$m/$y  $h:$min';
+    }
+    final s = raw.toString().trim();
+    return s.isEmpty ? fallback : s;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: stream,
+        builder: (context, snapshot) {
+          // ── خطأ ──
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline_rounded,
+                        size: 52, color: AppColors.danger),
+                    const SizedBox(height: 12),
+                    const Text('حدث خطأ أثناء التحميل',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textDark,
+                            fontSize: 16)),
+                    const SizedBox(height: 6),
+                    Text(
+                      snapshot.error.toString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: AppColors.textLight, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // ── تحميل ──
+          if (!snapshot.hasData) {
+            return Center(
+              child: CircularProgressIndicator(color: accentColor),
+            );
+          }
+
+          // ── فرز client-side بالأحدث أولاً ──
+          final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs)
+            ..sort((a, b) {
+              final aRaw =
+                  (a.data() as Map<String, dynamic>)['createdAt'];
+              final bRaw =
+                  (b.data() as Map<String, dynamic>)['createdAt'];
+              final aTs = aRaw is Timestamp ? aRaw : null;
+              final bTs = bRaw is Timestamp ? bRaw : null;
+              if (aTs == null && bTs == null) return 0;
+              if (aTs == null) return 1;
+              if (bTs == null) return -1;
+              return bTs.compareTo(aTs);
+            });
+
+          // ── فارغ ──
+          if (docs.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inbox_rounded,
+                        size: 64,
+                        color: accentColor.withValues(alpha: 0.25)),
+                    const SizedBox(height: 16),
+                    Text(
+                      emptyMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: AppColors.textLight,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'ستظهر السجلات هنا فور إضافتها',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: AppColors.textLight,
+                          fontSize: 13,
+                          height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // ── القائمة ──
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            itemCount: docs.length,
+            itemBuilder: (context, i) {
+              try {
+                final doc = docs[i];
+                final d = doc.data() as Map<String, dynamic>;
+                final titleVal = _display(d[titleKey], '—');
+                final subtitleVal =
+                    subtitleKey != null ? _display(d[subtitleKey!], '') : null;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: AppColors.border),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── رأس البطاقة ──
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundColor:
+                                  accentColor.withValues(alpha: 0.12),
+                              child: Text(
+                                titleVal.isNotEmpty
+                                    ? titleVal[0].toUpperCase()
+                                    : '؟',
+                                style: TextStyle(
+                                    color: accentColor,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    titleVal,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: AppColors.textDark),
+                                  ),
+                                  if (subtitleVal != null &&
+                                      subtitleVal.isNotEmpty)
+                                    Text(
+                                      subtitleVal,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textLight),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // ── الحقول التفصيلية ──
+                        if (fields.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          const Divider(height: 1, color: AppColors.border),
+                          const SizedBox(height: 10),
+                          for (final f in fields) ...[
+                            _FieldRow(
+                              icon: f.icon,
+                              label: f.label,
+                              value: _display(d[f.key], f.fallback),
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              } catch (_) {
+                return const SizedBox.shrink();
+              }
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// صف حقل واحد داخل بطاقة الإحصائية
+// ─────────────────────────────────────────────
+class _FieldRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _FieldRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: AppColors.textLight),
+          const SizedBox(width: 6),
+          Text(
+            '$label: ',
+            style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textLight,
+                fontWeight: FontWeight.w500),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, color: AppColors.textDark),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

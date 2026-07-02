@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 import 'package:zad_app/services/location_service.dart';
+import '../common/location_picker_screen.dart';
 import 'package:zad_app/services/notification_service.dart';
 import 'package:zad_app/theme/app_colors.dart';
 import 'package:zad_app/theme/app_constants.dart';
@@ -41,7 +42,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   // ── إحداثيات مكان الاستلام ──
   double? _latitude;
   double? _longitude;
-  bool _fetchingLocation = false;
+  String _locationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -94,45 +95,27 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     }
   }
 
-  // ── جلب الموقع الحالي وعكس ترميزه لاسم منطقة ──
-  Future<void> _fetchLocation() async {
-    setState(() => _fetchingLocation = true);
-    final svc = LocationService();
-    final position = await svc.getCurrentLocation();
-    if (!mounted) return;
-
-    if (position == null) {
-      setState(() => _fetchingLocation = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذّر الحصول على الموقع — تحقق من صلاحيات GPS'),
-          backgroundColor: AppColors.danger,
+  // ── فتح شاشة اختيار الموقع على خريطة OpenStreetMap ──
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLatitude: _latitude,
+          initialLongitude: _longitude,
+          initialAddress: _pickupController.text.trim().isNotEmpty
+              ? _pickupController.text.trim()
+              : null,
         ),
-      );
-      return;
-    }
-
-    final address = await svc.getAddressFromCoordinates(
-      position.latitude,
-      position.longitude,
+      ),
     );
-    if (!mounted) return;
-
+    if (result == null || !mounted) return;
     setState(() {
-      _latitude = position.latitude;
-      _longitude = position.longitude;
-      _fetchingLocation = false;
-      if (address.isNotEmpty && _pickupController.text.trim().isEmpty) {
-        _pickupController.text = address;
-      }
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _pickupController.text = result.address;
+      _locationSource = result.locationSource;
     });
-
-    final msg = address.isNotEmpty
-        ? 'تم تحديد الموقع ✅'
-        : 'تم تحديد الموقع ✅ — يرجى كتابة اسم المنطقة يدوياً';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppColors.success),
-    );
   }
 
   @override
@@ -300,7 +283,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         'latitude': _latitude,
         'longitude': _longitude,
         'hasLocation': _latitude != null && _longitude != null,
-        'locationSource': _latitude != null ? 'gps' : 'manual',
+        'locationSource': _latitude != null ? _locationSource : 'manual',
         'allergyInfo': allergyInfo,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -331,6 +314,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         _isMysteryPackage = false;
         _latitude = null;
         _longitude = null;
+        _locationSource = 'manual';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -507,9 +491,9 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // 6 ── تحديد موقع الاستلام (GPS) ──
+                  // 6 ── تحديد موقع الاستلام على الخريطة ──
                   GestureDetector(
-                    onTap: _fetchingLocation ? null : _fetchLocation,
+                    onTap: _openLocationPicker,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 12),
@@ -526,29 +510,21 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                       ),
                       child: Row(
                         children: [
-                          _fetchingLocation
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.primary),
-                                )
-                              : Icon(
-                                  _latitude != null
-                                      ? Icons.my_location_rounded
-                                      : Icons.location_searching_rounded,
-                                  color: _latitude != null
-                                      ? AppColors.success
-                                      : AppColors.primary,
-                                  size: 20,
-                                ),
+                          Icon(
+                            _latitude != null
+                                ? Icons.my_location_rounded
+                                : Icons.map_outlined,
+                            color: _latitude != null
+                                ? AppColors.success
+                                : AppColors.primary,
+                            size: 20,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               _latitude != null
                                   ? 'تم تحديد الموقع ✓ (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})'
-                                  : 'تحديد موقع الاستلام ',
+                                  : 'تحديد موقع الاستلام على الخريطة',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: _latitude != null
@@ -563,6 +539,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                               onTap: () => setState(() {
                                 _latitude = null;
                                 _longitude = null;
+                                _locationSource = 'manual';
                               }),
                               child: const Icon(Icons.close_rounded,
                                   size: 16, color: AppColors.textLight),

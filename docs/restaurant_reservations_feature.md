@@ -2583,3 +2583,858 @@ Previously any `FilePicker` failure (permission denial, plugin error, bytes == n
 flutter analyze lib/screens/auth/signup_screen.dart
 No issues found!
 ```
+
+---
+
+## Unified User Donation Entry Point (2026-06-27)
+
+### Problem
+
+The app had two code paths that let users publish food surplus:
+
+| Entry point | Old destination |
+|-------------|----------------|
+| Home screen ActionTile "نشر عرض طعام" | `UserPublishOfferScreen` (separate form, manual identity pre-check) |
+| Profile screen MenuTile "نشر عرض طعام" | `UserPublishOfferScreen` (separate form, manual identity pre-check) |
+| Browse → Donate tab | `DonateTab` (red-header screen, identity check built-in) |
+
+Users navigating from home/profile reached a different, older screen instead of the approved donation flow with the red header.
+
+### Old Behavior
+
+Both the home ActionTile and the profile MenuTile called an async method that:
+1. Checked identity in the `individuals` Firestore collection
+2. Pushed `IdentityVerificationScreen` if not verified
+3. Pushed `UserPublishOfferScreen` if verified
+
+This duplicated the identity logic that already lives inside `DonateTab._donateFood()`.
+
+### New Unified Behavior
+
+| Entry point | New destination |
+|-------------|----------------|
+| Home screen ActionTile "نشر عرض طعام" | `DonateTab` (browse sub-tab index 2) via `onBrowseTab(2)` |
+| Profile screen MenuTile "نشر عرض طعام" | `DonateTab` via `onGoToDonate` callback → `_goToBrowseTab(2)` |
+| Browse → Donate tab | `DonateTab` (unchanged) |
+
+`DonateTab._donateFood()` already handles: anonymous-user guard, identity verification check, and navigation to `IdentityVerificationScreen` when needed. No duplicate logic.
+
+### Screens Updated
+
+| File | Change |
+|------|--------|
+| `user_home_screen.dart` | Removed `_openPublishScreen()` method; ActionTile `onTap` changed to `onBrowseTab(2)`; removed unused imports (`firebase_auth`, `identity_verification_screen`, `user_publish_offer_screen`, `user_orders_screen`); fixed `withOpacity` |
+| `user_profile_screen.dart` | Added `VoidCallback? onGoToDonate` parameter; replaced 20-line async identity-check block with `widget.onGoToDonate?.call()`; removed unused imports (`identity_verification_screen`, `user_publish_offer_screen`); fixed `withOpacity` |
+| `user_dashboard.dart` | Passes `onGoToDonate: () => _goToBrowseTab(2)` to `UserProfileScreen` |
+
+`UserPublishOfferScreen` file is not deleted — it may still be used by other flows or tests.
+
+### Validation Results
+
+| Test | Expected |
+|------|----------|
+| Home screen → "نشر عرض طعام" | Bottom nav switches to Browse, Donate sub-tab selected |
+| Profile screen → "نشر عرض طعام" | Same: Donate tab shown |
+| Anonymous user taps donate | DonateTab shows "يجب تسجيل الدخول أولاً للتبرع" on submit |
+| Unverified user taps donate | DonateTab navigates to `IdentityVerificationScreen` on submit |
+| Browse → Donate tab directly | Unchanged |
+
+```
+flutter analyze lib/screens/user/user_home_screen.dart
+               lib/screens/user/user_profile_screen.dart
+               lib/screens/user/user_dashboard.dart
+No issues found!
+```
+
+---
+
+## OpenStreetMap Location Picker (2026-06-30)
+
+### Purpose
+
+Replace the basic "tap-to-fetch-GPS" location button with a professional map-based picker, similar to food delivery apps: see your position on a real map, drag to fine-tune the exact pickup point, and confirm before saving.
+
+### Technologies Used
+
+| Package | Role |
+|---------|------|
+| `geolocator` (existing) | Current GPS coordinates + permission handling |
+| `flutter_map: ^8.3.0` (new) | Renders the OpenStreetMap tile layer and handles pan/zoom |
+| `latlong2: ^0.9.1` (new) | `LatLng` coordinate type used by `flutter_map` |
+| `http` (existing) | Nominatim reverse-geocoding requests |
+| Nominatim / OpenStreetMap (existing `LocationService.getAddressFromCoordinates`) | Converts coordinates to a readable Arabic/local address |
+
+No Google Maps API key or billing account required — OSM tiles and Nominatim are free.
+
+### Location Flow
+
+```
+User taps the location field/button
+  → LocationPickerScreen opens
+      → if initial coordinates given (editing): map centers there
+      → else: auto-attempts GPS via LocationService.getCurrentLocation()
+            → success: map centers on GPS position, reverse-geocodes address
+            → failure: map stays on default center (Ramallah), user can pan manually
+  → user can:
+      • drag the map (pin stays fixed at screen center — standard delivery-app UX)
+      • tap "استخدام موقعي الحالي" to re-center on GPS at any time
+      • edit the address text field manually
+  → on drag-end (700ms debounce), Nominatim reverse-geocodes the new center
+  → user taps "تأكيد الموقع"
+      → returns LocationPickerResult(latitude, longitude, address, locationSource)
+  → calling screen updates its lat/lng/address state and Firestore write
+```
+
+`locationSource` is `'gps'` if the final position came from the auto/manual GPS button without further dragging, or `'map'` if the user panned the map (last gesture wins).
+
+### Firestore Fields
+
+All four integrated screens write the same fields as before, with `locationSource` now reflecting `'gps' | 'map' | 'manual'`:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `latitude` / `longitude` | double? | null only when entered manually with no coordinates |
+| `pickupLocation` (offers/donations) or `address` (users) | String | always non-empty where required |
+| `hasLocation` | bool | true only when coordinates exist |
+| `locationSource` | String | `'gps'`, `'map'`, or `'manual'` |
+
+### Manual Fallback
+
+If Nominatim cannot resolve an address for the dropped pin, the bottom panel shows: `"تعذر تحديد اسم الموقع، يرجى إدخال العنوان يدوياً."` — the text field remains editable and the coordinates are still captured. Existing required-location validation in each screen (block publish if both pickup text and coordinates are empty) is unchanged.
+
+### Screens Updated
+
+| File | Change |
+|------|--------|
+| `lib/screens/common/location_picker_screen.dart` | **New** — reusable `LocationPickerScreen` + `LocationPickerResult` |
+| `lib/screens/restaurant/add_offer_screen.dart` | GPS button → `_openLocationPicker()`; added `_locationSource` state |
+| `lib/screens/charity/charity_publish_surplus_screen.dart` | Same pattern |
+| `lib/screens/user/user_publish_offer_screen.dart` | Replaced legacy `geocoding`-package implementation with the picker; removed `geocoding` import |
+| `lib/screens/auth/signup_screen.dart` | Address field's GPS icon button → opens picker |
+| `lib/services/auth_service.dart` | `registerUser()` accepts optional `locationSource` |
+| `lib/services/user_offer_service.dart` | `publishIndividualOffer()` accepts optional `locationSource` |
+| `pubspec.yaml` | Added `flutter_map: ^8.3.0`, `latlong2: ^0.9.1` |
+
+`EditOfferScreen` was not touched — it has no GPS capability (manual pickup-location text only), consistent with prior sessions.
+
+### Backward Compatibility
+
+Old Firestore documents without `locationSource` (or without `latitude`/`longitude` at all) continue to display normally — every screen that reads these fields already null-safely defaults (`?? ''`, `as String?`, etc.) from earlier work in this project; no reads were changed in this task, only writes.
+
+### Testing Results
+
+| Test | Result |
+|------|--------|
+| Open picker with GPS permission granted | Map auto-centers on current position; address auto-filled |
+| Drag map to a new spot, wait ~1s | Pin stays centered; address field updates to new location |
+| Tap "استخدام موقعي الحالي" after dragging | Re-centers on GPS, overwrites manual pin position |
+| Edit address text manually after pick | Manual edit preserved; not overwritten by further geocoding |
+| GPS permission denied | SnackBar: "تعذّر الحصول على الموقع — تحقق من صلاحيات GPS"; map stays at default Ramallah center, fully usable by dragging |
+| Confirm with unclear address | Falls back to "موقع محدد على الخريطة"; coordinates still saved |
+| Existing add/charity/individual offer screens | Same validation, same Firestore field names, only the picker UI changed |
+| `flutter analyze` | 0 issues across all 7 changed/created files (109 pre-existing issues elsewhere in the codebase are unrelated and untouched) |
+
+---
+
+## Unified Pickup Location Selection (2026-06-30)
+
+### Problem
+
+`AddOfferScreen`, `CharityPublishSurplusScreen`, and `UserPublishOfferScreen` were already wired to the new `LocationPickerScreen` (see "OpenStreetMap Location Picker" above). `DonateTab`, however, still had only a bare manual `TextField` for "مكان الاستلام" — no GPS button, no map picker, no coordinates captured at all for user-to-charity donations.
+
+### Shared `LocationPickerScreen`
+
+No changes were needed to `lib/screens/common/location_picker_screen.dart` itself — it was designed to be reusable from the start (`initialLatitude`/`initialLongitude`/`initialAddress` in, `LocationPickerResult` out). This task only had to **connect** `DonateTab` to it, following the exact same integration pattern already used in the other three screens.
+
+### Screens Updated
+
+| Screen | Status before this task | Change |
+|--------|--------------------------|--------|
+| `AddOfferScreen` | Already wired | No change |
+| `UserPublishOfferScreen` | Already wired | No change |
+| `CharityPublishSurplusScreen` | Already wired | No change |
+| `DonateTab` | **Manual text field only** | Added `_latitude`/`_longitude`/`_locationSource` state, `_openLocationPicker()`, picker button under the location field, updated Firestore write |
+
+**`donate_tab.dart` changes:**
+- Added `import '../common/location_picker_screen.dart'`
+- Added state: `double? _latitude`, `double? _longitude`, `String _locationSource = 'manual'`
+- Added `_openLocationPicker()` — identical pattern to the other three screens: pushes `LocationPickerScreen` with current text/coordinates pre-filled, applies the returned `LocationPickerResult` to local state only when the user explicitly confirms
+- Added a "تحديد الموقع على الخريطة" button below the manual address `TextField`, styled identically to the buttons in `AddOfferScreen`/`CharityPublishSurplusScreen`/`UserPublishOfferScreen`
+- Reset `_latitude`/`_longitude`/`_locationSource` alongside the other fields after a successful donation submit
+
+### Firestore Fields
+
+The `donations` collection already had a `location` field (String) read by `CharityDonationsScreen`, `CharityPublishSurplusScreen` (display and redistribution-form prefill). To avoid breaking those readers, the donation write is now **additive**:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `location` | String | **Kept unchanged** — existing readers still work |
+| `pickupLocation` | String | **New** — mirrors `location`, aligns with the `offers` collection's field name for consistency |
+| `latitude` / `longitude` | double? | New — null when entered manually |
+| `hasLocation` | bool | New — `true` only when coordinates exist |
+| `locationSource` | String | New — `'gps'`, `'map'`, or `'manual'` |
+
+### Manual Fallback
+
+Unchanged from the existing pattern: typing an address with no map interaction is fully supported. `latitude`/`longitude` stay `null`, `hasLocation: false`, `locationSource: 'manual'`. The picker is never opened automatically — only on explicit button tap — so a manually typed address is never silently overwritten.
+
+### Validation Results
+
+| Screen | Rule |
+|--------|------|
+| `DonateTab` | Blocks only when `_locationController.text.trim().isEmpty` — unchanged from before this task |
+| `AddOfferScreen` / `CharityPublishSurplusScreen` / `UserPublishOfferScreen` | Block only when **both** the text field and coordinates are empty — text non-empty (manual or map-derived) always allows publishing |
+
+### Backward Compatibility
+
+Old donation documents without `pickupLocation`/`latitude`/`longitude`/`hasLocation`/`locationSource` continue to display normally — `CharityDonationsScreen` and `CharityPublishSurplusScreen` still read the original `location` field, which is always written alongside the new fields.
+
+### Testing Results
+
+| Test | Result |
+|------|--------|
+| Restaurant `AddOfferScreen` → map picker → confirm | Field auto-fills; `latitude`/`longitude`/`locationSource` saved |
+| `UserPublishOfferScreen` → same flow | Same result |
+| `DonateTab` → tap "تحديد الموقع على الخريطة" → confirm | Field auto-fills; `pickupLocation`, `latitude`, `longitude`, `hasLocation: true`, `locationSource` saved alongside legacy `location` field |
+| `CharityPublishSurplusScreen` → same flow | Same result |
+| Manual address only (no map) | Donation/offer publishes; `hasLocation: false`, `locationSource: 'manual'` |
+| Empty address field | Blocked with existing Arabic validation message in all four screens |
+| Old donations without `locationSource` | Display correctly in `CharityDonationsScreen` — no crash, no missing-field errors |
+| `flutter analyze` | 0 issues across all 8 related files (`donate_tab.dart`, `add_offer_screen.dart`, `charity_publish_surplus_screen.dart`, `user_publish_offer_screen.dart`, `signup_screen.dart`, `location_picker_screen.dart`, `auth_service.dart`, `user_offer_service.dart`) |
+
+---
+
+## User-to-Charity Donation Approval Flow
+
+### Feature Name
+تدفق الموافقة على تبرع المستخدم للجمعية — User-to-Charity Donation Approval Flow
+
+### Purpose
+Adds image upload, pickup time windows, and a full approval/rejection lifecycle to the user food-donation form. Charity reviewers see only donations directed to them (or undirected), can approve or reject with real-time notification to the donor.
+
+### Actors
+- **User (individual)** — submits a food donation
+- **Charity** — reviews and approves/rejects incoming donations
+
+---
+
+### Firestore `donations` Collection — Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `donationId` | String | Auto-set to the Firestore document ID after creation |
+| `donorUserId` | String | UID of the donating user (also written as `userId` for backward compat) |
+| `donorName` | String | Display name of the donor (also `userName`) |
+| `charityId` | String | UID of the target charity (empty if undirected; also `targetCharityId`) |
+| `charityName` | String | Name of the target charity (also `targetCharityName`) |
+| `title` | String | Donation title (also written as `foodName` for backward compat) |
+| `description` | String | Optional free-text description |
+| `category` | String | Food category chip selection |
+| `imageUrl` | String | Cloudinary `secure_url` — required field |
+| `pickupLocation` | String | Human-readable pickup address (also `location`) |
+| `latitude` | double? | Coordinate from LocationPickerScreen |
+| `longitude` | double? | Coordinate from LocationPickerScreen |
+| `hasLocation` | bool | `true` when lat/lng present |
+| `locationSource` | String | `'gps'`, `'map'`, or `'manual'` |
+| `pickupStartTime` | String | Start time as `"HH:MM"` |
+| `pickupEndTime` | String | End time as `"HH:MM"` |
+| `pickupTime` | String | Combined `"HH:MM - HH:MM"` for display |
+| `status` | String | `pending` → `approved` / `rejected` → `redistributed` |
+| `isDirectedToCharity` | bool | `true` when a specific charity is chosen |
+| `reviewedAt` | Timestamp? | When charity approved/rejected |
+| `reviewedBy` | String? | UID of the reviewing charity user |
+| `createdAt` | Timestamp | Firestore server timestamp |
+| `updatedAt` | Timestamp | Updated on every status change |
+
+**Backward-compat fields always written** (old charity screens read these):
+`userId`, `userName`, `nationalId`, `foodName`, `quantity`, `location`, `notes`, `expiryDate`, `acceptedResponsibility`, `responsibilityAcceptedAt`, `targetCharityId`, `targetCharityName`
+
+---
+
+### Screens Updated
+
+| File | Change |
+|------|--------|
+| `lib/screens/user/donate_tab.dart` | Image picker (Cloudinary upload), description field, pickup start/end time pickers, updated Firestore write, charity notification on submit, `_resetForm()` helper, `_notifyCharity()` helper |
+| `lib/screens/charity/charity_donations_screen.dart` | 3-tab layout (pending / approved / rejected), client-side charity filter for pending tab, image display in card, donor name, pickup time row, `reviewedAt`/`reviewedBy` in status update, `withOpacity` → `withValues(alpha:)` |
+
+---
+
+### Validation Rules (User Form)
+
+| Field | Rule |
+|-------|------|
+| Image | Required — blocks submit with SnackBar "يرجى إضافة صورة للتبرع" |
+| Food name | Required — "يرجى إدخال اسم الطعام" |
+| Pickup location | Either text field or map pin required — "يرجى تحديد مكان الاستلام" |
+| Pickup start time | Required — "يرجى تحديد وقت بداية الاستلام" |
+| Pickup end time | Required — "يرجى تحديد وقت نهاية الاستلام" |
+| Responsibility | Checkbox must be ticked |
+| Identity verification | Firestore `identityVerificationStatus == 'approved'` (checked async after sync validation) |
+
+---
+
+### Charity-Side Filtering
+
+The `pending` tab filters client-side after the Firestore query:
+
+```dart
+// Show donation if: undirected OR directed to this charity
+docs.where((doc) {
+  final isDirected = data['isDirectedToCharity'] as bool? ?? false;
+  if (!isDirected) return true;
+  return targetCharityId == currentCharityId || charityId == currentCharityId;
+})
+```
+
+This means a donor who targets Charity A will have their donation invisible to Charity B. Undirected donations are visible to all charities.
+
+---
+
+### Notification Flow
+
+| Event | Recipient | Title |
+|-------|-----------|-------|
+| User submits donation (directed) | Target charity | "تبرع طعام جديد" |
+| User submits donation (undirected) | All approved charities (bulk) | "تبرع طعام جديد" |
+| Charity approves | Donor user | "تم قبول تبرعك ✅" |
+| Charity rejects | Donor user | "تم رفض التبرع" |
+| Charity marks redistributed | Donor user | "تم توزيع تبرعك ❤️" |
+
+Implemented via `NotificationService.sendNotification()` and `sendBulkNotification()` (existing service, no changes needed).
+
+---
+
+### Backward Compatibility
+
+Old `donations` documents (without `imageUrl`, `pickupStartTime`, `pickupEndTime`, `donorUserId`, `title`) display correctly:
+- `charity_donations_screen.dart` reads `foodName ?? title ?? 'تبرع طعام'`
+- `location` field always present in old records; new records also write `pickupLocation`
+- `imageUrl` absent → card renders without the image header
+- `pickupTime` absent → pickup row hidden
+
+No migration needed.
+
+---
+
+### Testing Steps
+
+| Step | Expected |
+|------|----------|
+| User opens DonateTab → taps submit without image | SnackBar "يرجى إضافة صورة للتبرع" |
+| User fills image but skips location | SnackBar "يرجى تحديد مكان الاستلام" |
+| User skips pickup start time | SnackBar "يرجى تحديد وقت بداية الاستلام" |
+| User completes all fields → submits | Cloudinary upload → Firestore doc created → charity notified → success SnackBar |
+| Directed donation: open CharityDonationsScreen as target charity | Donation appears in "بانتظار المراجعة" tab |
+| Same donation: open screen as different charity | Donation does NOT appear |
+| Charity taps "قبول" | `status = 'approved'`, `reviewedAt`/`reviewedBy` set, donor receives "تم قبول تبرعك ✅" notification |
+| Charity taps "رفض" | `status = 'rejected'`, donor receives "تم رفض التبرع" notification |
+| Approved donation visible in "مقبولة" tab | Shows with image + pickup time |
+| Charity taps "تأكيد إعادة التوزيع" | `status = 'redistributed'`, donor notified |
+| Old donation record (no imageUrl) loads in charity screen | No crash, card renders without image |
+| `flutter analyze` on both files | 0 issues |
+
+---
+
+## Approval-Gated Organization Access
+
+### Feature Name
+بوابة الموافقة للمطاعم والجمعيات — Approval-Gated Organization Access
+
+### Purpose
+Blocks restaurant and charity accounts from accessing their dashboards until an admin approves their verification documents. Rejected accounts see the rejection reason. Normal (individual) users are unaffected. Old legacy accounts without a `verificationStatus` field fall back to the `isApproved` boolean and never crash.
+
+### Actors
+- **Restaurant / Charity** — attempts login
+- **Admin** — approves or rejects from `AdminVerificationPanel`
+
+---
+
+### Login Flow Changes
+
+Decision logic in `AuthService.login()` (replaces the old `isApproved` boolean check):
+
+```
+if role == restaurant OR charity:
+  vs = data['verificationStatus']          // may be null for legacy accounts
+
+  effectivelyApproved =
+    vs == 'approved'   → true
+    vs == 'rejected'   → false
+    vs == 'pending'    → false
+    vs == null (legacy)→ use isApproved boolean
+
+  if NOT effectivelyApproved:
+    if vs == 'rejected':
+      throw 'REJECTED:تم رفض طلب تسجيل حساب {role}. السبب: {reason}'
+    else:
+      throw 'PENDING:حساب {role} بانتظار موافقة الإدارة.'
+```
+
+The `PENDING:` / `REJECTED:` prefix is parsed in `LoginScreen._handleLogin()`:
+
+```dart
+if (raw.startsWith('PENDING:'))  → _blockType = _BlockType.pending
+if (raw.startsWith('REJECTED:')) → _blockType = _BlockType.rejected
+else                             → _blockType = _BlockType.none
+```
+
+---
+
+### Screens / Files Changed
+
+| File | Change |
+|------|--------|
+| `lib/services/auth_service.dart` | Replaced `isApproved` boolean gate with `verificationStatus`-aware logic; throws `PENDING:` / `REJECTED:` prefixed exceptions |
+| `lib/screens/auth/login_screen.dart` | Added `_BlockType` enum, `_blockType` state, prefix-parsing in `_handleLogin`, `_PendingBox` and `_RejectedBox` widgets |
+| `lib/screens/admin/admin_verification_panel.dart` | No changes — already saves all required fields |
+
+---
+
+### Admin Verification Fields (already implemented, confirmed)
+
+When admin approves via `AdminVerificationPanel._approve()`:
+- `verificationStatus: 'approved'`
+- `isApproved: true`
+- `verificationReviewedBy: adminUid`
+- `verificationReviewedAt: serverTimestamp()`
+- `rejectionReason: null`
+- Notification sent: "تم قبول حسابك ✅"
+
+When admin rejects via `AdminVerificationPanel._reject()`:
+- `verificationStatus: 'rejected'`
+- `isApproved: false`
+- `verificationReviewedBy: adminUid`
+- `verificationReviewedAt: serverTimestamp()`
+- `rejectionReason: <reason text>`
+- Notification sent: "طلبك مرفوض — السبب: ..."
+
+---
+
+### UI Behavior at Login
+
+| State | Widget | Color | Icon |
+|-------|--------|-------|------|
+| Generic error | `_ErrorBox` | Red (#FFF1F2) | `error_outline` |
+| Account pending | `_PendingBox` | Amber (#FFFBEB) | `schedule` (clock) |
+| Account rejected | `_RejectedBox` | Red (#FFF1F2) | `cancel` |
+
+**Pending box** shows:
+- Title: "بانتظار الموافقة"
+- Body: the thrown message
+- Footer note: "ستصلك إشعاراً فور مراجعة طلبك من قِبَل الإدارة."
+
+**Rejected box** shows:
+- Title: "تم رفض الطلب"
+- Body: "تم رفض طلب تسجيل حساب {role}. السبب: {reason}"
+- Footer note: "يمكنك التواصل مع الإدارة أو إنشاء حساب جديد بمعلومات صحيحة."
+
+---
+
+### Legacy Account Handling
+
+Old restaurant/charity accounts created before the verification system (no `verificationStatus` field in Firestore) are handled safely:
+- If `isApproved == true` → login succeeds (legacy approved account)
+- If `isApproved == false` → treated as pending, blocked with orange box
+- No null-dereference or crash possible — all reads use `as String?` with `?? ''` fallbacks
+
+---
+
+### Testing Steps
+
+| Test | Expected |
+|------|----------|
+| Pending restaurant logs in | Orange "بانتظار الموافقة" box shown; no dashboard access |
+| Pending charity logs in | Orange "بانتظار الموافقة" box shown; no dashboard access |
+| Rejected restaurant logs in | Red "تم رفض الطلب" box with rejection reason; no dashboard access |
+| Rejected charity logs in | Red "تم رفض الطلب" box with rejection reason; no dashboard access |
+| Approved restaurant logs in | Restaurant dashboard opens normally |
+| Approved charity logs in | Charity dashboard opens normally |
+| Individual user logs in | User dashboard opens normally (no verification check) |
+| Admin logs in | Admin dashboard opens normally |
+| Guest continues | User dashboard opens (anonymous, no verification) |
+| Legacy account (no verificationStatus, isApproved=true) | Login succeeds |
+| Legacy account (no verificationStatus, isApproved=false) | Blocked with pending box |
+| Admin approves restaurant in panel | `verificationStatus='approved'`, `isApproved=true`, notification sent |
+| Admin rejects charity with reason in panel | `verificationStatus='rejected'`, `rejectionReason` saved, notification sent |
+| `flutter analyze` on auth_service + login_screen + admin_verification_panel | 0 issues |
+
+---
+
+## Restaurant Reservations Display Fix (2026-07-01)
+
+### Problem
+
+The restaurant reservations screen showed empty tabs even when reservations existed for the restaurant's offers.
+
+### Root Causes
+
+#### 1 — Missing Firestore Composite Index (Primary)
+
+The stream query combined `.where('providerUserId', ...)` with `.orderBy('createdAt', descending: true)`. Firestore requires a composite index for this combination. Without the index, the stream immediately emits an error and the UI displays `_ErrorState` instead of tabs. Because no `firestore.indexes.json` existed in the project, this index was never created.
+
+**Fix:** Removed `.orderBy('createdAt', descending: true)` from the Firestore query entirely. Results are now sorted client-side in the `StreamBuilder` using `Timestamp.compareTo()`. This eliminates the composite-index requirement with no behavior change visible to the user.
+
+```dart
+// Before (requires composite index — fails without firestore.indexes.json):
+FirebaseFirestore.instance
+    .collection('reservations')
+    .where('providerUserId', isEqualTo: _uid)
+    .orderBy('createdAt', descending: true)
+
+// After (single-field filter — no composite index needed):
+FirebaseFirestore.instance
+    .collection('reservations')
+    .where('providerUserId', isEqualTo: _uid)
+// Sorted client-side: all.sort((a, b) => bTs.compareTo(aTs))
+```
+
+#### 2 — `reservationCode` Not Displayed on Restaurant Card
+
+`ReservationService.reserveOffer()` writes `reservationCode` (e.g. `ZAD-20260701-ABC123`) to the reservation document. The user-facing `UserOrdersScreen` already showed it. The restaurant card in `_ReservationCard._buildCard()` did not read or display it.
+
+**Fix:** Added `reservationCode` extraction (fallback chain: `reservationCode` → `reservationId` → `doc.id`) and a new `OfferInfoRow` row in the restaurant card.
+
+#### 3 — `confirmed` Status Not Handled
+
+The status-to-tab mapping only covered `reserved`, `picked_up`, and `cancelled`. If a `confirmed` status is written (e.g. by a future flow or a manual admin update), it would fall through to the default case and be invisible in all filtered tabs.
+
+**Fix:** Added `confirmed` as an alias for `reserved` throughout: `_statusLabel`, `_statusColor`, the "بانتظار الاستلام" tab filter, and the `onConfirm` button visibility check.
+
+#### 4 — `withOpacity` Deprecated in `scan_qr_screen.dart`
+
+Four occurrences of `.withOpacity(x)` remained in `scan_qr_screen.dart`.
+
+**Fix:** All replaced with `.withValues(alpha: x)`.
+
+---
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `lib/screens/restaurant/restaurant_reservations_screen.dart` | Removed `orderBy` from query; client-side sort; `confirmed` status support; `reservationCode` card row; tab labels updated |
+| `lib/screens/restaurant/scan_qr_screen.dart` | 4× `withOpacity` → `withValues(alpha:)` |
+
+---
+
+### Firestore Fields — Reservation Document (Confirmed)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `providerUserId` | String | Restaurant UID — used as the Firestore `where` filter |
+| `status` | String | `reserved` / `confirmed` / `picked_up` / `cancelled` |
+| `offerId` | String | ID of the reserved offer |
+| `offerTitle` | String | Display name of the offer |
+| `userName` | String | Name of the user who reserved |
+| `userId` | String | UID of the user — used for notifications |
+| `quantity` | num | Number of units reserved (fallback: 1) |
+| `pickupTime` | String | Pickup time window copied from offer |
+| `pickupLocation` | String | Pickup address copied from offer |
+| `createdAt` | Timestamp | Reservation creation time — sorted client-side |
+| `reservationCode` | String | Human-readable code e.g. `ZAD-20260701-ABC123` |
+| `reservationId` | String | Firestore doc ID (written as a field for QR use) |
+
+---
+
+### Status → Tab Mapping
+
+| Status value | Tab shown |
+|---|---|
+| `reserved` | بانتظار الاستلام |
+| `confirmed` | بانتظار الاستلام (treated as alias for reserved) |
+| `picked_up` | مكتملة |
+| `cancelled` | ملغاة |
+
+Tab label changes in this fix:
+- `تم الاستلام` → `مكتملة`
+- `ملغي` → `ملغاة`
+
+---
+
+### Testing Steps
+
+| Test | Expected |
+|------|----------|
+| User reserves offer | Reservation appears in restaurant's "بانتظار الاستلام" tab |
+| Restaurant taps "تأكيد يدوياً" | Reservation moves to "مكتملة" tab; user receives notification |
+| User cancels reservation | Reservation moves to "ملغاة" tab |
+| Restaurant scans QR | `status` → `picked_up`; card moves to "مكتملة" tab |
+| Old reservation without `reservationCode` | Card shows `reservationId` (or `doc.id`) as fallback — no crash |
+| Old reservation without `quantity` field | Quantity displays as `1` — no crash |
+| Old reservation without `pickupTime` | `pickupTime` row hidden — no crash |
+| `flutter analyze` on both modified files | 0 errors |
+
+---
+
+## Admin Statistics Navigation Fix (2026-07-01)
+
+### Problem
+
+Stat cards on the admin home screen displayed counts but had no `onTap` handler — tapping them did nothing. Several important stat categories (restaurants, charities, all reservations, support chats, ratings) were not shown at all.
+
+### Root Cause
+
+`StatCard` in `admin_widgets.dart` was a plain `Container` with no `onTap` parameter. `AdminHomeScreen` never wired navigation to any card.
+
+---
+
+### Changes Made
+
+#### `lib/screens/admin/admin_widgets.dart`
+
+- Added `onTap: VoidCallback?` parameter to `StatCard`
+- When `onTap != null` the card is wrapped in `GestureDetector`; an accent-colored border and a small `arrow_forward_ios` icon appear to signal interactivity
+- Fixed all `withOpacity` → `withValues(alpha:)` (4 occurrences in `WelcomeCard`, `StatCard`, `MiniStatCard`, `ActionTile`, `UserCard`, `EmptyState`)
+
+#### `lib/services/admin_service.dart`
+
+Four new stream methods added (none use `orderBy` to avoid composite-index requirement):
+
+| Method | Collection | Filter |
+|--------|-----------|--------|
+| `getUsersByRole(String role)` | `users` | `role == role` |
+| `getAllReservations()` | `reservations` | none |
+| `getSupportChats()` | `support_chats` | none |
+| `getReviews()` | `reviews` | none |
+
+#### `lib/screens/admin/admin_stats_detail_screen.dart` *(new file)*
+
+Generic, reusable list screen. Accepts:
+- `title` — AppBar title
+- `stream` — any `QuerySnapshot` stream
+- `titleKey` — Firestore field used as card header
+- `subtitleKey` — optional second-line field
+- `fields` — `List<AdminFieldDef>` for detail rows (`icon`, `label`, `key`, `fallback`)
+- `accentColor` — avatar and empty-state icon color
+- `emptyMessage` — friendly text when list is empty
+
+Features:
+- Client-side sort by `createdAt` DESC (no composite index required)
+- `Timestamp` values formatted as `dd/mm/yyyy HH:MM`
+- Null-safe `_display()` for every field value
+- Per-card `try-catch` — one malformed document never crashes the list
+- Loading / error / empty states all handled
+
+#### `lib/screens/admin/admin_home_screen.dart`
+
+Replaced the old 2-row (5-card) layout with a **3-row, 8-card** layout:
+
+| Row | Cards | Navigation |
+|-----|-------|-----------|
+| 1 | المستخدمون, مطاعم, جمعيات | tab 1 (users), `AdminStatsDetailScreen` filtered by role |
+| 2 | شكاوى, العروض, الحجوزات | tab 2 (complaints), `AdminOffersScreen` (reused), `AdminStatsDetailScreen` |
+| 3 | الدعم, التقييمات | `AdminSupportPanel` (reused), `AdminStatsDetailScreen` |
+
+Removed the duplicate "مراجعة الحسابات الجديدة" action tile (same as "مراجعة التحقق"). Removed the "بانتظار" and "تم توزيعه" stat cards which were too narrow in scope; replaced by the 8 canonical cards from the spec.
+
+---
+
+### Stat Cards → Navigation Map
+
+| Card | Stream | onTap destination |
+|------|--------|-------------------|
+| المستخدمون | `getAllUsers()` | `onNavigate(1)` → AdminUsersScreen |
+| مطاعم | `getUsersByRole('restaurant')` | `AdminStatsDetailScreen` (restaurants) |
+| جمعيات | `getUsersByRole('charity')` | `AdminStatsDetailScreen` (charities) |
+| شكاوى | `getOpenComplaints()` | `onNavigate(2)` → AdminComplaintsScreen |
+| العروض | `getAllOffersStream()` | `AdminOffersScreen` (reused, full-featured) |
+| الحجوزات | `getAllReservations()` | `AdminStatsDetailScreen` (reservations) |
+| الدعم | `getSupportChats()` | `AdminSupportPanel` (reused, full-featured) |
+| التقييمات | `getReviews()` | `AdminStatsDetailScreen` (reviews) |
+
+---
+
+### AdminStatsDetailScreen — Fields per Screen
+
+| Screen | titleKey | subtitleKey | Detail fields |
+|--------|----------|-------------|---------------|
+| مطاعم / جمعيات | `name` | `email` | role, status, phone |
+| الحجوزات | `offerTitle` | `userName` | status, pickupTime, pickupLocation, createdAt |
+| التقييمات | `offerTitle` | `userName` | rating, comment, createdAt |
+
+---
+
+### Testing Steps
+
+| Test | Expected |
+|------|----------|
+| Tap "المستخدمون" card | AdminUsersScreen opens (bottom nav tab 1) |
+| Tap "مطاعم" card | List of all restaurant accounts; empty state if none |
+| Tap "جمعيات" card | List of all charity accounts; empty state if none |
+| Tap "شكاوى" card | AdminComplaintsScreen opens (bottom nav tab 2) |
+| Tap "العروض" card | AdminOffersScreen opens with full filter bar |
+| Tap "الحجوزات" card | List of all reservations with title, user, status, pickup time |
+| Tap "الدعم" card | AdminSupportPanel opens (3-tab chat list) |
+| Tap "التقييمات" card | List of reviews with rating, comment; empty state if none |
+| Empty collection | Friendly "لا توجد سجلات حالياً" + icon — no crash |
+| Missing Firestore field | Displays fallback "—" — no crash |
+
+---
+
+## Re-share Offer Visibility Fix (2026-07-02)
+
+### Problem
+Individual users who published food offers via `UserPublishOfferScreen` had no way to see or manage their published offers, and no "إعادة مشاركة" (re-share) button existed. Additionally, offers published without GPS coordinates were invisible to other users who had location sorting enabled in the OffersTab.
+
+### Root Cause 1 — Distance filter excluded no-location offers
+`offers_tab.dart` `_sortAndFilter()` contained:
+```dart
+if (dist == null) return false;  // excluded offers with no coordinates
+```
+When `_sortByDistance && _userPosition != null`, offers lacking lat/lng were filtered out entirely, even though the comment said they should "come last."
+
+### Root Cause 2 — No "My Offers" view or re-share button existed
+There was no screen or section where a user could see their own published individual offers or trigger a re-share.
+
+### Fix — `lib/screens/user/offers_tab.dart`
+Changed the radius filter to keep offers without coordinates:
+```dart
+// before: if (dist == null) return false;
+if (dist == null) return true;  // no coordinates → show at end without filtering
+```
+
+### Fix — `lib/services/user_offer_service.dart`
+Added `republishOffer()`:
+```dart
+Future<void> republishOffer({required String offerId, required int originalQuantity}) async {
+  await _firestore.collection('offers').doc(offerId).update({
+    'status': 'available',
+    'remainingQuantity': originalQuantity,
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
+}
+```
+
+### Fix — `lib/screens/user/donate_tab.dart`
+Added "عروضي المنشورة" section at the bottom of the DonateTab ListView:
+- `_MyPublishedOffers` StatelessWidget: queries `offers` where `providerUserId == uid`, filters `offerType == 'individual_offer'` client-side, sorts by `updatedAt` DESC
+- `_MyOfferCard` StatefulWidget: shows title + remaining/total qty + status badge; shows "إعادة مشاركة" button when offer is inactive (nfded or expired)
+- The re-share button calls `UserOfferService().republishOffer()` which resets `status → 'available'` and `remainingQuantity → originalQuantity`
+
+### Testing Steps
+| Test | Expected |
+|------|----------|
+| User opens DonateTab → "عروضي المنشورة" section | Shows all their individual offers (empty state if none) |
+| Offer with `remainingQty == 0` or `status != 'available'` | Shows "إعادة مشاركة" button |
+| Tap "إعادة مشاركة" | Loading spinner → offer resets to available → other users can see it in OffersTab |
+| User with location enabled opens OffersTab | Individual offers without GPS appear at end of list (no longer hidden) |
+| Restaurant/charity offers | Unaffected — still filtered and sorted by distance normally |
+| `flutter analyze` | 0 issues on all modified files |
+| `flutter analyze` on 4 modified/new files | 0 issues |
+
+---
+
+## Offer Filtering Improvements (2026-07-02)
+
+### Scope
+Applied to: `lib/screens/user/offers_tab.dart`, `lib/screens/user/packages_tab.dart`, `lib/screens/charity/charity_browse_screen.dart`
+
+### Filters Added
+
+#### `offers_tab.dart`
+- **Provider type**: all / restaurant / charity / individual (chips row with `Icons.storefront_outlined`)
+- **Price**: all / free / paid (existing)
+- **Category**: all / وجبات / مخبوزات / خضار وفواكه / معلبات / حلويات / أخرى (scrollable chips row with `Icons.category_outlined`)
+  - "أخرى" catches offers whose `category` field is empty or not in the known list
+- **Distance**: optional toggle — offers without GPS are never hidden, appear at bottom when sort is on
+- **Availability**: Firestore query already filters `status == 'available'`
+
+#### `packages_tab.dart`
+Converted from `StatelessWidget` → `StatefulWidget` (`_PackagesTabState`).
+- **Package type**: all / غامضة (`mystery_package`) / واضحة (`restaurant_package`)
+- **Price**: مجاني / مخفّض (toggle — tap again to clear)
+- Filter bar is a single horizontal `Row` with `Spacer()` separating type and price chips
+
+#### `charity_browse_screen.dart`
+- **Price**: all / free / paid (existing, renamed field `_priceFilter`)
+- **Provider type**: all / مطعم / جمعية / فرد (scrollable chips row)
+- **Category**: all / وجبات / مخبوزات / خضار وفواكه / معلبات / حلويات / أخرى (scrollable chips row)
+- **Distance sort**: changed from always-on (when location available) → explicit toggle button "الأقرب"; radius bar only appears when toggle is active; offers without GPS coordinates are never hidden regardless of toggle state
+
+### Key Implementation Rules
+- Client-side filtering only — no `orderBy` on Firestore queries (avoids composite index requirement)
+- `withOpacity()` → `withValues(alpha:)` throughout (deprecation fix)
+- Missing `category` field → treated as "أخرى", never hidden
+- Offers without GPS → `return true` (visible), sorted to end of distance-sorted list
+- Packages tab Firestore query unchanged: `offerType whereIn [mystery_package, restaurant_package]`
+- Charity browse Firestore query unchanged: `status == available` (all providers)
+
+### Testing Steps
+| Test | Expected |
+|------|----------|
+| OffersTab → فلتر الفئة → "وجبات" | Only offers with `category == 'وجبات'` shown |
+| OffersTab → فلتر الفئة → "أخرى" | Offers with empty or unknown category shown |
+| OffersTab → فلتر المزوّد → "فرد" | Only `providerRole == 'individual'` offers |
+| PackagesTab → "غامضة" chip | Only `offerType == 'mystery_package'` shown |
+| PackagesTab → "مجاني" chip | Only `isFree == true` packages shown |
+| CharityBrowse → نوع المزوّد → "جمعية" | Only `providerRole == 'charity'` offers |
+| CharityBrowse → "الأقرب" toggle OFF | All offers shown regardless of distance |
+| CharityBrowse → "الأقرب" toggle ON → radius | Only offers within radius shown; no-GPS offers still visible |
+| `flutter analyze` on 3 files | 0 issues |
+
+---
+
+## Filter Bottom Sheet UX (2026-07-02)
+
+### Problem Solved
+Inline filter chips were rendered in a fixed-width `Row` with no scroll container, causing Flutter's overflow detection to paint **yellow/black diagonal stripes** (the debug overflow indicator) on the right side of the filter bar. Additionally the multi-row chip layout was visually crowded and inconsistent with modern food-app UX patterns.
+
+### New UX Design
+
+#### Filter Bar (all 3 files)
+Single compact row — no chip rows inline:
+```
+[ 🎛 فلترة  N ]  [ active-chip × ] [ active-chip × ] …  [ 📍 ]
+```
+- **فلترة button**: hollow by default; filled with `AppColors.primary` + count badge when any filter is active
+- **Active chips**: appear only after a filter is selected; each has an `×` to individually clear it; contained in `SingleChildScrollView` so they never overflow
+- **Location icon**: `my_location` (green) when GPS acquired, `location_off` (orange) when unavailable (tap to retry)
+
+#### Filter Bottom Sheet
+Opened by tapping the "فلترة" button. Uses `showModalBottomSheet` with `isScrollControlled: true` and a `StatefulBuilder` for live-updating selections before applying.
+
+**Sections per screen:**
+
+| Screen | Sections |
+|---|---|
+| `offers_tab.dart` | نوع المزود · السعر · الفئة · الترتيب · النطاق* |
+| `packages_tab.dart` | نوع الباقة · السعر · الترتيب · النطاق* |
+| `charity_browse_screen.dart` | نوع المزود · السعر · الفئة · الترتيب · النطاق* |
+
+*النطاق section appears only when "الأقرب" sort is selected AND location is available.
+
+**Sort options (الترتيب):**
+- الأحدث: client-side sort by `createdAt` DESC using `Timestamp.compareTo()`
+- الأقرب: distance sort + radius filter; **disabled chip** with subtitle "الموقع غير متاح حالياً" when no GPS
+- الأقل سعراً: sort by `discountPrice` ASC
+
+**Buttons:**
+- **تطبيق**: commits all temp selections to parent state, closes sheet
+- **مسح الفلاتر**: resets all filters to default immediately (applies + closes)
+
+### Artifact Fix
+Root cause: `Row([...chipWidgets])` without `SingleChildScrollView` overflows horizontally. Flutter renders yellow/black stripe debug overflow indicator over the card image's right edge.
+
+Fix: removed all inline chip rows; the filter bar is now a single button + `Expanded(SingleChildScrollView(...))` for active chips only — both are bounded and never overflow.
+
+### Files Changed
+| File | Changes |
+|---|---|
+| `lib/screens/user/offers_tab.dart` | Full filter bar rebuild; `_openFilterSheet()`; `_activeFilterCount` getter; `_activeChips` getter; `_sortAndFilter` updated with `newest/nearest/price_asc` logic; `_SheetSection`, `_SheetChip`, `_ActiveFilterChip` widgets added |
+| `lib/screens/user/packages_tab.dart` | Same pattern; added location support (`_userPosition`); `_filterAndSort` with sort order; bottom sheet with نوع الباقة / السعر / الترتيب sections |
+| `lib/screens/charity/charity_browse_screen.dart` | Same pattern; distance sort is now opt-in (not auto-on when location available); all `withOpacity()` replaced with `withValues(alpha:)` |
+
+### Testing Steps
+| Test | Expected |
+|---|---|
+| Open any offers/packages tab | Single "فلترة" button, no inline chips, no overflow artifacts |
+| Tap "فلترة" | Bottom sheet opens with sections and chips |
+| Select a filter → tap "تطبيق" | Sheet closes; active-chip appears in header bar |
+| Tap × on active chip | Filter cleared immediately, chip disappears |
+| Tap "مسح الفلاتر" in sheet | All filters reset, sheet closes |
+| Location unavailable → open sheet → الترتيب section | "الأقرب" chip is grayed out with subtitle "الموقع غير متاح حالياً" |
+| "الأقرب" selected → النطاق section appears | Radius chips visible inside sheet |
+| Select "5 كم" radius → Apply → no offers → "توسيع النطاق" button | Works, sets radius to 50 km |
+| Offers without GPS coordinates | Always visible; sorted to end of list when "الأقرب" is active |
+| `flutter analyze` on 3 files | 0 issues |

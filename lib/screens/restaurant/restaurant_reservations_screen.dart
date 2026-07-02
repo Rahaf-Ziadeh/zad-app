@@ -23,11 +23,12 @@ const _kPaidColor = AppColors.success;
 String _statusLabel(String status) {
   switch (status) {
     case 'reserved':
+    case 'confirmed':
       return 'بانتظار الاستلام';
     case 'picked_up':
-      return 'تم الاستلام';
+      return 'مكتملة';
     case 'cancelled':
-      return 'ملغي';
+      return 'ملغاة';
     default:
       return status;
   }
@@ -36,6 +37,7 @@ String _statusLabel(String status) {
 Color _statusColor(String status) {
   switch (status) {
     case 'reserved':
+    case 'confirmed':
       return _kReservedColor;
     case 'picked_up':
       return _kPickedUpColor;
@@ -132,11 +134,12 @@ class _RestaurantReservationsScreenState
 
   String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
 
+  // No orderBy in the Firestore query — avoids the composite-index requirement.
+  // Results are sorted client-side in the StreamBuilder.
   Stream<QuerySnapshot> _reservationsStream() =>
       FirebaseFirestore.instance
           .collection('reservations')
           .where('providerUserId', isEqualTo: _uid)
-          .orderBy('createdAt', descending: true)
           .snapshots();
 
   Future<void> _markPickedUp(
@@ -201,8 +204,8 @@ class _RestaurantReservationsScreenState
           tabs: const [
             Tab(text: 'الكل'),
             Tab(text: 'بانتظار الاستلام'),
-            Tab(text: 'تم الاستلام'),
-            Tab(text: 'ملغي'),
+            Tab(text: 'مكتملة'),
+            Tab(text: 'ملغاة'),
           ],
         ),
       ),
@@ -221,8 +224,6 @@ class _RestaurantReservationsScreenState
             );
           }
 
-          final all = snapshot.data!.docs;
-
           // مساعد آمن: يُعيد قيمة حقل status دون أي استثناء
           String safeStatus(QueryDocumentSnapshot d) {
             try {
@@ -234,8 +235,24 @@ class _RestaurantReservationsScreenState
             }
           }
 
-          final reserved =
-              all.where((d) => safeStatus(d) == 'reserved').toList();
+          // ترتيب client-side بدلاً من orderBy في الاستعلام (يتجنب الحاجة لـ composite index)
+          final all = List<QueryDocumentSnapshot>.from(snapshot.data!.docs)
+            ..sort((a, b) {
+              final aRaw = (a.data() as Map<String, dynamic>)['createdAt'];
+              final bRaw = (b.data() as Map<String, dynamic>)['createdAt'];
+              final aTs = aRaw is Timestamp ? aRaw : null;
+              final bTs = bRaw is Timestamp ? bRaw : null;
+              if (aTs == null && bTs == null) return 0;
+              if (aTs == null) return 1;
+              if (bTs == null) return -1;
+              return bTs.compareTo(aTs);
+            });
+
+          // reserved + confirmed معاً في تبويب "بانتظار الاستلام"
+          final reserved = all
+              .where((d) =>
+                  safeStatus(d) == 'reserved' || safeStatus(d) == 'confirmed')
+              .toList();
           final pickedUp =
               all.where((d) => safeStatus(d) == 'picked_up').toList();
           final cancelled =
@@ -289,7 +306,7 @@ class _RestaurantReservationsScreenState
                     ),
                     _ReservationList(
                       docs: cancelled,
-                      emptyMessage: 'لا توجد طلبات ملغية',
+                      emptyMessage: 'لا توجد طلبات ملغاة',
                       onConfirm: null,
                     ),
                   ],
@@ -403,8 +420,10 @@ class _ReservationList extends StatelessWidget {
           return _ReservationCard(
             doc: doc,
             data: data,
-            // أظهر أزرار التأكيد فقط للحجوزات المنتظرة
-            onConfirm: status == 'reserved' ? onConfirm : null,
+            // أظهر أزرار التأكيد للحجوزات المنتظرة والمؤكدة
+            onConfirm: (status == 'reserved' || status == 'confirmed')
+                ? onConfirm
+                : null,
           );
         } catch (e, stack) {
           debugPrint('[Reservations] error building card at index $index: $e\n$stack');
@@ -451,6 +470,13 @@ class _ReservationCard extends StatelessWidget {
     final userName = _safeStr(data['userName'], 'مستخدم');
     final status = _safeStr(data['status'], 'reserved');
     final pickupLocation = _safeStr(data['pickupLocation'], 'غير محدد');
+    // رقم الحجز: reservationCode → reservationId → doc.id
+    final reservationCode = () {
+      final code = _safeStr(data['reservationCode'], '');
+      if (code.isNotEmpty) return code;
+      final rid = _safeStr(data['reservationId'], '');
+      return rid.isNotEmpty ? rid : doc.id;
+    }();
     final pickupTime = data['pickupTime']?.toString() ?? '';
     final price = data['price'];
     final currency = _safeStr(data['currency'], 'ILS');
@@ -530,6 +556,11 @@ class _ReservationCard extends StatelessWidget {
             const SizedBox(height: 10),
 
             // ── تفاصيل الحجز ──
+            OfferInfoRow(
+              icon: Icons.confirmation_number_outlined,
+              label: 'رقم الحجز',
+              value: reservationCode,
+            ),
             OfferInfoRow(
               icon: Icons.location_on_outlined,
               label: 'مكان الاستلام',

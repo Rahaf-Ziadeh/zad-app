@@ -5,6 +5,8 @@ import 'package:zad_app/screens/common/notifications_screen.dart';
 import 'package:zad_app/theme/app_colors.dart';
 import '../../services/admin_service.dart';
 import 'admin_offers_screen.dart';
+import 'admin_stats_detail_screen.dart';
+import 'admin_support_panel.dart';
 import 'admin_verification_panel.dart';
 import 'admin_widgets.dart';
 
@@ -18,9 +20,101 @@ class AdminHomeScreen extends StatelessWidget {
     required this.onNavigate,
   });
 
+  // ── ثوابت اللون لكل بطاقة ──
+  static const _colorUsers = AppColors.primary;
+  static const _colorRestaurant = Color(0xFF0EA5E9); // أزرق فاتح
+  static const _colorCharity = Color(0xFF7C3AED); // بنفسجي
+  static const _colorComplaint = AppColors.danger;
+  static const _colorOffer = Color(0xFFF59E0B); // أصفر / ذهبي
+  static const _colorReservation = AppColors.success;
+  static const _colorSupport = Color(0xFFEC4899); // وردي
+  static const _colorReview = Color(0xFFEA580C); // برتقالي
+
+  // ── بانيو لشاشة التفاصيل: المستخدمون ──
+  AdminStatsDetailScreen _usersDetail(
+    Stream<QuerySnapshot> stream,
+    String title,
+    Color color, {
+    String emptyMessage = 'لا يوجد مستخدمون',
+  }) {
+    return AdminStatsDetailScreen(
+      title: title,
+      stream: stream,
+      titleKey: 'name',
+      subtitleKey: 'email',
+      accentColor: color,
+      emptyMessage: emptyMessage,
+      fields: const [
+        AdminFieldDef(icon: Icons.badge_outlined, label: 'الدور', key: 'role'),
+        AdminFieldDef(
+            icon: Icons.circle_outlined, label: 'الحالة', key: 'status'),
+        AdminFieldDef(
+            icon: Icons.phone_outlined, label: 'الهاتف', key: 'phone'),
+      ],
+    );
+  }
+
+  // ── بانيو لشاشة التفاصيل: الحجوزات ──
+  AdminStatsDetailScreen _reservationsDetail(
+      AdminService svc, String title, Color color) {
+    return AdminStatsDetailScreen(
+      title: title,
+      stream: svc.getAllReservations(),
+      titleKey: 'offerTitle',
+      subtitleKey: 'userName',
+      accentColor: color,
+      emptyMessage: 'لا توجد حجوزات حالياً',
+      fields: const [
+        AdminFieldDef(
+            icon: Icons.info_outline_rounded, label: 'الحالة', key: 'status'),
+        AdminFieldDef(
+            icon: Icons.access_time_rounded,
+            label: 'وقت الاستلام',
+            key: 'pickupTime'),
+        AdminFieldDef(
+            icon: Icons.location_on_outlined,
+            label: 'الموقع',
+            key: 'pickupLocation'),
+        AdminFieldDef(
+            icon: Icons.calendar_today_outlined,
+            label: 'تاريخ الحجز',
+            key: 'createdAt'),
+      ],
+    );
+  }
+
+  // ── بانيو لشاشة التفاصيل: التقييمات ──
+  AdminStatsDetailScreen _reviewsDetail(AdminService svc) {
+    return AdminStatsDetailScreen(
+      title: 'التقييمات',
+      stream: svc.getReviews(),
+      titleKey: 'offerTitle',
+      subtitleKey: 'userName',
+      accentColor: _colorReview,
+      emptyMessage: 'لا توجد تقييمات بعد',
+      fields: const [
+        AdminFieldDef(
+            icon: Icons.star_outline_rounded,
+            label: 'التقييم',
+            key: 'rating'),
+        AdminFieldDef(
+            icon: Icons.comment_outlined, label: 'التعليق', key: 'comment'),
+        AdminFieldDef(
+            icon: Icons.calendar_today_outlined,
+            label: 'التاريخ',
+            key: 'createdAt'),
+      ],
+    );
+  }
+
+  void _push(BuildContext context, Widget screen) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  }
+
   @override
   Widget build(BuildContext context) {
     final adminService = AdminService();
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -54,7 +148,6 @@ class AdminHomeScreen extends StatelessWidget {
             builder: (context, snapshot) {
               final hasUnread =
                   snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-
               return Stack(
                 children: [
                   IconButton(
@@ -66,7 +159,6 @@ class AdminHomeScreen extends StatelessWidget {
                           builder: (_) => NotificationsScreen(
                             onNotificationTap: (context, data) {
                               final type = data['type'];
-
                               if (type == 'account') {
                                 onNavigate(1);
                                 Navigator.pop(context);
@@ -109,7 +201,7 @@ class AdminHomeScreen extends StatelessWidget {
           WelcomeCard(user: user),
           const SizedBox(height: 20),
 
-          // ── إحصائيات ──
+          // ── صف 1: المستخدمون / مطاعم / جمعيات ──
           Row(
             children: [
               Expanded(
@@ -117,64 +209,152 @@ class AdminHomeScreen extends StatelessWidget {
                   stream: adminService.getAllUsers(),
                   builder: (_, snap) => StatCard(
                     title: 'المستخدمون',
-                    value: snap.hasData ? '${snap.data!.docs.length}' : '...',
+                    value:
+                        snap.hasData ? '${snap.data!.docs.length}' : '...',
                     icon: Icons.people_rounded,
-                    color: AppColors.primary,
+                    color: _colorUsers,
+                    onTap: () => onNavigate(1),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: adminService.getPendingUsers(),
+                  stream: adminService.getUsersByRole('restaurant'),
                   builder: (_, snap) => StatCard(
-                    title: 'بانتظار',
-                    value: snap.hasData ? '${snap.data!.docs.length}' : '...',
-                    icon: Icons.pending_rounded,
-                    color: AppColors.secondary,
+                    title: 'مطاعم',
+                    value:
+                        snap.hasData ? '${snap.data!.docs.length}' : '...',
+                    icon: Icons.restaurant_rounded,
+                    color: _colorRestaurant,
+                    onTap: snap.hasData
+                        ? () => _push(
+                              context,
+                              _usersDetail(
+                                adminService.getUsersByRole('restaurant'),
+                                'المطاعم',
+                                _colorRestaurant,
+                                emptyMessage: 'لا توجد مطاعم مسجلة بعد',
+                              ),
+                            )
+                        : null,
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: adminService.getOpenComplaints(),
+                  stream: adminService.getUsersByRole('charity'),
                   builder: (_, snap) => StatCard(
-                    title: 'شكاوى',
-                    value: snap.hasData ? '${snap.data!.docs.length}' : '...',
-                    icon: Icons.report_rounded,
-                    color: AppColors.danger,
+                    title: 'جمعيات',
+                    value:
+                        snap.hasData ? '${snap.data!.docs.length}' : '...',
+                    icon: Icons.volunteer_activism_rounded,
+                    color: _colorCharity,
+                    onTap: snap.hasData
+                        ? () => _push(
+                              context,
+                              _usersDetail(
+                                adminService.getUsersByRole('charity'),
+                                'الجمعيات الخيرية',
+                                _colorCharity,
+                                emptyMessage:
+                                    'لا توجد جمعيات خيرية مسجلة بعد',
+                              ),
+                            )
+                        : null,
                   ),
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
 
-          // ── عروض نشطة + حجوزات ──
+          // ── صف 2: الشكاوى / العروض / الحجوزات ──
           Row(
             children: [
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: adminService.getActiveOffers(),
+                  stream: adminService.getOpenComplaints(),
                   builder: (_, snap) => StatCard(
-                    title: 'عروض نشطة',
-                    value: snap.hasData ? '${snap.data!.docs.length}' : '...',
-                    icon: Icons.fastfood_rounded,
-                    color: const Color(0xFF7C3AED),
+                    title: 'شكاوى',
+                    value:
+                        snap.hasData ? '${snap.data!.docs.length}' : '...',
+                    icon: Icons.report_rounded,
+                    color: _colorComplaint,
+                    onTap: () => onNavigate(2),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: adminService.getPickedUpReservations(),
+                  stream: adminService.getAllOffersStream(),
                   builder: (_, snap) => StatCard(
-                    title: 'تم توزيعه',
-                    value: snap.hasData ? '${snap.data!.docs.length}' : '...',
-                    icon: Icons.check_circle_rounded,
-                    color: AppColors.success,
+                    title: 'العروض',
+                    value:
+                        snap.hasData ? '${snap.data!.docs.length}' : '...',
+                    icon: Icons.fastfood_rounded,
+                    color: _colorOffer,
+                    onTap: () => _push(context, const AdminOffersScreen()),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: adminService.getAllReservations(),
+                  builder: (_, snap) => StatCard(
+                    title: 'الحجوزات',
+                    value:
+                        snap.hasData ? '${snap.data!.docs.length}' : '...',
+                    icon: Icons.receipt_long_rounded,
+                    color: _colorReservation,
+                    onTap: () => _push(
+                      context,
+                      _reservationsDetail(
+                          adminService, 'جميع الحجوزات', _colorReservation),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          // ── صف 3: محادثات الدعم / التقييمات ──
+          Row(
+            children: [
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: adminService.getSupportChats(),
+                  builder: (_, snap) => StatCard(
+                    title: 'الدعم',
+                    value:
+                        snap.hasData ? '${snap.data!.docs.length}' : '...',
+                    icon: Icons.support_agent_rounded,
+                    color: _colorSupport,
+                    onTap: () => _push(
+                      context,
+                      AdminSupportPanel(user: user),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: adminService.getReviews(),
+                  builder: (_, snap) => StatCard(
+                    title: 'التقييمات',
+                    value:
+                        snap.hasData ? '${snap.data!.docs.length}' : '...',
+                    icon: Icons.star_rounded,
+                    color: _colorReview,
+                    onTap: () =>
+                        _push(context, _reviewsDetail(adminService)),
                   ),
                 ),
               ),
@@ -183,6 +363,7 @@ class AdminHomeScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
+          // ── إدارة سريعة ──
           const Text('إدارة سريعة',
               style: TextStyle(
                   fontSize: 18,
@@ -192,10 +373,10 @@ class AdminHomeScreen extends StatelessWidget {
 
           ActionTile(
             icon: Icons.verified_user_rounded,
-            title: 'مراجعة الحسابات الجديدة',
-            subtitle: 'قبول أو رفض حسابات المطاعم والجمعيات',
+            title: 'مراجعة التحقق',
+            subtitle: 'الموافقة على حسابات المطاعم والجمعيات',
             color: AppColors.primary,
-            onTap: () => onNavigate(1),
+            onTap: () => _push(context, const AdminVerificationPanel()),
           ),
           ActionTile(
             icon: Icons.warning_amber_rounded,
@@ -216,24 +397,7 @@ class AdminHomeScreen extends StatelessWidget {
             title: 'إدارة العروض',
             subtitle: 'عرض وحذف عروض المطاعم والجمعيات والأفراد',
             color: AppColors.secondary,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AdminOffersScreen(),
-              ),
-            ),
-          ),
-          ActionTile(
-            icon: Icons.verified_user_rounded,
-            title: 'مراجعة التحقق',
-            subtitle: 'الموافقة على حسابات المطاعم والجمعيات وهويات المستخدمين',
-            color: AppColors.primary,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AdminVerificationPanel(),
-              ),
-            ),
+            onTap: () => _push(context, const AdminOffersScreen()),
           ),
         ],
       ),

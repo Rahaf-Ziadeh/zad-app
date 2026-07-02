@@ -39,11 +39,34 @@ class AuthService {
         throw Exception('تم رفض هذا الحساب من قبل الإدارة');
       }
       if (status != 'active') throw Exception('هذا الحساب غير نشط حالياً');
-      if (role == 'restaurant' && !isApproved) {
-        throw Exception('حساب المطعم بانتظار موافقة الإدارة.');
-      }
-      if (role == 'charity' && !isApproved) {
-        throw Exception('حساب الجمعية بانتظار موافقة الإدارة.');
+
+      // ── التحقق من موافقة الإدارة على المطاعم والجمعيات ──
+      if (role == 'restaurant' || role == 'charity') {
+        final vs = data['verificationStatus'] as String?;
+        final roleLabel = role == 'restaurant' ? 'المطعم' : 'الجمعية';
+
+        // تحديد حالة القبول الفعلية
+        final bool effectivelyApproved;
+        if (vs == 'approved') {
+          effectivelyApproved = true;
+        } else if (vs == 'rejected' || vs == 'pending') {
+          effectivelyApproved = false;
+        } else {
+          // حساب قديم بدون verificationStatus — الرجوع إلى isApproved
+          effectivelyApproved = isApproved;
+        }
+
+        if (!effectivelyApproved) {
+          if (vs == 'rejected') {
+            final reason =
+                (data['rejectionReason'] as String? ?? '').trim();
+            final display =
+                reason.isNotEmpty ? reason : 'لا يوجد سبب محدد';
+            throw Exception(
+                'REJECTED:تم رفض طلب تسجيل حساب $roleLabel. السبب: $display');
+          }
+          throw Exception('PENDING:حساب $roleLabel بانتظار موافقة الإدارة.');
+        }
       }
 
       return AppUser.fromMap(uid, data);
@@ -64,6 +87,7 @@ class AuthService {
     String? nationalId,
     double? latitude,
     double? longitude,
+    String? locationSource,
     // Restaurant
     String? ownerName,
     String? workingHours,
@@ -99,7 +123,8 @@ class AuthService {
         'latitude': latitude,
         'longitude': longitude,
         'hasLocation': latitude != null && longitude != null,
-        'locationSource': latitude != null ? 'gps' : 'manual',
+        'locationSource':
+            latitude != null ? (locationSource ?? 'gps') : 'manual',
         'status': 'active',
         'isApproved': !needsVerification,
         'photoUrl': null,

@@ -49,7 +49,10 @@ class _UserDashboardState extends State<UserDashboard> {
         initialIndex: _browseTabIndex,
       ),
       const UserOrdersScreen(),
-      UserProfileScreen(user: widget.user),
+      UserProfileScreen(
+        user: widget.user,
+        onGoToDonate: () => _goToBrowseTab(2),
+      ),
     ];
   }
 

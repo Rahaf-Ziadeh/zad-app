@@ -11,6 +11,8 @@ import '../charity/charity_dashboard.dart';
 import '../restaurant/restaurant_dashboard.dart';
 import 'signup_screen.dart';
 
+enum _BlockType { none, pending, rejected }
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -28,6 +30,7 @@ class _LoginScreenState extends State<LoginScreen>
   bool _isLoading = false;
   bool _rememberMe = true;
   String? _errorMessage;
+  _BlockType _blockType = _BlockType.none;
 
   // ── إعادة إرسال التحقق ──
   bool _resendLoading = false;
@@ -78,7 +81,10 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _handleLogin() async {
-    setState(() => _errorMessage = null);
+    setState(() {
+      _errorMessage = null;
+      _blockType = _BlockType.none;
+    });
 
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -113,9 +119,23 @@ class _LoginScreenState extends State<LoginScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-      });
+      final raw = e.toString().replaceAll('Exception: ', '');
+      if (raw.startsWith('PENDING:')) {
+        setState(() {
+          _blockType = _BlockType.pending;
+          _errorMessage = raw.substring(8);
+        });
+      } else if (raw.startsWith('REJECTED:')) {
+        setState(() {
+          _blockType = _BlockType.rejected;
+          _errorMessage = raw.substring(9);
+        });
+      } else {
+        setState(() {
+          _blockType = _BlockType.none;
+          _errorMessage = raw;
+        });
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -393,7 +413,12 @@ class _LoginScreenState extends State<LoginScreen>
                     // ── رسالة الخطأ ──
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 8),
-                      _ErrorBox(message: _errorMessage!),
+                      if (_blockType == _BlockType.pending)
+                        _PendingBox(message: _errorMessage!)
+                      else if (_blockType == _BlockType.rejected)
+                        _RejectedBox(message: _errorMessage!)
+                      else
+                        _ErrorBox(message: _errorMessage!),
                     ],
 
                     const SizedBox(height: 20),
@@ -522,7 +547,7 @@ class _LoginScreenState extends State<LoginScreen>
 }
 
 // ─────────────────────────────────────────────
-// بطاقة الخطأ
+// بطاقة الخطأ العامة
 // ─────────────────────────────────────────────
 class _ErrorBox extends StatelessWidget {
   final String message;
@@ -550,6 +575,124 @@ class _ErrorBox extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// بطاقة الحساب بانتظار الموافقة
+// ─────────────────────────────────────────────
+class _PendingBox extends StatelessWidget {
+  final String message;
+  const _PendingBox({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFCD34D)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.schedule_rounded,
+                  color: Color(0xFFD97706), size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'بانتظار الموافقة',
+                style: TextStyle(
+                  color: Color(0xFF92400E),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            style: const TextStyle(
+              color: Color(0xFF78350F),
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'ستصلك إشعاراً فور مراجعة طلبك من قِبَل الإدارة.',
+            style: TextStyle(
+              color: Color(0xFF92400E),
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// بطاقة الحساب المرفوض
+// ─────────────────────────────────────────────
+class _RejectedBox extends StatelessWidget {
+  final String message;
+  const _RejectedBox({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFCA5A5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cancel_rounded,
+                  color: Color(0xFFDC2626), size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'تم رفض الطلب',
+                style: TextStyle(
+                  color: Color(0xFF991B1B),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            style: const TextStyle(
+              color: Color(0xFF7F1D1D),
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'يمكنك التواصل مع الإدارة أو إنشاء حساب جديد بمعلومات صحيحة.',
+            style: TextStyle(
+              color: Color(0xFF991B1B),
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
             ),
           ),
         ],
