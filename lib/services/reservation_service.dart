@@ -39,20 +39,41 @@ class ReservationService {
     final providerUid = (offerData['providerUserId'] as String? ?? '').trim();
     if (providerUid.isNotEmpty) {
       try {
-        final providerDoc =
-            await _firestore.collection('users').doc(providerUid).get();
-        if (providerDoc.exists) {
-          final pd = providerDoc.data()!;
-          for (final key in [
-            'name',
-            'fullName',
-            'restaurantName',
-            'charityName',
-          ]) {
-            final v = (pd[key] as String? ?? '').trim();
-            if (v.isNotEmpty) {
-              providerName = v;
-              break;
+        final providerRole = (offerData['providerRole'] as String? ?? '').trim();
+        final roleCollection = providerRole == 'restaurant'
+            ? 'restaurants'
+            : providerRole == 'charity'
+                ? 'charities'
+                : null;
+
+        if (roleCollection != null) {
+          final roleDoc = await _firestore
+              .collection(roleCollection)
+              .doc(providerUid)
+              .get();
+          if (roleDoc.exists) {
+            final rd = roleDoc.data()!;
+            for (final key in ['restaurantName', 'charityName', 'name']) {
+              final v = (rd[key] as String? ?? '').trim();
+              if (v.isNotEmpty) {
+                providerName = v;
+                break;
+              }
+            }
+          }
+        }
+
+        if (providerName.isEmpty) {
+          final providerDoc =
+              await _firestore.collection('users').doc(providerUid).get();
+          if (providerDoc.exists) {
+            final pd = providerDoc.data()!;
+            for (final key in ['name', 'fullName']) {
+              final v = (pd[key] as String? ?? '').trim();
+              if (v.isNotEmpty) {
+                providerName = v;
+                break;
+              }
             }
           }
         }

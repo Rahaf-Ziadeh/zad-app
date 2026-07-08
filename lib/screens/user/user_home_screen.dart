@@ -566,38 +566,49 @@ class _UrgentCharitiesSection extends StatelessWidget {
             ...charities.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
               final name = data['name'] ?? data['fullName'] ?? 'جمعية';
-              final address = data['address'] ?? '';
               final email = data['email'] ?? '';
 
-              return Card(
-                elevation: 0,
-                margin: const EdgeInsets.only(bottom: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppColors.border),
-                ),
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFE11D48),
-                    child: Icon(
-                      Icons.volunteer_activism_rounded,
-                      color: Colors.white,
+              return FutureBuilder<DocumentSnapshot>(
+                future: FirebaseFirestore.instance
+                    .collection('charities')
+                    .doc(doc.id)
+                    .get(),
+                builder: (context, charitySnap) {
+                  final charityData =
+                      charitySnap.data?.data() as Map<String, dynamic>? ?? {};
+                  final address = charityData['address'] ?? '';
+
+                  return Card(
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: AppColors.border),
                     ),
-                  ),
-                  title: Text(
-                    name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    address.toString().isNotEmpty ? address : email,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: TextButton(
-                    onPressed: onDonate,
-                    child: const Text('تبرع'),
-                  ),
-                ),
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Color(0xFFE11D48),
+                        child: Icon(
+                          Icons.volunteer_activism_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                      title: Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        address.toString().isNotEmpty ? address : email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: TextButton(
+                        onPressed: onDonate,
+                        child: const Text('تبرع'),
+                      ),
+                    ),
+                  );
+                },
               );
             }),
           ],

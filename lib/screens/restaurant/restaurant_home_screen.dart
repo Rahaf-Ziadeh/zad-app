@@ -11,9 +11,17 @@ import 'package:zad_app/theme/app_colors.dart';
 
 import '../common/notifications_screen.dart';
 
+// ── تنقّل داخل قشرة لوحة تحكم المطعم: يبدّل التبويب مع فلتر اختياري ──
+// index: 1 = عروضي (مع offersFilter اختياري)، 2 = حجوزاتي (مع reservationsTab اختياري)
+typedef RestaurantTabNavigate = void Function(
+  int index, {
+  String? offersFilter,
+  int? reservationsTab,
+});
+
 class RestaurantHomeScreen extends StatelessWidget {
   final AppUser user;
-  final ValueChanged<int> onNavigate;
+  final RestaurantTabNavigate onNavigate;
 
   const RestaurantHomeScreen({
     super.key,
@@ -131,29 +139,43 @@ class RestaurantHomeScreen extends StatelessWidget {
                   return Row(
                     children: [
                       Expanded(
-                        child: StatCard(
-                          title: 'كل العروض',
-                          value: '${offers.length}',
-                          icon: Icons.fastfood_rounded,
-                          color: AppColors.primary,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => onNavigate(1),
+                          child: StatCard(
+                            title: 'كل العروض',
+                            value: '${offers.length}',
+                            icon: Icons.fastfood_rounded,
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: StatCard(
-                          title: 'نشطة',
-                          value: '$activeOffers',
-                          icon: Icons.check_circle_rounded,
-                          color: AppColors.success,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () =>
+                              onNavigate(1, offersFilter: 'available'),
+                          child: StatCard(
+                            title: 'نشطة',
+                            value: '$activeOffers',
+                            icon: Icons.check_circle_rounded,
+                            color: AppColors.success,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: StatCard(
-                          title: 'بانتظار',
-                          value: '$pendingRes',
-                          icon: Icons.pending_rounded,
-                          color: AppColors.secondary,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          // ── تبويب "بانتظار الاستلام" داخل شاشة حجوزاتي (index 1) ──
+                          onTap: () => onNavigate(2, reservationsTab: 1),
+                          child: StatCard(
+                            title: 'بانتظار',
+                            value: '$pendingRes',
+                            icon: Icons.pending_rounded,
+                            color: AppColors.secondary,
+                          ),
                         ),
                       ),
                     ],

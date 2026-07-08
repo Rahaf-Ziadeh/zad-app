@@ -30,6 +30,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _phoneController = TextEditingController(text: widget.user.phone);
     _addressController = TextEditingController(text: widget.user.address);
     _updatedPhotoUrl = widget.user.photoUrl;
+    _loadIndividualAddress();
+  }
+
+  // ── العنوان أصبح مخزّناً في مجموعة individuals وليس users ──
+  Future<void> _loadIndividualAddress() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final doc = await FirebaseFirestore.instance
+        .collection('individuals')
+        .doc(uid)
+        .get();
+    final address = doc.data()?['address'] as String?;
+    if (!mounted || address == null || address.isEmpty) return;
+    setState(() => _addressController.text = address);
   }
 
   @override
@@ -50,12 +64,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     setState(() => _isSaving = true);
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'name': _nameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'address': _addressController.text.trim(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      final name = _nameController.text.trim();
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {
+          'name': name,
+          'fullName': name,
+          'phone': _phoneController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('individuals').doc(uid),
+        {
+          'name': name,
+          'address': _addressController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       setState(() => _isEditing = false);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

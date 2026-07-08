@@ -30,6 +30,32 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
     _phoneController = TextEditingController(text: widget.user.phone);
     _addressController = TextEditingController(text: widget.user.address);
     _updatedPhotoUrl = widget.user.photoUrl;
+    _loadRestaurantAddress();
+  }
+
+  // ── العنوان أصبح مخزّناً في مجموعة restaurants وليس users ──
+  Future<void> _loadRestaurantAddress() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final doc = await FirebaseFirestore.instance
+        .collection('restaurants')
+        .doc(uid)
+        .get();
+    final data = doc.data();
+    if (!mounted || data == null) return;
+
+    final address = data['address'] as String?;
+    if (address != null && address.isNotEmpty) {
+      setState(() => _addressController.text = address);
+    }
+
+    // ── users.photoUrl هو المصدر الأساسي، والرجوع إلى logoUrl عند غيابها ──
+    if ((_updatedPhotoUrl == null || _updatedPhotoUrl!.isEmpty)) {
+      final logoUrl = data['logoUrl'] as String?;
+      if (logoUrl != null && logoUrl.isNotEmpty) {
+        setState(() => _updatedPhotoUrl = logoUrl);
+      }
+    }
   }
 
   @override
@@ -50,12 +76,28 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
     setState(() => _isSaving = true);
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'name': _nameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'address': _addressController.text.trim(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      final name = _nameController.text.trim();
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {
+          'name': name,
+          'fullName': name,
+          'phone': _phoneController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('restaurants').doc(uid),
+        {
+          'name': name,
+          'restaurantName': name,
+          'address': _addressController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       setState(() => _isEditing = false);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -101,7 +143,9 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
 
       if (!mounted) return;
 
-      Navigator.of(context).pushNamedAndRemoveUntil(
+      // ── نستهدف الـ Navigator الجذري صراحةً: هذه الشاشة متداخلة الآن ضمن
+      // Navigator خاص بتبويب "حسابي"، ولا نريد تسجيل الخروج أن يؤثر عليه فقط ──
+      Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
         '/',
         (route) => false,
       );
@@ -160,6 +204,7 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
                   name: widget.user.name,
                   photoUrl: _updatedPhotoUrl,
                   color: AppColors.primary,
+                  role: 'restaurant',
                   onPhotoUpdated: (url) =>
                       setState(() => _updatedPhotoUrl = url),
                 ),

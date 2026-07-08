@@ -36,6 +36,30 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
     _phoneController = TextEditingController(text: widget.user.phone);
     _addressController = TextEditingController(text: widget.user.address);
     _updatedPhotoUrl = widget.user.photoUrl;
+    _loadCharityAddress();
+  }
+
+  // ── العنوان أصبح مخزّناً في مجموعة charities وليس users ──
+  Future<void> _loadCharityAddress() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final doc =
+        await FirebaseFirestore.instance.collection('charities').doc(uid).get();
+    final data = doc.data();
+    if (!mounted || data == null) return;
+
+    final address = data['address'] as String?;
+    if (address != null && address.isNotEmpty) {
+      setState(() => _addressController.text = address);
+    }
+
+    // ── users.photoUrl هو المصدر الأساسي، والرجوع إلى logoUrl عند غيابها ──
+    if ((_updatedPhotoUrl == null || _updatedPhotoUrl!.isEmpty)) {
+      final logoUrl = data['logoUrl'] as String?;
+      if (logoUrl != null && logoUrl.isNotEmpty) {
+        setState(() => _updatedPhotoUrl = logoUrl);
+      }
+    }
   }
 
   @override
@@ -62,13 +86,27 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
       final newPhone = _phoneController.text.trim();
       final newAddress = _addressController.text.trim();
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'name': newName,
-        'fullName': newName,
-        'phone': newPhone,
-        'address': newAddress,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {
+          'name': newName,
+          'fullName': newName,
+          'phone': newPhone,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('charities').doc(uid),
+        {
+          'name': newName,
+          'charityName': newName,
+          'address': newAddress,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
 
       // ← إبلاغ الـ dashboard بالتحديث
       widget.onUserUpdated?.call(
@@ -186,6 +224,7 @@ class _CharityProfileScreenState extends State<CharityProfileScreen> {
                   name: widget.user.name,
                   photoUrl: _updatedPhotoUrl,
                   color: const Color(0xFFE11D48),
+                  role: 'charity',
                   onPhotoUpdated: (url) =>
                       setState(() => _updatedPhotoUrl = url),
                 ),

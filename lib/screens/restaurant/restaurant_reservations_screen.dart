@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 import 'package:zad_app/screens/restaurant/scan_qr_screen.dart';
+import 'package:zad_app/screens/restaurant/user_public_profile_screen.dart';
 import 'package:zad_app/theme/app_colors.dart';
 import 'package:zad_app/widgets/offer_widgets.dart';
 import '../../services/notification_service.dart';
@@ -108,7 +109,10 @@ String _safeStr(dynamic raw, String fallback) {
 // الشاشة الرئيسية
 // ─────────────────────────────────────────────
 class RestaurantReservationsScreen extends StatefulWidget {
-  const RestaurantReservationsScreen({super.key});
+  // ── التبويب المبدئي: 0=الكل، 1=بانتظار الاستلام، 2=مكتملة، 3=ملغاة ──
+  final int initialTabIndex;
+
+  const RestaurantReservationsScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<RestaurantReservationsScreen> createState() =>
@@ -123,7 +127,11 @@ class _RestaurantReservationsScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
   }
 
   @override
@@ -266,6 +274,7 @@ class _RestaurantReservationsScreenState
                 active: reserved.length,
                 completed: pickedUp.length,
                 cancelled: cancelled.length,
+                tabController: _tabController,
               ),
 
               // ── قوائم التبويب ──
@@ -328,12 +337,14 @@ class _SummaryRow extends StatelessWidget {
   final int active;
   final int completed;
   final int cancelled;
+  final TabController tabController;
 
   const _SummaryRow({
     required this.total,
     required this.active,
     required this.completed,
     required this.cancelled,
+    required this.tabController,
   });
 
   @override
@@ -344,38 +355,54 @@ class _SummaryRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: StatCard(
-              title: 'الكل',
-              value: '$total',
-              icon: Icons.receipt_long_rounded,
-              color: AppColors.textLight,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => tabController.animateTo(0),
+              child: StatCard(
+                title: 'الكل',
+                value: '$total',
+                icon: Icons.receipt_long_rounded,
+                color: AppColors.textLight,
+              ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: StatCard(
-              title: 'نشطة',
-              value: '$active',
-              icon: Icons.hourglass_top_rounded,
-              color: _kReservedColor,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => tabController.animateTo(1),
+              child: StatCard(
+                title: 'نشطة',
+                value: '$active',
+                icon: Icons.hourglass_top_rounded,
+                color: _kReservedColor,
+              ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: StatCard(
-              title: 'مستلمة',
-              value: '$completed',
-              icon: Icons.check_circle_rounded,
-              color: _kPickedUpColor,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => tabController.animateTo(2),
+              child: StatCard(
+                title: 'مستلمة',
+                value: '$completed',
+                icon: Icons.check_circle_rounded,
+                color: _kPickedUpColor,
+              ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: StatCard(
-              title: 'ملغية',
-              value: '$cancelled',
-              icon: Icons.cancel_rounded,
-              color: _kCancelledColor,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => tabController.animateTo(3),
+              child: StatCard(
+                title: 'ملغية',
+                value: '$cancelled',
+                icon: Icons.cancel_rounded,
+                color: _kCancelledColor,
+              ),
             ),
           ),
         ],
@@ -535,11 +562,30 @@ class _ReservationCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        userName,
-                        style: const TextStyle(
-                          color: AppColors.textLight,
-                          fontSize: 12,
+                      InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => UserPublicProfileScreen(
+                              userId: _safeStr(data['userId'], ''),
+                              userName: userName,
+                              reservationId: doc.id,
+                              offerId: _safeStr(data['offerId'], ''),
+                              offerTitle: offerTitle,
+                              reservationStatus: status,
+                            ),
+                          ),
+                        ),
+                        child: Text(
+                          userName,
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            decoration: TextDecoration.underline,
+                            decorationColor: AppColors.primary,
+                          ),
                         ),
                       ),
                     ],

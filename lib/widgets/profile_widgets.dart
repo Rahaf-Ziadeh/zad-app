@@ -15,6 +15,7 @@ class ProfileAvatar extends StatefulWidget {
   final String? photoUrl;
   final Color color;
   final double radius;
+  final String? role; // ← restaurant/charity: يُزامن الصورة مع logoUrl أيضاً
   final ValueChanged<String>? onPhotoUpdated; // يرجع الـ URL الجديد
 
   const ProfileAvatar({
@@ -23,6 +24,7 @@ class ProfileAvatar extends StatefulWidget {
     this.photoUrl,
     this.color = AppColors.primary,
     this.radius = 52,
+    this.role,
     this.onPhotoUpdated,
   });
 
@@ -125,11 +127,28 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       await ref.putFile(file);
       final url = await ref.getDownloadURL();
 
-      // حفظ الـ URL في Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'photoUrl': url});
+      // حفظ الـ URL في Firestore: users.photoUrl دائماً، ومرآة logoUrl لدور المطعم/الجمعية
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {'photoUrl': url},
+      );
+      final String? roleCollection = widget.role == 'restaurant'
+          ? 'restaurants'
+          : widget.role == 'charity'
+              ? 'charities'
+              : null;
+      if (roleCollection != null) {
+        batch.set(
+          FirebaseFirestore.instance.collection(roleCollection).doc(uid),
+          {
+            'logoUrl': url,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+      await batch.commit();
 
       setState(() => _localPhotoUrl = url);
       widget.onPhotoUpdated?.call(url);

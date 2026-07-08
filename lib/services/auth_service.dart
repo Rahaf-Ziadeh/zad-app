@@ -58,10 +58,8 @@ class AuthService {
 
         if (!effectivelyApproved) {
           if (vs == 'rejected') {
-            final reason =
-                (data['rejectionReason'] as String? ?? '').trim();
-            final display =
-                reason.isNotEmpty ? reason : 'لا يوجد سبب محدد';
+            final reason = (data['rejectionReason'] as String? ?? '').trim();
+            final display = reason.isNotEmpty ? reason : 'لا يوجد سبب محدد';
             throw Exception(
                 'REJECTED:تم رفض طلب تسجيل حساب $roleLabel. السبب: $display');
           }
@@ -108,27 +106,27 @@ class AuthService {
 
       final uid = credential.user!.uid;
 
-      final bool needsVerification =
-          role == 'restaurant' || role == 'charity';
+      final bool needsVerification = role == 'restaurant' || role == 'charity';
+      final bool hasLocation = latitude != null && longitude != null;
 
-      await _firestore.collection('users').doc(uid).set({
+      final batch = _firestore.batch();
+
+      // ── الصورة الشخصية: تُستخدم شعار المطعم/الجمعية كصورة الحساب في users ──
+      final String? photoUrl =
+          (logoUrl != null && logoUrl.isNotEmpty) ? logoUrl : null;
+
+      // ── المستند العام في users: يُستخدم لتسجيل الدخول والتحقق من القبول ──
+      final userRef = _firestore.collection('users').doc(uid);
+      batch.set(userRef, {
         'uid': uid,
         'name': fullName,
         'fullName': fullName,
         'email': email,
         'phone': phone,
         'role': role,
-        'address': address,
-        'nationalId': nationalId ?? '',
-        'latitude': latitude,
-        'longitude': longitude,
-        'hasLocation': latitude != null && longitude != null,
-        'locationSource':
-            latitude != null ? (locationSource ?? 'gps') : 'manual',
         'status': 'active',
         'isApproved': !needsVerification,
-        'photoUrl': null,
-        'points': 0,
+        'photoUrl': photoUrl,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         // ── حقول التحقق للمطاعم والجمعيات ──
@@ -138,24 +136,75 @@ class AuthService {
           'verificationReviewedAt': null,
           'rejectionReason': null,
         },
-        // ── حقول المطعم ──
-        if (role == 'restaurant') ...{
+      });
+
+      // ── المستند التفصيلي الخاص بالدور ──
+      final String roleCollection = role == 'restaurant'
+          ? 'restaurants'
+          : role == 'charity'
+              ? 'charities'
+              : 'individuals';
+
+      final Map<String, dynamic> roleData;
+      if (role == 'restaurant') {
+        roleData = {
+          'userId': uid,
+          'restaurantName': fullName,
+          'name': fullName,
           'ownerName': ownerName ?? '',
+          'email': email,
+          'phone': phone,
+          'address': address,
+          'latitude': latitude,
+          'longitude': longitude,
           'workingHours': workingHours ?? '',
           'licenseNumber': licenseNumber ?? '',
           'description': description ?? '',
           'logoUrl': logoUrl ?? '',
           'businessLicenseUrl': businessLicenseUrl ?? '',
-        },
-        // ── حقول الجمعية ──
-        if (role == 'charity') ...{
+          'isVerified': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+      } else if (role == 'charity') {
+        roleData = {
+          'userId': uid,
+          'charityName': fullName,
+          'name': fullName,
           'responsiblePerson': responsiblePerson ?? '',
+          'email': email,
+          'phone': phone,
+          'address': address,
+          'latitude': latitude,
+          'longitude': longitude,
           'registrationNumber': registrationNumber ?? '',
           'description': description ?? '',
           'logoUrl': logoUrl ?? '',
           'charityDocumentUrl': charityDocumentUrl ?? '',
-        },
-      });
+          'isVerified': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+      } else {
+        roleData = {
+          'userId': uid,
+          'name': fullName,
+          'address': address,
+          'nationalId': nationalId ?? '',
+          'latitude': latitude,
+          'longitude': longitude,
+          'hasLocation': hasLocation,
+          'locationSource':
+              latitude != null ? (locationSource ?? 'gps') : 'manual',
+          'points': 0,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+      }
+
+      batch.set(_firestore.collection(roleCollection).doc(uid), roleData);
+
+      await batch.commit();
       // ── إرسال بريد التحقق بعد إنشاء الحساب ──
       await credential.user?.sendEmailVerification();
 

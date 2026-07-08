@@ -69,7 +69,13 @@ class _DonateTabState extends State<DonateTab> {
         await FirebaseFirestore.instance.collection('users').doc(uid).get();
     if (doc.exists) {
       final data = doc.data()!;
-      final nationalId = data['nationalId'] ?? '';
+      final individualDoc = await FirebaseFirestore.instance
+          .collection('individuals')
+          .doc(uid)
+          .get();
+      final individualData = individualDoc.data() ?? {};
+      final nationalId =
+          data['nationalId'] ?? individualData['nationalId'] ?? '';
       final idVerified =
           (data['identityVerificationStatus'] as String? ?? '') == 'approved';
       setState(() {
@@ -286,15 +292,13 @@ class _DonateTabState extends State<DonateTab> {
       if (idStatus == 'pending') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content:
-                  Text('طلب توثيق هويتك قيد المراجعة، يرجى الانتظار.')),
+              content: Text('طلب توثيق هويتك قيد المراجعة، يرجى الانتظار.')),
         );
         return;
       }
       await Navigator.push(
         context,
-        MaterialPageRoute(
-            builder: (_) => const IdentityVerificationScreen()),
+        MaterialPageRoute(builder: (_) => const IdentityVerificationScreen()),
       );
       return;
     }
@@ -1079,12 +1083,10 @@ class _DonateTabState extends State<DonateTab> {
               children: donations.map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 final status = data['status'] ?? 'pending';
-                final charityName = data['targetCharityName'] ??
-                    data['charityName'] ??
-                    '';
+                final charityName =
+                    data['targetCharityName'] ?? data['charityName'] ?? '';
                 final imageUrl = data['imageUrl'] as String? ?? '';
-                final displayTitle =
-                    data['foodName'] ?? data['title'] ?? '';
+                final displayTitle = data['foodName'] ?? data['title'] ?? '';
                 final pickupTime = data['pickupTime'] as String? ?? '';
 
                 return Card(
@@ -1122,8 +1124,7 @@ class _DonateTabState extends State<DonateTab> {
                           Text(
                             pickupTime,
                             style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textLight),
+                                fontSize: 11, color: AppColors.textLight),
                           ),
                         if (charityName.isNotEmpty)
                           Row(
@@ -1221,7 +1222,6 @@ class _CharityPickerSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -1246,9 +1246,7 @@ class _CharityPickerSheet extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
@@ -1275,10 +1273,8 @@ class _CharityPickerSheet extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
               const Divider(height: 1),
-
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
@@ -1322,127 +1318,27 @@ class _CharityPickerSheet extends StatelessWidget {
                         final data = doc.data() as Map<String, dynamic>;
                         final name =
                             data['name'] ?? data['fullName'] ?? 'جمعية';
-                        final address = data['address'] ?? '';
                         final phone = data['phone'] ?? '';
                         final isSelected = selectedId == doc.id;
 
-                        return GestureDetector(
-                          onTap: () => onSelected(doc.id, name),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? const Color(0xFFE11D48)
-                                      .withValues(alpha: 0.07)
-                                  : AppColors.card,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSelected
-                                    ? const Color(0xFFE11D48)
-                                    : AppColors.border,
-                                width: isSelected ? 2 : 1,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 46,
-                                  height: 46,
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? const Color(0xFFE11D48)
-                                            .withValues(alpha: 0.12)
-                                        : AppColors.primary
-                                            .withValues(alpha: 0.08),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.volunteer_activism_rounded,
-                                    color: isSelected
-                                        ? const Color(0xFFE11D48)
-                                        : AppColors.primary,
-                                    size: 22,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(name,
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15,
-                                              color: isSelected
-                                                  ? const Color(0xFFBE123C)
-                                                  : AppColors.textDark)),
-                                      if (address.isNotEmpty) ...[
-                                        const SizedBox(height: 3),
-                                        Row(
-                                          children: [
-                                            const Icon(
-                                                Icons.location_on_outlined,
-                                                size: 12,
-                                                color: AppColors.textLight),
-                                            const SizedBox(width: 3),
-                                            Expanded(
-                                              child: Text(address,
-                                                  style: const TextStyle(
-                                                      fontSize: 12,
-                                                      color:
-                                                          AppColors.textLight),
-                                                  overflow:
-                                                      TextOverflow.ellipsis),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                      if (phone.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.phone_outlined,
-                                                size: 12,
-                                                color: AppColors.textLight),
-                                            const SizedBox(width: 3),
-                                            Text(phone,
-                                                style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color:
-                                                        AppColors.textLight)),
-                                          ],
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isSelected
-                                        ? const Color(0xFFE11D48)
-                                        : Colors.transparent,
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? const Color(0xFFE11D48)
-                                          : AppColors.border,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: isSelected
-                                      ? const Icon(Icons.check_rounded,
-                                          color: Colors.white, size: 14)
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ),
+                        return FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('charities')
+                              .doc(doc.id)
+                              .get(),
+                          builder: (context, charitySnap) {
+                            final charityData = charitySnap.data?.data()
+                                    as Map<String, dynamic>? ??
+                                {};
+                            final address = charityData['address'] ?? '';
+                            return _CharityListTile(
+                              name: name,
+                              address: address,
+                              phone: phone,
+                              isSelected: isSelected,
+                              onTap: () => onSelected(doc.id, name),
+                            );
+                          },
                         );
                       },
                     );
@@ -1453,6 +1349,126 @@ class _CharityPickerSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _CharityListTile extends StatelessWidget {
+  final String name;
+  final String address;
+  final String phone;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _CharityListTile({
+    required this.name,
+    required this.address,
+    required this.phone,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFFE11D48).withValues(alpha: 0.07)
+              : AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFE11D48) : AppColors.border,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? const Color(0xFFE11D48).withValues(alpha: 0.12)
+                    : AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.volunteer_activism_rounded,
+                color: isSelected ? const Color(0xFFE11D48) : AppColors.primary,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: isSelected
+                              ? const Color(0xFFBE123C)
+                              : AppColors.textDark)),
+                  if (address.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            size: 12, color: AppColors.textLight),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(address,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.textLight),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (phone.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const Icon(Icons.phone_outlined,
+                            size: 12, color: AppColors.textLight),
+                        const SizedBox(width: 3),
+                        Text(phone,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.textLight)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color:
+                    isSelected ? const Color(0xFFE11D48) : Colors.transparent,
+                border: Border.all(
+                  color:
+                      isSelected ? const Color(0xFFE11D48) : AppColors.border,
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? const Icon(Icons.check_rounded,
+                      color: Colors.white, size: 14)
+                  : null,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1493,10 +1509,20 @@ class _NoNationalIdViewState extends State<_NoNationalIdView> {
     setState(() => _isSaving = true);
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'nationalId': id});
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {'nationalId': id},
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('individuals').doc(uid),
+        {
+          'nationalId': id,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1824,8 +1850,8 @@ class _MyOfferCardState extends State<_MyOfferCard> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
