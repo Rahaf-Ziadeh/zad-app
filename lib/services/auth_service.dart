@@ -99,6 +99,43 @@ class AuthService {
     String? charityDocumentUrl,
   }) async {
     try {
+      // ── تقليم الحقول التعريفية قبل التحقق من التفرّد وقبل الحفظ ──
+      licenseNumber = licenseNumber?.trim();
+      registrationNumber = registrationNumber?.trim();
+      nationalId = nationalId?.trim();
+
+      // ── التحقق من تفرّد الحقل التعريفي الخاص بالدور قبل إنشاء حساب Firebase Auth ──
+      if (role == 'restaurant') {
+        final existing = await _firestore
+            .collection('restaurants')
+            .where('licenseNumber', isEqualTo: licenseNumber)
+            .limit(1)
+            .get();
+        if (existing.docs.isNotEmpty) {
+          throw Exception('رقم رخصة المطعم مستخدم مسبقًا');
+        }
+      } else if (role == 'charity') {
+        final existing = await _firestore
+            .collection('charities')
+            .where('registrationNumber', isEqualTo: registrationNumber)
+            .limit(1)
+            .get();
+        if (existing.docs.isNotEmpty) {
+          throw Exception('رقم تسجيل الجمعية مستخدم مسبقًا');
+        }
+      } else if (role == 'individual' &&
+          nationalId != null &&
+          nationalId.isNotEmpty) {
+        final existing = await _firestore
+            .collection('individuals')
+            .where('nationalId', isEqualTo: nationalId)
+            .limit(1)
+            .get();
+        if (existing.docs.isNotEmpty) {
+          throw Exception('رقم الهوية مستخدم مسبقًا');
+        }
+      }
+
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
