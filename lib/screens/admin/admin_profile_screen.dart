@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:zad_app/utils/phone_formatter.dart';
 import '../auth/WelcomeScreen.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
@@ -91,12 +92,14 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      // ── نستخدم سياق النافذة الخاص بها (dialogContext) لإغلاقها، وليس سياق
+      // الشاشة الخارجية، تفادياً لأي التباس مع Navigator غير الجذري ──
+      builder: (dialogContext) => AlertDialog(
         title: const Text('تسجيل الخروج'),
         content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('إلغاء'),
           ),
           ElevatedButton(
@@ -104,23 +107,24 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
               backgroundColor: AppColors.danger,
               foregroundColor: Colors.white,
             ),
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('خروج'),
           ),
         ],
       ),
     );
 
-    if (confirm == true) {
-      await FirebaseAuth.instance.signOut();
+    if (confirm != true) return;
+    if (!mounted) return;
 
-      if (!mounted) return;
+    // ── نلتقط الـ Navigator الجذري صراحةً قبل await تسجيل الخروج: تغيّر حالة
+    // المصادقة قد يُعيد بناء الشجرة فوق هذه الشاشة بمجرد اكتمال signOut،
+    // فنفقد إمكانية استخدام context بأمان بعد ذلك ──
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
 
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-      );
-    }
+    await FirebaseAuth.instance.signOut();
+
+    rootNavigator.pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   @override
@@ -223,6 +227,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             controller: _phoneController,
             isEditing: _isEditing,
             keyboardType: TextInputType.phone,
+            isPhone: true,
           ),
           const Divider(),
           _ProfileField(
@@ -273,6 +278,7 @@ class _ProfileField extends StatelessWidget {
   final bool isEditing;
   final bool readOnly;
   final TextInputType? keyboardType;
+  final bool isPhone;
 
   const _ProfileField({
     required this.icon,
@@ -281,10 +287,13 @@ class _ProfileField extends StatelessWidget {
     required this.isEditing,
     this.readOnly = false,
     this.keyboardType,
+    this.isPhone = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final valueStyle = TextStyle(
+        fontSize: 14, color: readOnly ? AppColors.textLight : AppColors.textDark);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -314,12 +323,11 @@ class _ProfileField extends StatelessWidget {
                           border: UnderlineInputBorder(),
                         ),
                       )
-                    : Text(controller.text.isEmpty ? '—' : controller.text,
-                        style: TextStyle(
-                            fontSize: 14,
-                            color: readOnly
-                                ? AppColors.textLight
-                                : AppColors.textDark)),
+                    : controller.text.isEmpty
+                        ? Text('—', style: valueStyle)
+                        : isPhone
+                            ? PhoneText(controller.text, style: valueStyle)
+                            : Text(controller.text, style: valueStyle),
               ],
             ),
           ),

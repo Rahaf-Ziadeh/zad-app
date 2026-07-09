@@ -142,6 +142,7 @@ class ReservationService {
         'providerName': providerName,
         'pickupLocation': data['pickupLocation'] ?? '',
         'pickupTime': data['pickupTime'] ?? '',
+        'allergyInfo': data['allergyInfo'] ?? const <String>[],
         'price': data['discountPrice'] ?? data['price'] ?? 0,
         'currency': data['currency'] ?? 'ILS',
         'quantity': selectedQuantity,

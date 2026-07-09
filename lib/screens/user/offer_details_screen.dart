@@ -7,6 +7,7 @@ import '../../services/reservation_service.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/offer_widgets.dart';
+import 'provider_public_profile_screen.dart';
 import 'qr_code_screen.dart';
 import 'payment_method_screen.dart';
 
@@ -141,32 +142,35 @@ class OfferDetailsScreen extends StatelessWidget {
             padding: const EdgeInsets.all(18),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── العنوان والمزوّد ──
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(title,
-                          style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textDark)),
+                // ── العنوان ──
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark)),
+
+                const SizedBox(height: 10),
+
+                // ── المزوّد: قابل للنقر لفتح الملف العام (للمطعم/الجمعية فقط) ──
+                if (providerRole == 'restaurant' || providerRole == 'charity')
+                  _ProviderChip(
+                    providerUserId: (data['providerUserId'] as String?) ?? '',
+                    providerRole: providerRole,
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(_providerLabel(providerRole),
-                          style: const TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
+                    child: Text(_providerLabel(providerRole),
+                        style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold)),
+                  ),
 
                 const SizedBox(height: 16),
 
@@ -710,6 +714,107 @@ class _OfferRatings extends StatelessWidget {
               );
             }),
           ],
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// شريحة المزوّد: تجلب اسمه الحقيقي وتفتح ملفه العام عند الضغط
+// ─────────────────────────────────────────────
+class _ProviderChip extends StatelessWidget {
+  final String providerUserId;
+  final String providerRole; // 'restaurant' | 'charity'
+
+  const _ProviderChip({
+    required this.providerUserId,
+    required this.providerRole,
+  });
+
+  String get _roleCollection =>
+      providerRole == 'charity' ? 'charities' : 'restaurants';
+  String get _roleLabel => providerRole == 'charity' ? 'جمعية خيرية' : 'مطعم';
+
+  // ── نفس نمط استخراج الاسم المعتمد في reservation_service.dart ──
+  Future<String> _resolveName() async {
+    if (providerUserId.isEmpty) return _roleLabel;
+    try {
+      final roleDoc = await FirebaseFirestore.instance
+          .collection(_roleCollection)
+          .doc(providerUserId)
+          .get();
+      if (roleDoc.exists) {
+        final rd = roleDoc.data()!;
+        for (final key in ['restaurantName', 'charityName', 'name']) {
+          final v = (rd[key] as String? ?? '').trim();
+          if (v.isNotEmpty) return v;
+        }
+      }
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(providerUserId)
+          .get();
+      if (userDoc.exists) {
+        final ud = userDoc.data()!;
+        for (final key in ['name', 'fullName']) {
+          final v = (ud[key] as String? ?? '').trim();
+          if (v.isNotEmpty) return v;
+        }
+      }
+    } catch (_) {}
+    return _roleLabel;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _resolveName(),
+      builder: (context, snap) {
+        final name = snap.data ?? _roleLabel;
+        return InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: providerUserId.isEmpty
+              ? null
+              : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProviderPublicProfileScreen(
+                        providerUserId: providerUserId,
+                        providerRole: providerRole,
+                      ),
+                    ),
+                  ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  providerRole == 'charity'
+                      ? Icons.volunteer_activism_rounded
+                      : Icons.storefront_rounded,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: 6),
+                Text(name,
+                    style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold)),
+                if (providerUserId.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.chevron_left_rounded,
+                      size: 14, color: AppColors.primary),
+                ],
+              ],
+            ),
+          ),
         );
       },
     );

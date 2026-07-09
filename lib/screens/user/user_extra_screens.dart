@@ -3,24 +3,56 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../widgets/offer_widgets.dart';
+import 'provider_public_profile_screen.dart';
 
 // ─────────────────────────────────────────────
-// سجل تبرعات المستخدم
+// تبرعاتي — سجل تبرعات المستخدم فقط (لا علاقة له بـ"طلباتي")
 // ─────────────────────────────────────────────
-class UserDonationsHistoryScreen extends StatelessWidget {
+class UserDonationsHistoryScreen extends StatefulWidget {
   const UserDonationsHistoryScreen({super.key});
+
+  @override
+  State<UserDonationsHistoryScreen> createState() =>
+      _UserDonationsHistoryScreenState();
+}
+
+class _UserDonationsHistoryScreenState
+    extends State<UserDonationsHistoryScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  // ── null = الكل، وإلا القيمة الفعلية لحقل status في مجموعة donations ──
+  static const List<String?> _statuses = [
+    null,
+    'pending',
+    'approved',
+    'rejected',
+    'redistributed',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: _statuses.length, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   String _statusLabel(String status) {
     switch (status) {
-      case 'pending_review':
       case 'pending':
-        return 'قيد المراجعة';
+        return 'بانتظار المراجعة';
       case 'approved':
-        return 'مقبول';
-      case 'redistributed':
-        return 'تم توزيعه';
+        return 'مقبولة';
       case 'rejected':
-        return 'مرفوض';
+        return 'مرفوضة';
+      case 'redistributed':
+        return 'مكتملة';
       default:
         return status.isEmpty ? 'غير محدد' : status;
     }
@@ -28,15 +60,14 @@ class UserDonationsHistoryScreen extends StatelessWidget {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'pending_review':
       case 'pending':
         return Colors.orange;
       case 'approved':
         return AppColors.success;
-      case 'redistributed':
-        return AppColors.primary;
       case 'rejected':
         return AppColors.danger;
+      case 'redistributed':
+        return AppColors.primary;
       default:
         return AppColors.textLight;
     }
@@ -44,214 +75,291 @@ class UserDonationsHistoryScreen extends StatelessWidget {
 
   IconData _statusIcon(String status) {
     switch (status) {
-      case 'pending_review':
       case 'pending':
         return Icons.pending_actions_rounded;
       case 'approved':
         return Icons.check_circle_rounded;
-      case 'redistributed':
-        return Icons.share_rounded;
       case 'rejected':
         return Icons.cancel_rounded;
+      case 'redistributed':
+        return Icons.task_alt_rounded;
       default:
         return Icons.circle_outlined;
     }
   }
 
+  Stream<QuerySnapshot> _donationsStream(String? status) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    // ── تبرعات هذا المستخدم فقط، مهما كان التبويب ──
+    Query query = FirebaseFirestore.instance
+        .collection('donations')
+        .where('donorUserId', isEqualTo: uid);
+    if (status != null) {
+      query = query.where('status', isEqualTo: status);
+    }
+    return query.snapshots();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('سجل تبرعاتي'),
+        title: const Text('تبرعاتي'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textLight,
+          indicatorColor: AppColors.primary,
+          tabs: [
+            const Tab(text: 'الكل'),
+            for (final s in _statuses.skip(1)) Tab(text: _statusLabel(s!)),
+          ],
+        ),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('donations')
-            .where('donorUserId', isEqualTo: uid)
-            .snapshots(),
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return Center(child: Text('حدث خطأ: ${snap.error}'));
-          }
+      body: TabBarView(
+        controller: _tabController,
+        children: _statuses.map((status) {
+          return _DonationsList(
+            stream: _donationsStream(status),
+            statusLabel: _statusLabel,
+            statusColor: _statusColor,
+            statusIcon: _statusIcon,
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
 
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+class _DonationsList extends StatelessWidget {
+  final Stream<QuerySnapshot> stream;
+  final String Function(String) statusLabel;
+  final Color Function(String) statusColor;
+  final IconData Function(String) statusIcon;
 
-          final docs = snap.data!.docs;
+  const _DonationsList({
+    required this.stream,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.statusIcon,
+  });
 
-          docs.sort((a, b) {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(child: Text('حدث خطأ: ${snap.error}'));
+        }
+
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = List<QueryDocumentSnapshot>.from(snap.data!.docs)
+          ..sort((a, b) {
             final ad = (a.data() as Map<String, dynamic>)['createdAt'];
             final bd = (b.data() as Map<String, dynamic>)['createdAt'];
-
             if (ad is Timestamp && bd is Timestamp) {
               return bd.compareTo(ad);
             }
             return 0;
           });
 
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.volunteer_activism_outlined,
-                      size: 64, color: AppColors.primary.withOpacity(0.3)),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'لم تقم بأي تبرع بعد',
-                    style: TextStyle(color: AppColors.textLight, fontSize: 14),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          final pending = docs.where((d) {
-            final s =
-                (d.data() as Map<String, dynamic>)['donationStatus'] ?? '';
-            return s == 'pending_review' || s == 'pending';
-          }).length;
-
-          final approved = docs.where((d) {
-            final s =
-                (d.data() as Map<String, dynamic>)['donationStatus'] ?? '';
-            return s == 'approved' || s == 'redistributed';
-          }).length;
-
-          return Column(
-            children: [
-              Container(
-                color: AppColors.card,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                child: Row(
-                  children: [
-                    _QuickStat(
-                      label: 'الكل',
-                      value: '${docs.length}',
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 16),
-                    _QuickStat(
-                      label: 'مقبول',
-                      value: '$approved',
-                      color: AppColors.success,
-                    ),
-                    const SizedBox(width: 16),
-                    _QuickStat(
-                      label: 'بانتظار',
-                      value: '$pending',
-                      color: Colors.orange,
-                    ),
-                  ],
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.volunteer_activism_outlined,
+                    size: 64, color: AppColors.primary.withValues(alpha: 0.3)),
+                const SizedBox(height: 14),
+                const Text(
+                  'لا توجد تبرعات هنا',
+                  style: TextStyle(color: AppColors.textLight, fontSize: 14),
                 ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: docs.length,
-                  itemBuilder: (context, i) {
-                    final data = docs[i].data() as Map<String, dynamic>;
-                    final status = data['donationStatus'] ??
-                        data['status'] ??
-                        'pending_review';
-                    final color = _statusColor(status);
-
-                    final title = data['title'] ??
-                        data['foodName'] ??
-                        data['description'] ??
-                        'تبرع طعام';
-
-                    final quantity = data['quantity'] ?? '';
-                    final unitType = data['unitType'] ?? '';
-                    final category = data['category'] ?? '';
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: color.withOpacity(0.25)),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 46,
-                              height: 46,
-                              decoration: BoxDecoration(
-                                color: color.withOpacity(0.12),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                _statusIcon(status),
-                                color: color,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    title,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    [
-                                      if ('$quantity'.isNotEmpty) '$quantity',
-                                      if ('$unitType'.isNotEmpty) '$unitType',
-                                      if ('$category'.isNotEmpty) '$category',
-                                    ].join(' • '),
-                                    style: const TextStyle(
-                                      color: AppColors.textLight,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: color.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                _statusLabel(status),
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
+              ],
+            ),
           );
-        },
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final data = docs[i].data() as Map<String, dynamic>;
+            return _DonationCard(
+              data: data,
+              statusLabel: statusLabel,
+              statusColor: statusColor,
+              statusIcon: statusIcon,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// بطاقة تبرع واحد — بنفس أسلوب بطاقات "طلباتي" (رأس بشارة الحالة + صفوف تفاصيل)
+// ─────────────────────────────────────────────
+class _DonationCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final String Function(String) statusLabel;
+  final Color Function(String) statusColor;
+  final IconData Function(String) statusIcon;
+
+  const _DonationCard({
+    required this.data,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.statusIcon,
+  });
+
+  String _formatDate(Timestamp? ts) {
+    if (ts == null) return '';
+    final d = ts.toDate();
+    final day = d.day.toString().padLeft(2, '0');
+    final month = d.month.toString().padLeft(2, '0');
+    return '$day/$month/${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = (data['status'] as String?) ?? 'pending';
+    final color = statusColor(status);
+
+    final title = (data['title'] as String?) ??
+        (data['foodName'] as String?) ??
+        'تبرع طعام';
+    final category = (data['category'] as String? ?? '').trim();
+    final quantity = (data['quantity']?.toString() ?? '').trim();
+    final pickupLocation = ((data['pickupLocation'] as String?) ??
+            (data['location'] as String?) ??
+            '')
+        .trim();
+    final notes = (data['notes'] as String? ?? '').trim();
+    final charityId = ((data['charityId'] as String?) ??
+            (data['targetCharityId'] as String?) ??
+            '')
+        .trim();
+    final charityName = ((data['charityName'] as String?) ??
+            (data['targetCharityName'] as String?) ??
+            '')
+        .trim();
+    final dateStr = _formatDate(data['createdAt'] as Timestamp?);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(statusIcon(status), color: color, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    statusLabel(status),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            // ── اسم الجمعية قابل للنقر فقط عند توفر معرّف حسابها ──
+            if (charityName.isNotEmpty)
+              OfferInfoRow(
+                icon: Icons.volunteer_activism_outlined,
+                label: 'الجمعية',
+                value: charityName,
+                onTap: charityId.isNotEmpty
+                    ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProviderPublicProfileScreen(
+                              providerUserId: charityId,
+                              providerRole: 'charity',
+                            ),
+                          ),
+                        )
+                    : null,
+              ),
+            if (category.isNotEmpty)
+              OfferInfoRow(
+                icon: Icons.category_outlined,
+                label: 'الفئة',
+                value: category,
+              ),
+            if (quantity.isNotEmpty)
+              OfferInfoRow(
+                icon: Icons.inventory_2_outlined,
+                label: 'الكمية',
+                value: quantity,
+              ),
+            if (pickupLocation.isNotEmpty)
+              OfferInfoRow(
+                icon: Icons.location_on_outlined,
+                label: 'الموقع',
+                value: pickupLocation,
+              ),
+            if (dateStr.isNotEmpty)
+              OfferInfoRow(
+                icon: Icons.calendar_today_outlined,
+                label: 'التاريخ',
+                value: dateStr,
+              ),
+            if (notes.isNotEmpty)
+              OfferInfoRow(
+                icon: Icons.notes_outlined,
+                label: 'ملاحظات',
+                value: notes,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -636,44 +744,6 @@ class UserComplaintsScreen extends StatelessWidget {
           );
         },
       ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// Widget مساعد
-// ─────────────────────────────────────────────
-class _QuickStat extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _QuickStat({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textLight,
-            fontSize: 12,
-          ),
-        ),
-      ],
     );
   }
 }

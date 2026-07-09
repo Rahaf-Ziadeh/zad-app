@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/allergy_checkbox_panel.dart';
 import '../../widgets/user_publish_widgets.dart';
 import '../../services/user_offer_service.dart';
 import '../../services/location_service.dart';
@@ -7,6 +8,7 @@ import '../../services/user_service.dart';
 import '../../theme/app_colors.dart';
 import '../../constants/app_constants.dart';
 import '../common/location_picker_screen.dart';
+import 'national_id_step_screen.dart';
 
 class UserPublishOfferScreen extends StatefulWidget {
   const UserPublishOfferScreen({super.key});
@@ -31,6 +33,13 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
   double? _longitude;
   String _locationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
 
+  // وقت الاستلام
+  TimeOfDay? _pickupStartTime;
+  TimeOfDay? _pickupEndTime;
+
+  // مسببات الحساسية
+  Set<String> _selectedAllergens = {};
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -49,6 +58,28 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
       initialDate: DateTime.now(),
     );
     if (picked != null) setState(() => _expiryDate = picked);
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime:
+          (isStart ? _pickupStartTime : _pickupEndTime) ?? TimeOfDay.now(),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isStart) {
+        _pickupStartTime = picked;
+      } else {
+        _pickupEndTime = picked;
+      }
+    });
+  }
+
+  String _formatTime(TimeOfDay t) {
+    final h = t.hour.toString().padLeft(2, '0');
+    final m = t.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   // ── فتح شاشة اختيار الموقع على خريطة OpenStreetMap ──
@@ -76,12 +107,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
   Future<void> _publish() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_expiryDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى تحديد تاريخ الانتهاء')),
-      );
-      return;
-    }
 
     // ── تحقق من موقع الاستلام ──
     final locationText = _locationController.text.trim();
@@ -94,6 +119,37 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
       );
       return;
     }
+
+    // ── تحقق من وقت الاستلام: كلا الحقلين مطلوبان، ووقت النهاية يجب أن
+    // يكون بعد وقت البداية ──
+    if (_pickupStartTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى تحديد وقت بداية الاستلام')),
+      );
+      return;
+    }
+    if (_pickupEndTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى تحديد وقت نهاية الاستلام')),
+      );
+      return;
+    }
+    final startMinutes =
+        _pickupStartTime!.hour * 60 + _pickupStartTime!.minute;
+    final endMinutes = _pickupEndTime!.hour * 60 + _pickupEndTime!.minute;
+    if (endMinutes <= startMinutes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('وقت نهاية الاستلام يجب أن يكون بعد وقت البداية'),
+        ),
+      );
+      return;
+    }
+
+    // ── التحقق من رقم الهوية الوطنية وصورتها: تُطلب مرة واحدة فقط، ثم يتابع
+    // النشر تلقائياً بعد الحفظ دون الحاجة للضغط على "نشر العرض" مجدداً ──
+    final identityReady = await ensureNationalIdSaved(context);
+    if (!mounted || !identityReady) return;
 
     setState(() => _isLoading = true);
 
@@ -135,7 +191,10 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
         pickupLocation: resolvedLocation,
         latitude: _latitude,
         longitude: _longitude,
-        expiryDate: _expiryDate!,
+        pickupStartTime: _formatTime(_pickupStartTime!),
+        pickupEndTime: _formatTime(_pickupEndTime!),
+        expiryDate: _expiryDate,
+        allergyInfo: _selectedAllergens.toList(),
         locationSource: _locationSource,
       );
 
@@ -345,7 +404,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                       const SizedBox(height: 14),
                     ],
 
-                    // تاريخ الانتهاء
+                    // تاريخ الانتهاء (اختياري)
                     InkWell(
                       onTap: _pickDate,
                       borderRadius: BorderRadius.circular(12),
@@ -363,7 +422,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                             const SizedBox(width: 10),
                             Text(
                               _expiryDate == null
-                                  ? 'تاريخ انتهاء الصلاحية *'
+                                  ? 'تاريخ انتهاء الصلاحية (اختياري)'
                                   : '${_expiryDate!.day}/${_expiryDate!.month}/${_expiryDate!.year}',
                               style: TextStyle(
                                 color: _expiryDate == null
@@ -375,6 +434,106 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                           ],
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'إذا لم يتم تحديد تاريخ انتهاء الصلاحية، سينتهي العرض '
+                      'تلقائيًا بعد 24 ساعة من نشره.',
+                      style:
+                          TextStyle(fontSize: 11.5, color: AppColors.textLight),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // وقت الاستلام
+                    const SectionLabel(text: 'وقت الاستلام *'),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _pickTime(true),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: _pickupStartTime != null
+                                      ? AppColors.success.withValues(alpha: 0.5)
+                                      : AppColors.border,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.access_time_rounded,
+                                      size: 18,
+                                      color: _pickupStartTime != null
+                                          ? AppColors.success
+                                          : AppColors.primary),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _pickupStartTime != null
+                                          ? _formatTime(_pickupStartTime!)
+                                          : 'وقت البداية',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: _pickupStartTime != null
+                                            ? AppColors.textDark
+                                            : AppColors.textLight,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _pickTime(false),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: _pickupEndTime != null
+                                      ? AppColors.success.withValues(alpha: 0.5)
+                                      : AppColors.border,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.access_time_filled_rounded,
+                                      size: 18,
+                                      color: _pickupEndTime != null
+                                          ? AppColors.success
+                                          : AppColors.primary),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _pickupEndTime != null
+                                          ? _formatTime(_pickupEndTime!)
+                                          : 'وقت النهاية',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: _pickupEndTime != null
+                                            ? AppColors.textDark
+                                            : AppColors.textLight,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 14),
@@ -452,6 +611,14 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                           child: Icon(Icons.description_outlined),
                         ),
                       ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // مسببات الحساسية
+                    AllergyCheckboxPanel(
+                      selected: _selectedAllergens,
+                      onChanged: (v) => setState(() => _selectedAllergens = v),
                     ),
                   ],
                 ),

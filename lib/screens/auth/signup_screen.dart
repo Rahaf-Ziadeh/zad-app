@@ -46,8 +46,11 @@ class _SignupScreenState extends State<SignupScreen> {
 
   // ── حقول إضافية للمطعم ──
   final _ownerNameController = TextEditingController();
-  final _workingHoursController = TextEditingController();
   final _licenseNumberController = TextEditingController();
+
+  // ── ساعات العمل: مشتركة بين المطعم والجمعية ──
+  TimeOfDay? _workingHoursStart;
+  TimeOfDay? _workingHoursEnd;
 
   // ── حقول إضافية للجمعية ──
   final _responsiblePersonController = TextEditingController();
@@ -75,7 +78,6 @@ class _SignupScreenState extends State<SignupScreen> {
     _confirmPasswordController.dispose();
     _nationalIdController.dispose();
     _ownerNameController.dispose();
-    _workingHoursController.dispose();
     _licenseNumberController.dispose();
     _responsiblePersonController.dispose();
     _regNumberController.dispose();
@@ -289,6 +291,23 @@ class _SignupScreenState extends State<SignupScreen> {
     });
   }
 
+  String _formatTimeOfDay(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  Future<void> _pickWorkingHours({required bool isStart}) async {
+    final initial = (isStart ? _workingHoursStart : _workingHoursEnd) ??
+        TimeOfDay.now();
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _workingHoursStart = picked;
+      } else {
+        _workingHoursEnd = picked;
+      }
+    });
+  }
+
   Future<void> _handleSignup() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -312,7 +331,6 @@ class _SignupScreenState extends State<SignupScreen> {
         final isRestaurant = _selectedRole == 'restaurant';
         if (isRestaurant &&
             (_ownerNameController.text.trim().isEmpty ||
-                _workingHoursController.text.trim().isEmpty ||
                 _licenseNumberController.text.trim().isEmpty ||
                 _orgDescController.text.trim().isEmpty)) {
           throw Exception('يرجى تعبئة جميع حقول المطعم المطلوبة');
@@ -322,6 +340,17 @@ class _SignupScreenState extends State<SignupScreen> {
                 _regNumberController.text.trim().isEmpty ||
                 _orgDescController.text.trim().isEmpty)) {
           throw Exception('يرجى تعبئة جميع حقول الجمعية المطلوبة');
+        }
+        // ── ساعات العمل: مطلوبة لكل من المطعم والجمعية ──
+        if (_workingHoursStart == null || _workingHoursEnd == null) {
+          throw Exception('يرجى تحديد وقت بداية ونهاية العمل');
+        }
+        final startMinutes =
+            _workingHoursStart!.hour * 60 + _workingHoursStart!.minute;
+        final endMinutes =
+            _workingHoursEnd!.hour * 60 + _workingHoursEnd!.minute;
+        if (endMinutes <= startMinutes) {
+          throw Exception('وقت نهاية العمل يجب أن يكون بعد وقت البداية');
         }
         if (_orgDocFile == null) {
           throw Exception(isRestaurant
@@ -356,8 +385,13 @@ class _SignupScreenState extends State<SignupScreen> {
         locationSource: _registrationLocationSource,
         ownerName: _selectedRole == 'restaurant'
             ? _ownerNameController.text.trim() : null,
-        workingHours: _selectedRole == 'restaurant'
-            ? _workingHoursController.text.trim() : null,
+        workingHours: (_selectedRole == 'restaurant' ||
+                _selectedRole == 'charity')
+            ? {
+                'start': _formatTimeOfDay(_workingHoursStart!),
+                'end': _formatTimeOfDay(_workingHoursEnd!),
+              }
+            : null,
         licenseNumber: _selectedRole == 'restaurant'
             ? _licenseNumberController.text.trim() : null,
         description: _orgDescController.text.trim().isNotEmpty
@@ -640,13 +674,13 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        TextFormField(
-                          controller: _workingHoursController,
-                          decoration: const InputDecoration(
-                            labelText: 'ساعات العمل *',
-                            hintText: 'مثال: 8ص - 10م',
-                            prefixIcon: Icon(Icons.access_time_rounded),
-                          ),
+                        _WorkingHoursPicker(
+                          start: _workingHoursStart,
+                          end: _workingHoursEnd,
+                          formatTime: _formatTimeOfDay,
+                          onPickStart: () =>
+                              _pickWorkingHours(isStart: true),
+                          onPickEnd: () => _pickWorkingHours(isStart: false),
                         ),
                         const SizedBox(height: 14),
                         TextFormField(
@@ -702,6 +736,15 @@ class _SignupScreenState extends State<SignupScreen> {
                             labelText: 'رقم التسجيل الرسمي *',
                             prefixIcon: Icon(Icons.numbers_rounded),
                           ),
+                        ),
+                        const SizedBox(height: 14),
+                        _WorkingHoursPicker(
+                          start: _workingHoursStart,
+                          end: _workingHoursEnd,
+                          formatTime: _formatTimeOfDay,
+                          onPickStart: () =>
+                              _pickWorkingHours(isStart: true),
+                          onPickEnd: () => _pickWorkingHours(isStart: false),
                         ),
                         const SizedBox(height: 14),
                         _FilePickButton(
@@ -955,6 +998,56 @@ class _PickedDoc {
   bool get isImage => name.toLowerCase().endsWith('.jpg') ||
       name.toLowerCase().endsWith('.jpeg') ||
       name.toLowerCase().endsWith('.png');
+}
+
+// ── منتقي ساعات العمل: بداية ونهاية عبر Material Time Picker فقط (بدون كتابة يدوية) ──
+class _WorkingHoursPicker extends StatelessWidget {
+  final TimeOfDay? start;
+  final TimeOfDay? end;
+  final String Function(TimeOfDay) formatTime;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+
+  const _WorkingHoursPicker({
+    required this.start,
+    required this.end,
+    required this.formatTime,
+    required this.onPickStart,
+    required this.onPickEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            readOnly: true,
+            controller: TextEditingController(
+                text: start != null ? formatTime(start!) : ''),
+            decoration: const InputDecoration(
+              labelText: 'بداية العمل *',
+              prefixIcon: Icon(Icons.access_time_rounded),
+            ),
+            onTap: onPickStart,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextFormField(
+            readOnly: true,
+            controller: TextEditingController(
+                text: end != null ? formatTime(end!) : ''),
+            decoration: const InputDecoration(
+              labelText: 'نهاية العمل *',
+              prefixIcon: Icon(Icons.access_time_filled_rounded),
+            ),
+            onTap: onPickEnd,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // ── زر اختيار الملف (شعار أو وثيقة) ──────────────────────────────────────────

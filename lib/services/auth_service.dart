@@ -88,7 +88,7 @@ class AuthService {
     String? locationSource,
     // Restaurant
     String? ownerName,
-    String? workingHours,
+    Map<String, String>? workingHours,
     String? licenseNumber,
     String? description,
     String? logoUrl,
@@ -182,6 +182,10 @@ class AuthService {
               ? 'charities'
               : 'individuals';
 
+      // ── ساعات العمل: { start: "08:00", end: "17:00" } للمطعم والجمعية ──
+      final Map<String, String> resolvedWorkingHours =
+          workingHours ?? {'start': '', 'end': ''};
+
       final Map<String, dynamic> roleData;
       if (role == 'restaurant') {
         roleData = {
@@ -194,7 +198,7 @@ class AuthService {
           'address': address,
           'latitude': latitude,
           'longitude': longitude,
-          'workingHours': workingHours ?? '',
+          'workingHours': resolvedWorkingHours,
           'licenseNumber': licenseNumber ?? '',
           'description': description ?? '',
           'logoUrl': logoUrl ?? '',
@@ -214,6 +218,7 @@ class AuthService {
           'address': address,
           'latitude': latitude,
           'longitude': longitude,
+          'workingHours': resolvedWorkingHours,
           'registrationNumber': registrationNumber ?? '',
           'description': description ?? '',
           'logoUrl': logoUrl ?? '',

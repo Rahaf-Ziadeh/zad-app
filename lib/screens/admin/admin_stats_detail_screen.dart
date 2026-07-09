@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:zad_app/utils/phone_formatter.dart';
 import '../../theme/app_colors.dart';
 
 // ─────────────────────────────────────────────
@@ -10,12 +11,14 @@ class AdminFieldDef {
   final String label;
   final String key;
   final String fallback;
+  final bool isPhone;
 
   const AdminFieldDef({
     required this.icon,
     required this.label,
     required this.key,
     this.fallback = '—',
+    this.isPhone = false,
   });
 }
 
@@ -238,6 +241,7 @@ class AdminStatsDetailScreen extends StatelessWidget {
                               icon: f.icon,
                               label: f.label,
                               value: _display(d[f.key], f.fallback),
+                              isPhone: f.isPhone,
                             ),
                           ],
                         ],
@@ -263,15 +267,18 @@ class _FieldRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final bool isPhone;
 
   const _FieldRow({
     required this.icon,
     required this.label,
     required this.value,
+    this.isPhone = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    const valueStyle = TextStyle(fontSize: 12, color: AppColors.textDark);
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
       child: Row(
@@ -287,10 +294,9 @@ class _FieldRow extends StatelessWidget {
                 fontWeight: FontWeight.w500),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 12, color: AppColors.textDark),
-            ),
+            child: isPhone
+                ? PhoneText(value, style: valueStyle)
+                : Text(value, style: valueStyle),
           ),
         ],
       ),

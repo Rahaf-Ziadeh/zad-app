@@ -26,10 +26,18 @@ class UserOfferService {
     required String pickupLocation,
     required double? latitude,
     required double? longitude,
-    required DateTime expiryDate,
+    required String pickupStartTime,
+    required String pickupEndTime,
+    // ── تاريخ الانتهاء اختياري: إن لم يُحدَّد يُعتمد انتهاء تلقائي بعد 24
+    // ساعة من النشر بدل تكرار حقل "تاريخ انتهاء الصلاحية" في الواجهة ──
+    DateTime? expiryDate,
+    List<String>? allergyInfo,
     String? locationSource,
   }) async {
     final docRef = _firestore.collection('offers').doc();
+    final expiresAt =
+        expiryDate ?? DateTime.now().add(const Duration(hours: 24));
+    final pickupTime = '$pickupStartTime - $pickupEndTime';
 
     await docRef.set({
       'offerId': docRef.id,
@@ -55,7 +63,11 @@ class UserOfferService {
       'hasLocation': latitude != null,
       'locationSource':
           latitude != null ? (locationSource ?? 'gps') : 'manual',
-      'expiryDate': expiryDate,
+      'pickupStartTime': pickupStartTime,
+      'pickupEndTime': pickupEndTime,
+      'pickupTime': pickupTime,
+      'allergyInfo': allergyInfo ?? const <String>[],
+      'expiresAt': expiresAt,
       'isCash': true,
       'isOnline': false,
       'createdAt': FieldValue.serverTimestamp(),

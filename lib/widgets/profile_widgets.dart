@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:zad_app/utils/phone_formatter.dart';
 
 import '../../theme/app_colors.dart';
 
@@ -583,6 +584,7 @@ class ProfileFieldWidget extends StatelessWidget {
   final bool isEditing;
   final bool readOnly;
   final TextInputType? keyboardType;
+  final bool isPhone;
 
   const ProfileFieldWidget({
     required this.icon,
@@ -591,6 +593,7 @@ class ProfileFieldWidget extends StatelessWidget {
     required this.isEditing,
     this.readOnly = false,
     this.keyboardType,
+    this.isPhone = false,
   });
 
   @override
@@ -624,12 +627,25 @@ class ProfileFieldWidget extends StatelessWidget {
                           border: UnderlineInputBorder(),
                         ),
                       )
-                    : Text(controller.text.isEmpty ? '—' : controller.text,
-                        style: TextStyle(
-                            fontSize: 14,
-                            color: readOnly
-                                ? AppColors.textLight
-                                : AppColors.textDark)),
+                    : controller.text.isEmpty
+                        ? const Text('—',
+                            style: TextStyle(
+                                fontSize: 14, color: AppColors.textDark))
+                        : isPhone
+                            ? PhoneText(
+                                controller.text,
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    color: readOnly
+                                        ? AppColors.textLight
+                                        : AppColors.textDark),
+                              )
+                            : Text(controller.text,
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    color: readOnly
+                                        ? AppColors.textLight
+                                        : AppColors.textDark)),
               ],
             ),
           ),
