@@ -21,8 +21,7 @@ class CharityDonationsScreen extends StatelessWidget {
     String foodName,
   ) async {
     try {
-      final currentCharityId =
-          FirebaseAuth.instance.currentUser?.uid ?? '';
+      final currentCharityId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
       await FirebaseFirestore.instance
           .collection('donations')
@@ -192,8 +191,7 @@ class _DonationList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentCharityId =
-        FirebaseAuth.instance.currentUser?.uid ?? '';
+    final currentCharityId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
@@ -210,18 +208,22 @@ class _DonationList extends StatelessWidget {
 
         final allDocs = snapshot.data!.docs;
 
-        // فلترة التبرعات الموجّهة: عرض غير الموجّهة + الموجّهة لهذه الجمعية فقط
-        final docs = filterByCharity
-            ? allDocs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final isDirected =
-                    data['isDirectedToCharity'] as bool? ?? false;
-                if (!isDirected) return true;
-                final tId = data['targetCharityId'] as String? ?? '';
-                final cId = data['charityId'] as String? ?? '';
-                return tId == currentCharityId || cId == currentCharityId;
-              }).toList()
-            : allDocs.toList();
+        final docs = allDocs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          final targetCharityId = data['targetCharityId']?.toString() ?? '';
+
+          final charityId = data['charityId']?.toString() ?? '';
+
+          final charityUserId = data['charityUserId']?.toString() ?? '';
+
+          final reviewedBy = data['reviewedBy']?.toString() ?? '';
+
+          return targetCharityId == currentCharityId ||
+              charityId == currentCharityId ||
+              charityUserId == currentCharityId ||
+              reviewedBy == currentCharityId;
+        }).toList();
 
         if (docs.isEmpty) {
           return Center(
@@ -229,8 +231,7 @@ class _DonationList extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.volunteer_activism_outlined,
-                    size: 56,
-                    color: AppColors.primary.withValues(alpha: 0.3)),
+                    size: 56, color: AppColors.primary.withValues(alpha: 0.3)),
                 const SizedBox(height: 12),
                 Text(emptyMessage,
                     style: const TextStyle(color: AppColors.textLight)),
@@ -261,7 +262,8 @@ class _DonationList extends StatelessWidget {
                 : (startTime.isNotEmpty && endTime.isNotEmpty
                     ? '$startTime - $endTime'
                     : '');
-            final allergens = AppConstants.parseAllergyInfo(data['allergyInfo']);
+            final allergens =
+                AppConstants.parseAllergyInfo(data['allergyInfo']);
             final hasKnownAllergens = allergens.isNotEmpty &&
                 !(allergens.length == 1 &&
                     allergens.first == AppConstants.noKnownAllergens);

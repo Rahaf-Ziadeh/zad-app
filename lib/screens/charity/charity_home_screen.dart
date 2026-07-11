@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
@@ -18,6 +19,8 @@ class CharityHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentCharityId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -32,45 +35,96 @@ class CharityHomeScreen extends StatelessWidget {
                 color: AppColors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.eco_rounded,
-                  color: AppColors.primary, size: 18),
+              child: const Icon(
+                Icons.eco_rounded,
+                color: AppColors.primary,
+                size: 18,
+              ),
             ),
             const SizedBox(width: 8),
-            const Text('زاد',
-                style: TextStyle(
-                    color: AppColors.primary, fontWeight: FontWeight.bold)),
+            const Text(
+              'زاد',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         actions: [
           IconButton(
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+              MaterialPageRoute(
+                builder: (_) => const NotificationsScreen(),
+              ),
             ),
             icon: const Icon(Icons.notifications_none_rounded),
           ),
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // ✅ إصلاح — نجيب كل التبرعات بدون فلتر charityUserId
-        // لأن التبرعات الجديدة ما عندها charityUserId وقت الإنشاء
         stream: FirebaseFirestore.instance.collection('donations').snapshots(),
         builder: (context, snapshot) {
-          final donations = snapshot.hasData
-              ? snapshot.data!.docs
-              : <QueryDocumentSnapshot>[];
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('حدث خطأ أثناء تحميل البيانات'),
+            );
+          }
 
-          int pending = 0, approved = 0, redistributed = 0;
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final donations = snapshot.data!.docs;
+
+          int pending = 0;
+          int approved = 0;
+          int redistributed = 0;
 
           for (final doc in donations) {
             final data = doc.data() as Map<String, dynamic>;
-            // ✅ نستخدم 'status' بدل 'donationStatus'
-            final s = data['status'] ?? 'pending';
-            if (s == 'pending') pending++;
-            if (s == 'approved') approved++;
-            if (s == 'redistributed') redistributed++;
-          }
 
+            final status = data['status']?.toString() ?? 'pending';
+
+            final charityUserId = data['charityUserId']?.toString() ?? '';
+
+            final reviewedBy = data['reviewedBy']?.toString() ?? '';
+
+            final charityId = data['charityId']?.toString() ?? '';
+
+            final targetCharityId = data['targetCharityId']?.toString() ?? '';
+
+            // قيد المراجعة: فقط التبرعات الخاصة بهذه الجمعية
+            if (status == 'pending') {
+              if (targetCharityId == currentCharityId ||
+                  charityId == currentCharityId) {
+                pending++;
+              }
+
+              continue;
+            }
+
+            // المقبولة والموزعة: فقط التي عالجتها هذه الجمعية
+            final belongsToCurrentCharity = charityUserId == currentCharityId ||
+                reviewedBy == currentCharityId ||
+                charityId == currentCharityId ||
+                targetCharityId == currentCharityId;
+
+            if (!belongsToCurrentCharity) {
+              continue;
+            }
+
+            if (status == 'approved') {
+              approved++;
+            }
+
+            if (status == 'redistributed') {
+              redistributed++;
+            }
+          }
           return ListView(
             padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
             children: [
@@ -110,11 +164,14 @@ class CharityHomeScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
-              const Text('إجراءات سريعة',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textDark)),
+              const Text(
+                'إجراءات سريعة',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
               const SizedBox(height: 12),
               _ActionTile(
                 icon: Icons.volunteer_activism_rounded,
@@ -157,12 +214,12 @@ class CharityHomeScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// Widgets
-// ─────────────────────────────────────────────
 class _WelcomeCard extends StatelessWidget {
   final AppUser user;
-  const _WelcomeCard({required this.user});
+
+  const _WelcomeCard({
+    required this.user,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +227,10 @@ class _WelcomeCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFE11D48), Color(0xFFBE123C)],
+          colors: [
+            Color(0xFFE11D48),
+            Color(0xFFBE123C),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -191,9 +251,10 @@ class _WelcomeCard extends StatelessWidget {
             child: Text(
               user.name.isNotEmpty ? user.name[0].toUpperCase() : 'ج',
               style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold),
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           const SizedBox(width: 14),
@@ -201,19 +262,32 @@ class _WelcomeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('مرحباً بعودتك ❤️',
-                    style: TextStyle(color: Colors.white70, fontSize: 13)),
+                const Text(
+                  'مرحباً بعودتك ❤️',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                  ),
+                ),
                 const SizedBox(height: 3),
-                Text(user.name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                Text(
+                  user.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 5),
-                const Text('راجعي التبرعات وساعدي في توزيع الطعام',
-                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                const Text(
+                  'راجعي التبرعات وساعدي في توزيع الطعام',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
           ),
@@ -243,16 +317,22 @@ class _StatCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+        padding: const EdgeInsets.symmetric(
+          vertical: 16,
+          horizontal: 10,
+        ),
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(
+            color: AppColors.border,
+          ),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 3)),
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
           ],
         ),
         child: Column(
@@ -264,19 +344,31 @@ class _StatCard extends StatelessWidget {
                 color: color.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: color, size: 17),
+              child: Icon(
+                icon,
+                color: color,
+                size: 17,
+              ),
             ),
             const SizedBox(height: 8),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
             const SizedBox(height: 3),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: AppColors.textLight,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500)),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textLight,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
@@ -306,13 +398,18 @@ class _ActionTile extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.border),
+        side: const BorderSide(
+          color: AppColors.border,
+        ),
       ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
           child: Row(
             children: [
               Container(
@@ -322,29 +419,42 @@ class _ActionTile extends StatelessWidget {
                   color: color.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color, size: 22),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textDark,
-                            fontSize: 14)),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                        fontSize: 14,
+                      ),
+                    ),
                     const SizedBox(height: 3),
-                    Text(subtitle,
-                        style: const TextStyle(
-                            color: AppColors.textLight,
-                            fontSize: 12,
-                            height: 1.4)),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppColors.textLight,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios_rounded,
-                  size: 14, color: AppColors.textLight),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: AppColors.textLight,
+              ),
             ],
           ),
         ),

@@ -96,11 +96,22 @@ class _SignupScreenState extends State<SignupScreen> {
 
     String label;
     Color color;
-    if (strength <= 0.2) { label = 'ضعيفة جداً'; color = AppColors.danger; }
-    else if (strength <= 0.4) { label = 'ضعيفة'; color = Colors.orange; }
-    else if (strength <= 0.6) { label = 'متوسطة'; color = AppColors.secondary; }
-    else if (strength <= 0.8) { label = 'جيدة'; color = AppColors.primary; }
-    else { label = 'قوية جداً ✓'; color = AppColors.success; }
+    if (strength <= 0.2) {
+      label = 'ضعيفة جداً';
+      color = AppColors.danger;
+    } else if (strength <= 0.4) {
+      label = 'ضعيفة';
+      color = Colors.orange;
+    } else if (strength <= 0.6) {
+      label = 'متوسطة';
+      color = AppColors.secondary;
+    } else if (strength <= 0.8) {
+      label = 'جيدة';
+      color = AppColors.primary;
+    } else {
+      label = 'قوية جداً ✓';
+      color = AppColors.success;
+    }
 
     setState(() {
       _passwordStrength = strength;
@@ -255,8 +266,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
-      setState(
-          () => _orgDocFile = _PickedDoc(bytes: bytes, name: picked.name));
+      setState(() => _orgDocFile = _PickedDoc(bytes: bytes, name: picked.name));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -295,8 +305,8 @@ class _SignupScreenState extends State<SignupScreen> {
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Future<void> _pickWorkingHours({required bool isStart}) async {
-    final initial = (isStart ? _workingHoursStart : _workingHoursEnd) ??
-        TimeOfDay.now();
+    final initial =
+        (isStart ? _workingHoursStart : _workingHoursEnd) ?? TimeOfDay.now();
     final picked = await showTimePicker(context: context, initialTime: initial);
     if (picked == null) return;
     setState(() {
@@ -345,12 +355,23 @@ class _SignupScreenState extends State<SignupScreen> {
         if (_workingHoursStart == null || _workingHoursEnd == null) {
           throw Exception('يرجى تحديد وقت بداية ونهاية العمل');
         }
+
         final startMinutes =
             _workingHoursStart!.hour * 60 + _workingHoursStart!.minute;
-        final endMinutes =
-            _workingHoursEnd!.hour * 60 + _workingHoursEnd!.minute;
+
+        var endMinutes = _workingHoursEnd!.hour * 60 + _workingHoursEnd!.minute;
+
+// إذا كان وقت الإغلاق بعد منتصف الليل، اعتبره في اليوم التالي.
+// مثال: 8:00 صباحًا → 1:00 بعد منتصف الليل.
         if (endMinutes <= startMinutes) {
-          throw Exception('وقت نهاية العمل يجب أن يكون بعد وقت البداية');
+          endMinutes += 24 * 60;
+        }
+
+        final workingDuration = endMinutes - startMinutes;
+
+// منع اختيار نفس وقت البداية والنهاية كدوام 24 ساعة.
+        if (workingDuration == 24 * 60) {
+          throw Exception('وقت بداية ونهاية العمل لا يمكن أن يكونا متطابقين');
         }
         if (_orgDocFile == null) {
           throw Exception(isRestaurant
@@ -359,8 +380,8 @@ class _SignupScreenState extends State<SignupScreen> {
         }
         setState(() => _uploadingOrgDocs = true);
         if (_logoFile != null) {
-          logoUrl = await CloudinaryService().uploadBytes(
-              bytes: _logoFile!.bytes, filename: _logoFile!.name);
+          logoUrl = await CloudinaryService()
+              .uploadBytes(bytes: _logoFile!.bytes, filename: _logoFile!.name);
           if (!mounted) return;
         }
         orgDocUrl = await CloudinaryService().uploadBytes(
@@ -384,27 +405,30 @@ class _SignupScreenState extends State<SignupScreen> {
         longitude: _registrationLon,
         locationSource: _registrationLocationSource,
         ownerName: _selectedRole == 'restaurant'
-            ? _ownerNameController.text.trim() : null,
-        workingHours: (_selectedRole == 'restaurant' ||
-                _selectedRole == 'charity')
-            ? {
-                'start': _formatTimeOfDay(_workingHoursStart!),
-                'end': _formatTimeOfDay(_workingHoursEnd!),
-              }
+            ? _ownerNameController.text.trim()
             : null,
+        workingHours:
+            (_selectedRole == 'restaurant' || _selectedRole == 'charity')
+                ? {
+                    'start': _formatTimeOfDay(_workingHoursStart!),
+                    'end': _formatTimeOfDay(_workingHoursEnd!),
+                  }
+                : null,
         licenseNumber: _selectedRole == 'restaurant'
-            ? _licenseNumberController.text.trim() : null,
+            ? _licenseNumberController.text.trim()
+            : null,
         description: _orgDescController.text.trim().isNotEmpty
-            ? _orgDescController.text.trim() : null,
+            ? _orgDescController.text.trim()
+            : null,
         logoUrl: logoUrl,
-        businessLicenseUrl:
-            _selectedRole == 'restaurant' ? orgDocUrl : null,
+        businessLicenseUrl: _selectedRole == 'restaurant' ? orgDocUrl : null,
         responsiblePerson: _selectedRole == 'charity'
-            ? _responsiblePersonController.text.trim() : null,
+            ? _responsiblePersonController.text.trim()
+            : null,
         registrationNumber: _selectedRole == 'charity'
-            ? _regNumberController.text.trim() : null,
-        charityDocumentUrl:
-            _selectedRole == 'charity' ? orgDocUrl : null,
+            ? _regNumberController.text.trim()
+            : null,
+        charityDocumentUrl: _selectedRole == 'charity' ? orgDocUrl : null,
       );
 
       if (!mounted) return;
@@ -457,19 +481,27 @@ class _SignupScreenState extends State<SignupScreen> {
 
   String _roleLabel(String role) {
     switch (role) {
-      case 'individual': return 'مستخدم عادي';
-      case 'restaurant': return 'مطعم';
-      case 'charity': return 'جمعية خيرية';
-      default: return role;
+      case 'individual':
+        return 'مستخدم عادي';
+      case 'restaurant':
+        return 'مطعم';
+      case 'charity':
+        return 'جمعية خيرية';
+      default:
+        return role;
     }
   }
 
   IconData _roleIcon(String role) {
     switch (role) {
-      case 'individual': return Icons.person_rounded;
-      case 'restaurant': return Icons.restaurant_rounded;
-      case 'charity': return Icons.volunteer_activism_rounded;
-      default: return Icons.badge_rounded;
+      case 'individual':
+        return Icons.person_rounded;
+      case 'restaurant':
+        return Icons.restaurant_rounded;
+      case 'charity':
+        return Icons.volunteer_activism_rounded;
+      default:
+        return Icons.badge_rounded;
     }
   }
 
@@ -515,11 +547,12 @@ class _SignupScreenState extends State<SignupScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: selected
-                              ? AppColors.primary.withValues(alpha:0.10)
+                              ? AppColors.primary.withValues(alpha: 0.10)
                               : Colors.white,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: selected ? AppColors.primary : AppColors.border,
+                            color:
+                                selected ? AppColors.primary : AppColors.border,
                             width: selected ? 1.5 : 1,
                           ),
                         ),
@@ -678,8 +711,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           start: _workingHoursStart,
                           end: _workingHoursEnd,
                           formatTime: _formatTimeOfDay,
-                          onPickStart: () =>
-                              _pickWorkingHours(isStart: true),
+                          onPickStart: () => _pickWorkingHours(isStart: true),
                           onPickEnd: () => _pickWorkingHours(isStart: false),
                         ),
                         const SizedBox(height: 14),
@@ -742,8 +774,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           start: _workingHoursStart,
                           end: _workingHoursEnd,
                           formatTime: _formatTimeOfDay,
-                          onPickStart: () =>
-                              _pickWorkingHours(isStart: true),
+                          onPickStart: () => _pickWorkingHours(isStart: true),
                           onPickEnd: () => _pickWorkingHours(isStart: false),
                         ),
                         const SizedBox(height: 14),
@@ -845,9 +876,10 @@ class _SignupScreenState extends State<SignupScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.danger.withValues(alpha:0.04),
+                  color: AppColors.danger.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.danger.withValues(alpha:0.2)),
+                  border: Border.all(
+                      color: AppColors.danger.withValues(alpha: 0.2)),
                 ),
                 child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -859,9 +891,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       child: Text(
                         'إقرار قانوني: بالتسجيل في تطبيق زاد، أقرّ بأنني أتحمل المسؤولية الكاملة عن سلامة أي طعام أتبرع به أو أشاركه عبر التطبيق، وأن هويتي موثّقة لدى الجهة المشغّلة.',
                         style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.danger,
-                            height: 1.6),
+                            fontSize: 11, color: AppColors.danger, height: 1.6),
                       ),
                     ),
                   ],
@@ -872,19 +902,17 @@ class _SignupScreenState extends State<SignupScreen> {
 
               // ── الشروط والأحكام ──
               GestureDetector(
-                onTap: () =>
-                    setState(() => _acceptedTerms = !_acceptedTerms),
+                onTap: () => setState(() => _acceptedTerms = !_acceptedTerms),
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: _acceptedTerms
-                        ? AppColors.primary.withValues(alpha:0.05)
+                        ? AppColors.primary.withValues(alpha: 0.05)
                         : Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: _acceptedTerms
-                          ? AppColors.primary
-                          : AppColors.border,
+                      color:
+                          _acceptedTerms ? AppColors.primary : AppColors.border,
                     ),
                   ),
                   child: Row(
@@ -895,8 +923,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         onChanged: (v) =>
                             setState(() => _acceptedTerms = v ?? false),
                         activeColor: AppColors.primary,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
                       const SizedBox(width: 6),
@@ -995,7 +1022,8 @@ class _PickedDoc {
   final Uint8List bytes;
   final String name;
   const _PickedDoc({required this.bytes, required this.name});
-  bool get isImage => name.toLowerCase().endsWith('.jpg') ||
+  bool get isImage =>
+      name.toLowerCase().endsWith('.jpg') ||
       name.toLowerCase().endsWith('.jpeg') ||
       name.toLowerCase().endsWith('.png');
 }
@@ -1090,8 +1118,7 @@ class _FilePickButton extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(
                 children: [
                   Icon(
@@ -1109,9 +1136,8 @@ class _FilePickButton extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: picked
-                                ? AppColors.success
-                                : AppColors.textDark,
+                            color:
+                                picked ? AppColors.success : AppColors.textDark,
                           ),
                         ),
                         if (picked)
