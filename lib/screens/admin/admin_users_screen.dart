@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:zad_app/screens/admin/admin_verification_details_screen.dart';
 import 'package:zad_app/screens/admin/admin_widgets.dart';
 import 'package:zad_app/services/admin_service.dart';
 import 'package:zad_app/services/notification_service.dart';
@@ -206,12 +207,45 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
                       itemBuilder: (context, i) {
                         final doc = docs[i];
                         final data = doc.data() as Map<String, dynamic>;
+                        final role = data['role'] as String? ?? '';
+                        final needsVerification =
+                            role == 'restaurant' || role == 'charity';
                         return UserCard(
                           name: data['fullName'] ?? data['name'] ?? 'بدون اسم',
                           email: data['email'] ?? '',
-                          role: _roleLabel(data['role'] ?? ''),
+                          role: _roleLabel(role),
                           statusLabel: 'بانتظار الموافقة',
                           statusColor: Colors.orange,
+                          onTap: needsVerification
+                              ? () async {
+                                  debugPrint(
+                                      '[AdminUsers] تم النقر على المتقدم: ${doc.id}, الدور: $role');
+                                  final roleCol = role == 'restaurant'
+                                      ? 'restaurants'
+                                      : 'charities';
+                                  final roleDoc = await FirebaseFirestore
+                                      .instance
+                                      .collection(roleCol)
+                                      .doc(doc.id)
+                                      .get();
+                                  final roleData =
+                                      roleDoc.data() ?? {};
+                                  if (!context.mounted) return;
+                                  debugPrint(
+                                      '[AdminUsers] فتح AdminVerificationDetailsScreen, الدور: $role');
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          AdminVerificationDetailsScreen(
+                                        docId: doc.id,
+                                        data: {...data, ...roleData},
+                                        role: role,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              : null,
                           actions: [
                             ActionButton(
                               label: 'موافقة',

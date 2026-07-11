@@ -4,6 +4,7 @@ import 'package:zad_app/screens/admin/admin_complaint_details_screen.dart';
 import 'package:zad_app/screens/admin/admin_widgets.dart';
 import 'package:zad_app/services/admin_service.dart';
 import 'package:zad_app/theme/app_colors.dart';
+import 'package:zad_app/utils/complaint_user_resolver.dart';
 
 class AdminComplaintsScreen extends StatefulWidget {
   const AdminComplaintsScreen({super.key});
@@ -257,24 +258,13 @@ class _ComplaintCardState extends State<_ComplaintCard> {
     _resolveIfNeeded();
   }
 
-  // Scans complaint doc for any recognised UID field.
-  String _resolveUid() {
-    for (final key in [
-      'userId', 'complainantId', 'submittedBy', 'reporterId', 'uid'
-    ]) {
-      final v = (widget.data[key] as String? ?? '').trim();
-      if (v.isNotEmpty) return v;
-    }
-    return '';
-  }
-
   void _resolveIfNeeded() {
     // A. Name already stored in complaint doc — no fetch needed
     for (final key in ['userName', 'complainantName', 'reporterName']) {
       if ((widget.data[key] as String? ?? '').trim().isNotEmpty) return;
     }
 
-    final uid = _resolveUid();
+    final uid = extractComplaintUid(widget.data);
     if (uid.isEmpty) return;
 
     // B. Already in parent cache
@@ -283,56 +273,22 @@ class _ComplaintCardState extends State<_ComplaintCard> {
     if (_fetching) return;
     _fetching = true;
 
-    _fetchUser(uid);
+    _doFetch(uid);
   }
 
-  Future<void> _fetchUser(String uid) async {
+  Future<void> _doFetch(String uid) async {
     try {
-      // Primary: document ID == Firebase Auth UID
-      var snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      Map<String, dynamic>? d = snap.exists ? snap.data() : null;
-
-      // Fallback: search by 'uid' field (handles mismatched doc IDs)
-      if (d == null) {
-        final q = await FirebaseFirestore.instance
-            .collection('users')
-            .where('uid', isEqualTo: uid)
-            .limit(1)
-            .get();
-        if (q.docs.isNotEmpty) d = q.docs.first.data();
-      }
-
-      if (!mounted || d == null) return;
-
-      String name = '';
-      for (final key in ['fullName', 'name', 'username', 'email']) {
-        final v = (d[key] as String? ?? '').trim();
-        if (v.isNotEmpty) { name = v; break; }
-      }
-      final photo = _pickPhoto(d);
-      final resolved = name.isNotEmpty ? name : 'مستخدم غير معروف';
-
-      widget.onUserResolved(uid, resolved, photo);
+      final info = await resolveComplaintUser(widget.docId, widget.data);
+      widget.onUserResolved(uid, info.name, info.photoUrl);
       if (mounted) {
         setState(() {
-          _localName  = resolved;
-          _localPhoto = photo;
+          _localName  = info.name;
+          _localPhoto = info.photoUrl;
         });
       }
-    } catch (_) {
-      // non-critical — card stays with fallback text
+    } catch (e) {
+      debugPrint('[Complaint] card fetch failed: $e');
     }
-  }
-
-  String? _pickPhoto(Map<String, dynamic> d) {
-    for (final key in ['photoUrl', 'profileImage', 'photo']) {
-      final v = (d[key] as String? ?? '').trim();
-      if (v.isNotEmpty) return v;
-    }
-    return null;
   }
 
   String get _displayName {
@@ -341,14 +297,14 @@ class _ComplaintCardState extends State<_ComplaintCard> {
       final v = (widget.data[key] as String? ?? '').trim();
       if (v.isNotEmpty) return v;
     }
-    // B. Local fetch
+    // B. Local fetch result
     if (_localName != null) return _localName!;
     // C. Parent cache
-    final uid = _resolveUid();
+    final uid = extractComplaintUid(widget.data);
     if (uid.isNotEmpty && widget.nameCache.containsKey(uid)) {
       return widget.nameCache[uid]!;
     }
-    return 'مستخدم';
+    return 'مستخدم غير معروف';
   }
 
   String? get _displayPhoto {
@@ -357,7 +313,7 @@ class _ComplaintCardState extends State<_ComplaintCard> {
       if (v.isNotEmpty) return v;
     }
     if (_localPhoto != null) return _localPhoto;
-    final uid = _resolveUid();
+    final uid = extractComplaintUid(widget.data);
     if (uid.isNotEmpty && widget.photoCache.containsKey(uid)) {
       return widget.photoCache[uid];
     }

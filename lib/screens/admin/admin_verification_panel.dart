@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
+import 'admin_verification_details_screen.dart';
 
 class AdminVerificationPanel extends StatelessWidget {
   const AdminVerificationPanel({super.key});
@@ -284,6 +285,19 @@ class _OrgVerificationCardState extends State<_OrgVerificationCard> {
     }
   }
 
+  void _openDetails(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminVerificationDetailsScreen(
+          docId: widget.docId,
+          data: widget.data,
+          role: widget.role,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isRestaurant = widget.role == 'restaurant';
@@ -304,50 +318,67 @@ class _OrgVerificationCardState extends State<_OrgVerificationCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              // شعار
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: _logoUrl.isNotEmpty
-                    ? Image.network(_logoUrl,
-                        width: 52,
-                        height: 52,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _iconPlaceholder())
-                    : _iconPlaceholder(),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          // ── Header: tappable → opens full details ──
+          GestureDetector(
+            onTap: () => _openDetails(context),
+            behavior: HitTestBehavior.translucent,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(_name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppColors.textDark)),
-                    const SizedBox(height: 3),
-                    Text(
-                      isRestaurant ? 'صاحب العمل: $_ownerOrPerson' : 'المسؤول: $_ownerOrPerson',
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.textLight),
+                    // شعار
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: _logoUrl.isNotEmpty
+                          ? Image.network(_logoUrl,
+                              width: 52,
+                              height: 52,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _iconPlaceholder())
+                          : _iconPlaceholder(),
                     ),
-                    Text(
-                      isRestaurant ? 'رقم الرخصة: $_number' : 'رقم التسجيل: $_number',
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.textLight),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: AppColors.textDark)),
+                          const SizedBox(height: 3),
+                          Text(
+                            isRestaurant
+                                ? 'صاحب العمل: $_ownerOrPerson'
+                                : 'المسؤول: $_ownerOrPerson',
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.textLight),
+                          ),
+                          Text(
+                            isRestaurant
+                                ? 'رقم الرخصة: $_number'
+                                : 'رقم التسجيل: $_number',
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.textLight),
+                          ),
+                        ],
+                      ),
                     ),
+                    const Icon(Icons.arrow_forward_ios_rounded,
+                        size: 14, color: AppColors.textLight),
                   ],
                 ),
-              ),
-            ],
+                if (_docUrl.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _DocumentPreview(
+                      url: _docUrl,
+                      label: isRestaurant ? 'الرخصة التجارية' : 'وثيقة التسجيل'),
+                ],
+              ],
+            ),
           ),
-          if (_docUrl.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _DocumentPreview(url: _docUrl,
-                label: isRestaurant ? 'الرخصة التجارية' : 'وثيقة التسجيل'),
-          ],
           const SizedBox(height: 12),
           Row(
             children: [

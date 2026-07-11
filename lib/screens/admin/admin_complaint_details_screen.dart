@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/complaint_user_resolver.dart';
 
 class AdminComplaintDetailsScreen extends StatefulWidget {
   final String docId;
@@ -42,53 +43,21 @@ class _AdminComplaintDetailsScreenState
     super.dispose();
   }
 
-  // ─── load complainant from users collection ───────────────────────────────
-
-  // Scans complaint doc for any recognised UID field.
-  String _resolveUid() {
-    for (final key in [
-      'userId', 'complainantId', 'submittedBy', 'reporterId', 'uid'
-    ]) {
-      final v = (widget.data[key] as String? ?? '').trim();
-      if (v.isNotEmpty) return v;
-    }
-    return '';
-  }
+  // ─── load complainant via shared resolver (users + role collections) ────────
 
   Future<void> _loadUser() async {
-    debugPrint('[Complaint] doc data: ${widget.data}');
-
-    final uid = _resolveUid();
-    debugPrint('[Complaint] resolved UID: "$uid"');
-    if (uid.isEmpty) return;
-
     setState(() => _loadingUser = true);
     try {
-      // Primary: document ID == Firebase Auth UID
-      var doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      debugPrint('[Complaint] users.doc($uid).exists = ${doc.exists}');
-
-      Map<String, dynamic>? data = doc.exists ? doc.data() : null;
-
-      // Fallback: search by 'uid' field (handles mismatched doc IDs)
-      if (data == null) {
-        debugPrint('[Complaint] fallback: where(uid == $uid)');
-        final q = await FirebaseFirestore.instance
-            .collection('users')
-            .where('uid', isEqualTo: uid)
-            .limit(1)
-            .get();
-        if (q.docs.isNotEmpty) data = q.docs.first.data();
-        debugPrint('[Complaint] where-query found: ${q.docs.isNotEmpty}');
-      }
-
-      debugPrint('[Complaint] user data: $data');
-
-      if (mounted && data != null) {
-        setState(() => _userData = data);
+      final info = await resolveComplaintUser(widget.docId, widget.data);
+      if (mounted && info.isKnown) {
+        setState(() {
+          _userData = {
+            'fullName': info.name,
+            'role':     info.role  ?? '',
+            'email':    info.email ?? '',
+            'phone':    info.phone ?? '',
+          };
+        });
       }
     } catch (e) {
       debugPrint('[Complaint] _loadUser error: $e');
@@ -114,7 +83,7 @@ class _AdminComplaintDetailsScreenState
       }
     }
 
-    debugPrint('[Complaint] name fallback — _userData=$_userData uid="${_resolveUid()}"');
+    debugPrint('[Complaint] name fallback — _userData=$_userData uid="${extractComplaintUid(widget.data)}"');
     return 'مستخدم غير معروف';
   }
 

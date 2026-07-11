@@ -7,7 +7,6 @@ import '../../services/admin_service.dart';
 import 'admin_offers_screen.dart';
 import 'admin_stats_detail_screen.dart';
 import 'admin_support_panel.dart';
-import 'admin_verification_panel.dart';
 import 'admin_widgets.dart';
 
 class AdminHomeScreen extends StatelessWidget {
@@ -379,7 +378,7 @@ class AdminHomeScreen extends StatelessWidget {
             title: 'مراجعة التحقق',
             subtitle: 'الموافقة على حسابات المطاعم والجمعيات',
             color: AppColors.primary,
-            onTap: () => _push(context, const AdminVerificationPanel()),
+            onTap: () => onNavigate(1),
           ),
           ActionTile(
             icon: Icons.warning_amber_rounded,
