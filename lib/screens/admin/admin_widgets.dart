@@ -269,6 +269,8 @@ class UserCard extends StatelessWidget {
   final String statusLabel;
   final Color statusColor;
   final List<Widget> actions;
+  // When provided, the info area becomes tappable (actions row stays outside).
+  final VoidCallback? onTap;
 
   const UserCard({
     super.key,
@@ -278,10 +280,74 @@ class UserCard extends StatelessWidget {
     required this.statusLabel,
     required this.statusColor,
     required this.actions,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    Widget infoSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '؟',
+                style: const TextStyle(
+                    color: AppColors.primary, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(email,
+                      style: const TextStyle(
+                          color: AppColors.textLight, fontSize: 12)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(
+                    color: statusColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (onTap != null) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  size: 12, color: AppColors.textLight),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text('الدور: $role',
+            style: const TextStyle(color: AppColors.textLight, fontSize: 12)),
+      ],
+    );
+
+    if (onTap != null) {
+      infoSection = GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.translucent,
+        child: infoSection,
+      );
+    }
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
@@ -294,58 +360,13 @@ class UserCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.primary.withValues(alpha:0.12),
-                  child: Text(
-                    name.isNotEmpty ? name[0].toUpperCase() : '؟',
-                    style: const TextStyle(
-                        color: AppColors.primary, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text(email,
-                          style: const TextStyle(
-                              color: AppColors.textLight, fontSize: 12)),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha:0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(
-                        color: statusColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('الدور: $role',
-                style:
-                    const TextStyle(color: AppColors.textLight, fontSize: 12)),
+            infoSection,
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: actions,
-            )
+            ),
           ],
         ),
       ),

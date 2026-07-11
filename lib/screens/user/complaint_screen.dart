@@ -51,7 +51,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final userId = currentUser.uid;
+      final userId    = currentUser.uid;
+      final userEmail = (currentUser.email ?? '').trim();
 
       // Fetch user name + role for denormalization (avoids extra reads on admin side)
       String userName = '';
@@ -74,8 +75,9 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
 
       await FirebaseFirestore.instance.collection('complaints').add({
         'userId': userId,
-        if (userName.isNotEmpty) 'userName': userName,
-        if (userRole.isNotEmpty) 'userRole': userRole,
+        if (userName.isNotEmpty)  'userName':  userName,
+        if (userRole.isNotEmpty)  'userRole':  userRole,
+        if (userEmail.isNotEmpty) 'userEmail': userEmail,
         'type': _selectedType ?? 'مشكلة أخرى',
         'description': _descController.text.trim(),
         'relatedOfferId': _offerIdController.text.trim(),

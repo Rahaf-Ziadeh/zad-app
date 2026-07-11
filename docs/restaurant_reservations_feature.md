@@ -3705,3 +3705,72 @@ Remove these before release by deleting the `debugPrint` lines from `_loadUser()
 | Charity on desktop | Same sidebar, no FAB |
 | Navigation via rail | `setState` updates `_selectedIndex`, `IndexedStack` switches page |
 | `flutter analyze` on 4 files | 0 issues |
+
+---
+
+## Admin Verification Details Screen
+
+### Purpose
+Allows admins to review the full registration data of a pending restaurant or charity before approving or rejecting the account. Previously only a compact card was shown with partial fields; now tapping the card opens a dedicated details screen.
+
+### Root Cause of Previous Bug
+`_OrgVerificationCard` was a non-interactive container. Fields like description, address, phone, working hours, location, and verification metadata were never displayed. There was no navigation to any details screen.
+
+### New File
+| File | Purpose |
+|------|---------|
+| `lib/screens/admin/admin_verification_details_screen.dart` | Full details screen for verification requests |
+
+### Changed File
+| File | Change |
+|------|--------|
+| `lib/screens/admin/admin_verification_panel.dart` | Added `_openDetails()` + `GestureDetector` on card header → navigates to details screen; import added |
+
+### Displayed Fields
+
+**Restaurant:**
+| Section | Fields |
+|---------|--------|
+| المعلومات العامة | اسم المطعم، صاحب العمل، البريد، الهاتف، رقم الرخصة، ساعات العمل، الوصف، العنوان، تاريخ التسجيل |
+| التحقق | حالة الطلب (badge)، مراجع بواسطة، تاريخ المراجعة، سبب الرفض |
+| الوثائق | شعار المؤسسة (قابل للنقر → كامل الشاشة)، الرخصة التجارية (قابل للنقر) |
+| الموقع | خط العرض، خط الطول (if available) |
+
+**Charity:** Same sections; `responsiblePerson` + `registrationNumber` replace restaurant-specific fields; `charityDocumentUrl` replaces `businessLicenseUrl`.
+
+### Cloudinary Image Preview
+- `_TappableImage`: shows image at height 180, tap → `_FullScreenImagePage` with `InteractiveViewer` (pinch-to-zoom, max 5×)
+- `_LogoBanner`: full-width 200px logo at top, tap → full screen
+- PDF URLs (`/raw/upload/` or `.pdf`): shown as `_PdfTile` with copy-link button
+- Missing/broken URLs: `_MissingDoc` placeholder — "لا توجد وثيقة مرفقة"
+
+### Approval Workflow
+1. Card header (logo + name + doc preview) is tappable → opens `AdminVerificationDetailsScreen`
+2. Card still shows Approve/Reject buttons for quick action without opening details
+3. In details screen, Approve/Reject buttons appear only when `verificationStatus == 'pending'`
+4. Approve/Reject write a Firestore batch (users + restaurants/charities), send notification, then `Navigator.pop()`
+5. Rejection requires entering a reason — enforced by dialog (empty string not accepted)
+
+### Backward Compatibility
+- All fields use null-safe fallbacks (`_str(key)` returns `'—'` if null/empty)
+- Old accounts without `logoUrl`, `businessLicenseUrl`, etc. show `_MissingDoc` placeholder
+- `workingHours` handled as `Map<dynamic, dynamic>` with safe cast
+
+### Performance
+- No additional Firestore reads — `data` map already merged from `users` + role collection in `_PendingList`
+- `_FullScreenImagePage` loads lazily on demand
+
+### Testing Steps
+| Scenario | Expected |
+|---|---|
+| Tap restaurant card header | Opens `AdminVerificationDetailsScreen` with all fields |
+| Tap charity card header | Same; responsiblePerson + registrationNumber shown |
+| Logo present | Full-width image banner; tap opens full-screen viewer |
+| Tap license image | Full-screen `InteractiveViewer` opens |
+| License URL missing | "لا توجد وثيقة مرفقة" placeholder shown |
+| PDF license URL | `_PdfTile` with copy-link button |
+| Approve in details | Firestore updated, notification sent, screen pops |
+| Reject without reason | Dialog stays open, reject blocked |
+| Reject with reason | `rejectionReason` saved, notification sent, screen pops |
+| Old account missing fields | Screen opens, missing fields show "—" — no crash |
+| `flutter analyze` on 2 files | 0 issues |
