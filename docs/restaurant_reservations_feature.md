@@ -3438,3 +3438,270 @@ Fix: removed all inline chip rows; the filter bar is now a single button + `Expa
 | Select "5 كم" radius → Apply → no offers → "توسيع النطاق" button | Works, sets radius to 50 km |
 | Offers without GPS coordinates | Always visible; sorted to end of list when "الأقرب" is active |
 | `flutter analyze` on 3 files | 0 issues |
+
+---
+
+## Admin Offers Filtering and Details Enhancement
+
+### Feature Name
+تحسين إدارة عروض المسؤول — Admin Offers Filtering and Details
+
+### Purpose
+Replace the overflow-prone inline filter chips in the admin offers screen with a full bottom-sheet filter UX (6 filter dimensions), add asynchronous publisher name resolution with N+1 prevention via a parent-level cache, and open a dedicated `AdminOfferDetailsScreen` when an offer card is tapped.
+
+### Actor
+**Admin** (role: admin)
+
+### Files Changed
+| File | Change |
+|---|---|
+| `lib/screens/admin/admin_offers_screen.dart` | Full rewrite |
+| `lib/screens/admin/admin_offer_details_screen.dart` | New file |
+
+### Root Causes Fixed
+| Problem | Root Cause | Fix |
+|---|---|---|
+| Horizontal filter row overflows on small screens | Three `_FilterRow` widgets in a `Row` — too many chips when all three visible | Replaced with single "فلترة" button + `showModalBottomSheet` |
+| Missing status values (picked_up, expired) | Switch only had 3 cases | Added all 5 status values |
+| No price or category filter | Not implemented | Added `_priceFilter` (free / paid) and `_categoryFilter` (6 categories) |
+| Provider name shows raw role string | No Firestore lookup when `providerName` field was empty | `_OfferCard` fires async lookup in `initState`; result cached in parent `Map<String, String> _nameCache` |
+| Cards not tappable | `_OfferCard` was `StatelessWidget` with no `onTap` | Wrapped in `Material + InkWell`; navigates to `AdminOfferDetailsScreen` |
+| No details screen | Missing file | Created `AdminOfferDetailsScreen` |
+
+### Filtering Logic
+All filtering is **client-side** after a full `StreamBuilder` fetch from `getAllOffersStream()`. No compound Firestore queries are added.
+
+**Filter dimensions:**
+| Dimension | State variable | Firestore field | Values |
+|---|---|---|---|
+| Provider type | `_providerTypeFilter` | `providerRole` | all / restaurant / charity / individual |
+| Offer type | `_offerTypeFilter` | `offerType` | all / clear_offer / mystery_package / restaurant_package |
+| Status | `_statusFilter` | `status` | all / available / reserved / picked_up / expired / cancelled |
+| Price | `_priceFilter` | `isFree` | all / free / paid |
+| Category | `_categoryFilter` | `category` | all / وجبات / مخبوزات / خضار وفواكه / معلبات / حلويات / أخرى |
+| Sort | `_sortOrder` | `createdAt` / price fields | newest / oldest / price_asc / price_desc |
+
+**Category 'أخرى':** matches if `category == 'أخرى'` OR not in `{وجبات, مخبوزات, خضار وفواكه, معلبات, حلويات}`.
+
+### Publisher Name Resolution
+Priority chain (first non-empty wins):
+1. `providerName` stored in offer doc (no extra Firestore read)
+2. `restaurantName` from `users/{providerUserId}`
+3. `charityName`
+4. `name`
+5. `fullName`
+6. Fallback: role label string
+
+**N+1 prevention:** `_OfferCard` checks parent `_nameCache` before firing any Firestore read. If the uid is already cached by a previous card, no read is fired. Cache is populated via `onNameResolved(uid, name)` callback → parent `setState`.
+
+### Details Screen Behaviour
+`AdminOfferDetailsScreen`:
+- Shows all offer fields: image, title, status + type + category badges, description, price, quantity, pickup location/time, payment methods, allergens, timestamps.
+- Loads publisher info once in `initState` via single `users/{uid}` get(): name, role, email, phone, address, verificationStatus.
+- **No reserve button, no QR, no rating** — admin read-only view.
+- Delete button calls `AdminService.deleteOffer()` — existing reservation protection preserved.
+- On delete: calls `onDeleted` callback (parent shows snackbar) then pops screen.
+
+### Testing Steps
+| Scenario | Expected |
+|---|---|
+| Open admin offers screen | Single "فلترة" button; no overflow |
+| Tap "فلترة" | Bottom sheet opens with 6 filter sections |
+| Select filters → "تطبيق" | Sheet closes; active chips appear; list filtered |
+| Tap × on active chip | Filter cleared; list updates |
+| Tap "مسح الفلاتر" | All 6 filters reset; sheet closes |
+| Offer with stored `providerName` | Name shown immediately, no extra Firestore read |
+| Offer without `providerName` | Role label shown briefly → resolved name after fetch |
+| Two offers with same `providerUserId` | Only 1 Firestore read (second hits cache) |
+| Tap offer card | Opens `AdminOfferDetailsScreen` |
+| Delete with no active reservations | Deleted; snackbar shown in parent; screen pops |
+| Delete with active reservations | Error snackbar — "لا يمكن حذف هذا العرض لأنه مرتبط بحجوزات موجودة." |
+| `flutter analyze` on 2 new files | 0 issues |
+
+---
+
+## Admin Complaints Sorting and Details
+
+### Feature Name
+تحسين إدارة الشكاوى — Admin Complaints Sorting, Name Resolution, and Details Screen
+
+### Problem
+| Issue | Root Cause |
+|---|---|
+| Card shows "شكوى مستخدم" instead of real name | `_ComplaintCard` hardcoded the string; no lookup of `userId` in users collection |
+| No date/time on card | `createdAt` was never formatted or displayed |
+| No sort control | `_ComplaintsList` was `StatelessWidget`; sort hardcoded newest-first only |
+| Tapping card did nothing | No `onTap` handler, no details screen |
+
+### Files Changed
+| File | Change |
+|---|---|
+| `lib/screens/admin/admin_complaints_screen.dart` | Full rewrite |
+| `lib/screens/admin/admin_complaint_details_screen.dart` | New file |
+| `lib/services/admin_service.dart` | Added `resolveComplaintWithNote` and `reopenComplaint` |
+
+### User-Name Resolution
+Priority chain (first non-empty value wins):
+1. `userName` stored in complaint document (zero extra reads)
+2. `fullName` from `users/{userId}`
+3. `name`
+4. `username`
+5. Fallback: `'مستخدم'`
+
+**Photo resolution** (for avatar): `photoUrl` → `profileImage` → `photo` from user doc; falls back to colored initials circle if missing or image fails to load.
+
+**N+1 prevention:** `_AdminComplaintsScreenState` owns `Map<String, String> _nameCache` and `Map<String, String?> _photoCache`. Both tabs (`_ComplaintsList`) receive these maps by reference. Each `_ComplaintCard` checks the cache before firing a Firestore read; on resolution it calls `onUserResolved(uid, name, photo)` → parent `setState` → all cards in both tabs pick up the resolved name from cache on next frame.
+
+### Date Formatting
+Format: `dd/MM/yyyy - hh:mm ص/م` (12-hour Arabic AM/PM)
+Example: `08/07/2026 - 10:15 م`
+If `createdAt` is absent or not a `Timestamp`: card shows `'تاريخ غير متوفر'`; details screen shows `'—'`.
+No crash on missing field — null-safe via `as Timestamp? ?? null` guard.
+
+### Sorting Behavior
+- Sort state `_sortOrder` lives in `_ComplaintsListState` (per-tab, independent).
+- Two chips shown above each list: **الأحدث أولاً** (default) / **الأقدم أولاً**.
+- Sorting is client-side on the full stream result — no `orderBy` added to Firestore queries.
+- Records without `createdAt` always sort to the **end** regardless of direction.
+- `AutomaticKeepAliveClientMixin` preserves each tab's sort selection across tab switches.
+- `getOpenComplaints()` and `getResolvedComplaints()` streams are unchanged.
+
+### Details Screen Behaviour
+`AdminComplaintDetailsScreen` (`admin_complaint_details_screen.dart`):
+- Shows all complaint fields: ID, status (colored), complaint text, createdAt, updatedAt, resolvedAt, resolvedBy, resolutionNote, relatedOfferId, relatedReservationId.
+- Loads complainant info in `initState` via single `users/{userId}` get(): name (priority chain above), role, email, phone.
+- Attached images (from `images: List<String>` field) displayed in a horizontal scroll row.
+- **Open complaints:** shows optional resolution note `TextField` + **تمييز كمحلول** button → calls `AdminService.resolveComplaintWithNote()` with `adminId` + optional note → pops screen.
+- **Resolved complaints:** shows **إعادة فتح الشكوى** button with confirmation dialog → calls `AdminService.reopenComplaint()` → pops screen.
+
+### Service Methods Added
+| Method | Signature | Firestore Write |
+|---|---|---|
+| `resolveComplaintWithNote` | `({complaintId, adminId, note?})` | Sets `status: resolved`, `resolvedAt`, `resolvedBy`, `resolutionNote` (if provided) |
+| `reopenComplaint` | `(complaintId)` | Sets `status: open`, `reopenedAt` |
+
+Existing `resolveComplaint(complaintId)` is **preserved** — the quick-resolve button on the card still uses it for backward compatibility.
+
+### Backward Compatibility
+- Old complaint docs without `userName`, `userId`, `createdAt`, `images`, or resolution fields are handled safely with null-safe reads and empty-string fallbacks.
+- No schema migration required.
+
+### Testing Steps
+| Scenario | Expected |
+|---|---|
+| Complaint with `userName` stored | Name shown immediately, no Firestore read |
+| Complaint without `userName`, has `userId` | "مستخدم" briefly → resolved name after fetch |
+| Two complaints from same user | Only 1 Firestore read; second card hits name cache |
+| Missing user document | Falls back to "مستخدم" silently |
+| `createdAt` present | Date shown as `dd/MM/yyyy - hh:mm ص/م` |
+| `createdAt` absent | Shows "تاريخ غير متوفر" on card, "—" in details |
+| Sort → "الأحدث أولاً" | Newest complaint at top |
+| Sort → "الأقدم أولاً" | Oldest complaint at top |
+| Complaints without `createdAt` in any sort order | Always appear at end |
+| Switch tabs and back | Sort selection preserved per tab |
+| Tap complaint card | Opens `AdminComplaintDetailsScreen` |
+| Details: mark as resolved (no note) | Complaint resolved; screen pops; moves to "تم الحل" tab |
+| Details: mark as resolved (with note) | Same + `resolutionNote` saved |
+| Details: reopen resolved complaint | Confirmation dialog; complaint reopens; moves to "مفتوحة" tab |
+| Card "حل سريع" button (open tab) | Complaint resolved; disappears from open list |
+| `flutter analyze` on 3 changed files | 0 issues |
+
+---
+
+## Complainant Name Resolution Fix
+
+### Problem
+`AdminComplaintDetailsScreen` and `_ComplaintCard` both showed **"مستخدم"** / **"مستخدم غير معروف"** instead of the real user name.
+
+### Exact Root Cause
+Three compounding issues:
+
+1. **Only `userId` was tried as the UID field key.** The code did `widget.data['userId']` as a hard-coded key. This is correct for current complaints (field is `userId`) but fails silently for any complaint whose UID is stored under `complainantId`, `submittedBy`, `reporterId`, or `uid`.
+
+2. **No fallback if `users.doc(uid)` returns `!doc.exists`.** If for any reason (edge case, deleted account, mismatched doc ID) the primary lookup returns an empty snapshot, the code returned without trying a `where('uid', ==, uid)` query.
+
+3. **No `userName` stored at complaint creation time.** `complaint_screen.dart` only wrote `{ 'userId': uid, … }` — no `userName`, no `userRole`. Every admin view required a live Firestore read to the `users` collection. If that read failed (network, permissions, timing), the name stayed at the fallback string.
+
+### Complaint Field Used
+`userId` (confirmed from `complaint_screen.dart` line 55).  
+Fallback scan order: `userId` → `complainantId` → `submittedBy` → `reporterId` → `uid`.
+
+### User Lookup Path Used
+1. `users/{resolvedUserId}` (document ID = Firebase Auth UID — confirmed from `auth_service.dart` line 114)
+2. If `!doc.exists`: `users.where('uid', isEqualTo: resolvedUserId).limit(1)` (handles edge cases)
+
+Name extracted from: `fullName` → `name` → `username` → `email` → `'مستخدم غير معروف'`
+
+### Files Changed
+| File | Change |
+|---|---|
+| `lib/screens/admin/admin_complaint_details_screen.dart` | `_loadUser()` now scans 5 UID field names; two-step lookup; full `debugPrint` trace; `_complainantName` also scans 3 complaint name fields and adds `email` + `'مستخدم غير معروف'` fallback |
+| `lib/screens/admin/admin_complaints_screen.dart` | `_ComplaintCardState._resolveIfNeeded()` and `_displayName` use same multi-field scan + `_fetchUser()` with `where` fallback |
+| `lib/screens/user/complaint_screen.dart` | `_submit()` now fetches current user's `fullName`/`name`/`role` from Firestore before writing complaint, stores as `userName` + `userRole` on the document; also fixed 4× `withOpacity` → `withValues` deprecations |
+
+### Backward Compatibility
+- Old complaints without `userName` still resolve via Firestore lookup.
+- Old complaints without `userId` (any other UID field name) are handled by the multi-key scan.
+- No crashes if the user document is missing or the Firestore read fails — caught by `catch(_)` with a graceful fallback text.
+
+### Debug Prints (temporary)
+Four `debugPrint` calls added to `admin_complaint_details_screen.dart`:
+- `[Complaint] doc data:` — full complaint document
+- `[Complaint] resolved UID:` — which UID was extracted and from which field
+- `[Complaint] users.doc(uid).exists =` — whether primary lookup succeeded
+- `[Complaint] user data:` — the fetched user document
+- `[Complaint] name fallback —` — triggered only when both lookups fail
+
+Remove these before release by deleting the `debugPrint` lines from `_loadUser()` and `_complainantName`.
+
+### Testing Steps
+| Scenario | Expected |
+|---|---|
+| New complaint (after fix) | `userName` + `userRole` stored; details screen shows name instantly, no Firestore read needed |
+| Old complaint with `userId` + existing user doc | Name resolved via `users.doc(uid)`; shown after short async wait |
+| Old complaint with `userId`, `users.doc` returns `!exists` | Where-query fallback fires; name resolved if doc exists with `uid` field |
+| Old complaint with no UID field at all | Shows "مستخدم غير معروف" gracefully, no crash |
+| User document missing `fullName`/`name` | Falls back to `username`, then `email`, then "مستخدم غير معروف" |
+| Admin app: check Flutter debug console | See `[Complaint]` debug lines tracing each step |
+| `flutter analyze` on 3 files | 0 issues |
+
+---
+
+## Responsive Web Layout — Admin & Charity Dashboards
+
+### Breakpoints
+| Width | Layout |
+|-------|--------|
+| < 900 dp | Mobile — `NavigationBar` at bottom, unchanged |
+| ≥ 900 dp | Desktop — `NavigationRail` sidebar, content centered ≤ 1100 dp |
+
+### New Files
+| File | Purpose |
+|------|---------|
+| `lib/utils/responsive.dart` | `AppBreakpoints` — `isDesktop(context)`, `contentPadding(width)`, constants `desktop = 900`, `maxContentWidth = 1100` |
+
+### Changed Files
+| File | Change |
+|------|--------|
+| `lib/screens/admin/admin_dashboard.dart` | Added `_buildMobileLayout()` (existing), `_buildDesktopLayout()` (NavigationRail + centered IndexedStack), `_railDestinations`, `_fab` getter; `build()` dispatches on breakpoint |
+| `lib/screens/charity/charity_dashboard.dart` | Same pattern; `_body` getter for IndexedStack (needed because `_currentUser` can change); fixed `withOpacity` → `withValues` deprecation |
+| `lib/screens/restaurant/restaurant_dashboard.dart` | Fixed `withOpacity` → `withValues` deprecation only (no responsive changes) |
+
+### Desktop Layout Mechanics
+- `NavigationRail` takes the left side (`labelType: all`, `backgroundColor: AppColors.card`)
+- `VerticalDivider` separates rail from content
+- `Expanded` + `LayoutBuilder` wraps the `IndexedStack`; `Padding(horizontal: hPad)` centers content when available width > 1100 dp
+- FAB (admin support panel) is preserved on both layouts
+
+### Screens NOT Changed
+- `user_dashboard.dart` and all user screens — mobile UX preserved
+- Admin and charity inner screens — they fill the constrained column automatically
+
+### Testing Steps
+| Scenario | Expected |
+|---|---|
+| Admin on mobile (< 900 dp) | `NavigationBar` at bottom, layout unchanged |
+| Admin on desktop (≥ 900 dp) | `NavigationRail` on left, content centered in 1100 dp column |
+| Charity on desktop | Same sidebar, no FAB |
+| Navigation via rail | `setState` updates `_selectedIndex`, `IndexedStack` switches page |
+| `flutter analyze` on 4 files | 0 issues |

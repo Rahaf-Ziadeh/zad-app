@@ -52,8 +52,30 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
     setState(() => _isLoading = true);
     try {
       final userId = currentUser.uid;
+
+      // Fetch user name + role for denormalization (avoids extra reads on admin side)
+      String userName = '';
+      String userRole = 'individual';
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+        if (userDoc.exists) {
+          final ud = userDoc.data()!;
+          final fullName = (ud['fullName'] as String? ?? '').trim();
+          final name    = (ud['name']     as String? ?? '').trim();
+          userName = fullName.isNotEmpty ? fullName : name;
+          userRole = (ud['role'] as String? ?? 'individual');
+        }
+      } catch (_) {
+        // non-critical — complaint is still submitted without name
+      }
+
       await FirebaseFirestore.instance.collection('complaints').add({
         'userId': userId,
+        if (userName.isNotEmpty) 'userName': userName,
+        if (userRole.isNotEmpty) 'userRole': userRole,
         'type': _selectedType ?? 'مشكلة أخرى',
         'description': _descController.text.trim(),
         'relatedOfferId': _offerIdController.text.trim(),
@@ -89,9 +111,9 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.danger.withOpacity(0.06),
+              color: AppColors.danger.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.danger.withOpacity(0.2)),
+              border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
             ),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -147,7 +169,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                               horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
                             color: selected
-                                ? AppColors.danger.withOpacity(0.10)
+                                ? AppColors.danger.withValues(alpha: 0.10)
                                 : AppColors.background,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
@@ -229,7 +251,7 @@ class _SuccessView extends StatelessWidget {
               width: 100,
               height: 100,
               decoration: BoxDecoration(
-                color: AppColors.success.withOpacity(0.12),
+                color: AppColors.success.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.check_circle_rounded,

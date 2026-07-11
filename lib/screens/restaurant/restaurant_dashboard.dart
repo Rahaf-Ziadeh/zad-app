@@ -45,7 +45,7 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        indicatorColor: AppColors.primaryLight.withOpacity(0.25),
+        indicatorColor: AppColors.primaryLight.withValues(alpha: 0.25),
         backgroundColor: AppColors.card,
         elevation: 0,
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),

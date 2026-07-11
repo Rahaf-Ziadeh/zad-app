@@ -276,4 +276,24 @@ class AdminService {
       'resolvedAt': FieldValue.serverTimestamp(),
     });
   }
+
+  Future<void> resolveComplaintWithNote({
+    required String complaintId,
+    required String adminId,
+    String? note,
+  }) async {
+    await _firestore.collection('complaints').doc(complaintId).update({
+      'status': 'resolved',
+      'resolvedAt': FieldValue.serverTimestamp(),
+      'resolvedBy': adminId,
+      if (note != null && note.trim().isNotEmpty) 'resolutionNote': note.trim(),
+    });
+  }
+
+  Future<void> reopenComplaint(String complaintId) async {
+    await _firestore.collection('complaints').doc(complaintId).update({
+      'status': 'open',
+      'reopenedAt': FieldValue.serverTimestamp(),
+    });
+  }
 }
