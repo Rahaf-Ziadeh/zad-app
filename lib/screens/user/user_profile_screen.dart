@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/profile_widgets.dart';
+import 'national_id_step_screen.dart';
 import 'user_extra_screens.dart';
+import 'user_publish_offer_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final AppUser user;
-  final VoidCallback? onGoToDonate;
-  const UserProfileScreen({super.key, required this.user, this.onGoToDonate});
+  const UserProfileScreen({super.key, required this.user});
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
@@ -30,6 +31,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _phoneController = TextEditingController(text: widget.user.phone);
     _addressController = TextEditingController(text: widget.user.address);
     _updatedPhotoUrl = widget.user.photoUrl;
+    _loadIndividualAddress();
+  }
+
+  // ── العنوان أصبح مخزّناً في مجموعة individuals وليس users ──
+  Future<void> _loadIndividualAddress() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final doc = await FirebaseFirestore.instance
+        .collection('individuals')
+        .doc(uid)
+        .get();
+    final address = doc.data()?['address'] as String?;
+    if (!mounted || address == null || address.isEmpty) return;
+    setState(() => _addressController.text = address);
   }
 
   @override
@@ -50,12 +65,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     setState(() => _isSaving = true);
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'name': _nameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'address': _addressController.text.trim(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      final name = _nameController.text.trim();
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {
+          'name': name,
+          'fullName': name,
+          'phone': _phoneController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('individuals').doc(uid),
+        {
+          'name': name,
+          'address': _addressController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       setState(() => _isEditing = false);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -89,12 +119,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      // ── نستخدم سياق النافذة الخاص بها (dialogContext) لإغلاقها، وليس سياق
+      // الشاشة الخارجية، تفادياً لأي التباس مع Navigator غير الجذري ──
+      builder: (dialogContext) => AlertDialog(
         title: const Text('تسجيل الخروج'),
         content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('إلغاء'),
           ),
           ElevatedButton(
@@ -102,23 +134,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               backgroundColor: AppColors.danger,
               foregroundColor: Colors.white,
             ),
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('خروج'),
           ),
         ],
       ),
     );
 
-    if (confirm == true) {
-      await FirebaseAuth.instance.signOut();
+    if (confirm != true) return;
+    if (!mounted) return;
 
-      if (!mounted) return;
+    // ── نلتقط الـ Navigator الجذري صراحةً قبل await تسجيل الخروج: تغيّر حالة
+    // المصادقة قد يُعيد بناء الشجرة فوق هذه الشاشة بمجرد اكتمال signOut،
+    // فنفقد إمكانية استخدام context بأمان بعد ذلك ──
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
 
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-      );
-    }
+    await FirebaseAuth.instance.signOut();
+
+    rootNavigator.pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   String _roleLabel(String role) {
@@ -320,7 +353,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       label: 'رقم الهاتف',
                       controller: _phoneController,
                       isEditing: _isEditing,
-                      keyboardType: TextInputType.phone),
+                      keyboardType: TextInputType.phone,
+                      isPhone: true),
                   const Divider(),
                   ProfileFieldWidget(
                       icon: Icons.location_on_outlined,
@@ -347,7 +381,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   icon: Icons.add_box_rounded,
                   title: 'نشر عرض طعام',
                   color: AppColors.primary,
-                  onTap: () => widget.onGoToDonate?.call(),
+                  onTap: () async {
+                    // ── يفتح مباشرة شاشة نشر الطعام للكل، دون المرور بصفحة
+                    // الدخول المحايدة، بعد التحقق من توثيق الهوية ──
+                    final identityReady = await ensureNationalIdSaved(context);
+                    if (!context.mounted || !identityReady) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const UserPublishOfferScreen(),
+                      ),
+                    );
+                  },
                 ),
                 const Divider(height: 1, indent: 56),
                 MenuTileWidget(

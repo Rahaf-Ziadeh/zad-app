@@ -8,7 +8,10 @@ import 'package:zad_app/theme/app_colors.dart';
 import 'package:zad_app/widgets/offer_widgets.dart';
 
 class RestaurantOffersScreen extends StatelessWidget {
-  const RestaurantOffersScreen({super.key});
+  // ── فلترة أولية اختيارية حسب حالة العرض: 'available' (نشطة), 'reserved' (بانتظار)، أو null لعرض الكل ──
+  final String? initialFilter;
+
+  const RestaurantOffersScreen({super.key, this.initialFilter});
 
   String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
 
@@ -184,7 +187,12 @@ class RestaurantOffersScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final offers = snapshot.data!.docs;
+          final offers = initialFilter == null
+              ? snapshot.data!.docs
+              : snapshot.data!.docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return (data['status'] ?? '') == initialFilter;
+                }).toList();
 
           if (offers.isEmpty) {
             return Center(

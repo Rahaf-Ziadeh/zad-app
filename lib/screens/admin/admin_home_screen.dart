@@ -49,7 +49,10 @@ class AdminHomeScreen extends StatelessWidget {
         AdminFieldDef(
             icon: Icons.circle_outlined, label: 'الحالة', key: 'status'),
         AdminFieldDef(
-            icon: Icons.phone_outlined, label: 'الهاتف', key: 'phone'),
+            icon: Icons.phone_outlined,
+            label: 'الهاتف',
+            key: 'phone',
+            isPhone: true),
       ],
     );
   }

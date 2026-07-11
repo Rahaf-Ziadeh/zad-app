@@ -6,7 +6,47 @@ import '../../theme/app_colors.dart';
 import '../../widgets/user_home_widgets.dart';
 
 import 'complaint_screen.dart';
+import 'donate_tab.dart';
+import 'national_id_step_screen.dart';
 import 'notifications_screen.dart';
+import 'provider_public_profile_screen.dart';
+import 'user_extra_screens.dart';
+import 'user_publish_offer_screen.dart';
+
+// ─────────────────────────────────────────────
+// اختصارات تبرع/نشر: تفتح الشاشة المخصصة مباشرة (CharityDonationScreen أو
+// UserPublishOfferScreen) بعد التحقق من توثيق الهوية عبر نفس الدالة
+// المشتركة ensureNationalIdSaved، دون أي صفحة دخول وسيطة. charityId/
+// charityName اختياريان: يُمرَّران عند وجود جمعية محددة مسبقاً (مثل زر
+// "تبرع" بجانب جمعية بعينها)، ويُتركان فارغين عند عدم وجود جمعية محددة
+// (كزر "تبرع الآن" العام أو تصنيف "التبرع")، فيختار المستخدم الجمعية من
+// داخل CharityDonationScreen نفسها ──
+Future<void> _openCharityDonation(
+  BuildContext context, {
+  String? charityId,
+  String? charityName,
+}) async {
+  final identityReady = await ensureNationalIdSaved(context);
+  if (!context.mounted || !identityReady) return;
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => CharityDonationScreen(
+        initialCharityId: charityId,
+        initialCharityName: charityName,
+      ),
+    ),
+  );
+}
+
+Future<void> _openPublishOffer(BuildContext context) async {
+  final identityReady = await ensureNationalIdSaved(context);
+  if (!context.mounted || !identityReady) return;
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const UserPublishOfferScreen()),
+  );
+}
 
 class UserHomeScreen extends StatelessWidget {
   final AppUser user;
@@ -78,18 +118,25 @@ class UserHomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            _HeroBanner(onDonate: () => onBrowseTab(2)),
+            _HeroBanner(onDonate: () => _openCharityDonation(context)),
             const SizedBox(height: 20),
             _SearchBarCard(onTap: () => onBrowseTab(0)),
             const SizedBox(height: 22),
             _CategorySection(
               onBrowseTab: onBrowseTab,
               onOrders: () => onNavigate(2),
+              onMyDonations: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const UserDonationsHistoryScreen(),
+                ),
+              ),
+              onDonateToCharity: () => _openCharityDonation(context),
             ),
             const SizedBox(height: 22),
             const _ImpactTracker(),
             const SizedBox(height: 22),
-            _UrgentCharitiesSection(onDonate: () => onBrowseTab(2)),
+            const _UrgentCharitiesSection(),
             const SizedBox(height: 24),
             GridView.count(
               crossAxisCount: 2,
@@ -149,7 +196,7 @@ class UserHomeScreen extends StatelessWidget {
               title: 'نشر عرض طعام',
               subtitle: 'شارك طعامك الفائض مجاناً أو بسعر رمزي',
               color: const Color(0xFF7C3AED),
-              onTap: () => onBrowseTab(2),
+              onTap: () => _openPublishOffer(context),
             ),
             ActionTile(
               icon: Icons.receipt_long_rounded,
@@ -377,10 +424,14 @@ class _SearchBarCard extends StatelessWidget {
 class _CategorySection extends StatelessWidget {
   final ValueChanged<int> onBrowseTab;
   final VoidCallback onOrders;
+  final VoidCallback onMyDonations;
+  final VoidCallback onDonateToCharity;
 
   const _CategorySection({
     required this.onBrowseTab,
     required this.onOrders,
+    required this.onMyDonations,
+    required this.onDonateToCharity,
   });
 
   @override
@@ -390,6 +441,7 @@ class _CategorySection extends StatelessWidget {
       ('الباقات', Icons.card_giftcard_rounded, 1),
       ('التبرع', Icons.volunteer_activism_rounded, 2),
       ('طلباتي', Icons.receipt_long_rounded, -1),
+      ('تبرعاتي', Icons.history_rounded, -2),
     ];
 
     return Column(
@@ -404,44 +456,58 @@ class _CategorySection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Row(
+        // ── شبكة من 3 أعمدة: توزّع الفئات الخمس على صفّين بحجم موحّد بدل
+        // ازدحامها في صفّ واحد ──
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 16,
+          childAspectRatio: 1.05,
           children: items.map((item) {
-            return Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  if (item.$1 == 'طلباتي') {
-                    onOrders();
-                  } else {
-                    onBrowseTab(item.$3);
-                  }
-                },
-                child: Column(
-                  children: [
-                    Container(
-                      width: 58,
-                      height: 58,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha:0.10),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Icon(
-                        item.$2,
-                        color: AppColors.primary,
-                        size: 27,
-                      ),
+            return GestureDetector(
+              onTap: () {
+                if (item.$1 == 'طلباتي') {
+                  onOrders();
+                } else if (item.$1 == 'تبرعاتي') {
+                  onMyDonations();
+                } else if (item.$1 == 'التبرع') {
+                  // ── لا يرتبط بجمعية محددة، فيفتح CharityDonationScreen
+                  // مباشرة ويختار المستخدم الجمعية من داخلها ──
+                  onDonateToCharity();
+                } else {
+                  onBrowseTab(item.$3);
+                }
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha:0.10),
+                      borderRadius: BorderRadius.circular(18),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      item.$1,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textDark,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Icon(
+                      item.$2,
+                      color: AppColors.primary,
+                      size: 27,
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.$1,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textDark,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             );
           }).toList(),
@@ -520,11 +586,7 @@ class _ImpactTracker extends StatelessWidget {
 }
 
 class _UrgentCharitiesSection extends StatelessWidget {
-  final VoidCallback onDonate;
-
-  const _UrgentCharitiesSection({
-    required this.onDonate,
-  });
+  const _UrgentCharitiesSection();
 
   @override
   Widget build(BuildContext context) {
@@ -566,38 +628,64 @@ class _UrgentCharitiesSection extends StatelessWidget {
             ...charities.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
               final name = data['name'] ?? data['fullName'] ?? 'جمعية';
-              final address = data['address'] ?? '';
               final email = data['email'] ?? '';
 
-              return Card(
-                elevation: 0,
-                margin: const EdgeInsets.only(bottom: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppColors.border),
-                ),
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFE11D48),
-                    child: Icon(
-                      Icons.volunteer_activism_rounded,
-                      color: Colors.white,
+              return FutureBuilder<DocumentSnapshot>(
+                future: FirebaseFirestore.instance
+                    .collection('charities')
+                    .doc(doc.id)
+                    .get(),
+                builder: (context, charitySnap) {
+                  final charityData =
+                      charitySnap.data?.data() as Map<String, dynamic>? ?? {};
+                  final address = charityData['address'] ?? '';
+
+                  return Card(
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: AppColors.border),
                     ),
-                  ),
-                  title: Text(
-                    name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    address.toString().isNotEmpty ? address : email,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: TextButton(
-                    onPressed: onDonate,
-                    child: const Text('تبرع'),
-                  ),
-                ),
+                    child: ListTile(
+                      // ── يفتح الملف العام للجمعية؛ زر "تبرع" في trailing
+                      // له منطقة لمس خاصة به فلا يتعارض مع هذا الفتح ──
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ProviderPublicProfileScreen(
+                            providerUserId: doc.id,
+                            providerRole: 'charity',
+                          ),
+                        ),
+                      ),
+                      leading: const CircleAvatar(
+                        backgroundColor: Color(0xFFE11D48),
+                        child: Icon(
+                          Icons.volunteer_activism_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                      title: Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        address.toString().isNotEmpty ? address : email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => _openCharityDonation(
+                          context,
+                          charityId: doc.id,
+                          charityName: name.toString(),
+                        ),
+                        child: const Text('تبرع'),
+                      ),
+                    ),
+                  );
+                },
               );
             }),
           ],

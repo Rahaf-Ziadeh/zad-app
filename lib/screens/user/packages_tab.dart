@@ -11,6 +11,15 @@ import '../../widgets/offer_widgets.dart';
 import 'offer_details_screen.dart';
 import 'qr_code_screen.dart';
 
+// ── يُخفي الباقات المنتهية الصلاحية من قوائم التصفح: يدعم الحقل الجديد
+// expiresAt (العروض الفردية) والحقل القديم expiryDate (فائض الجمعيات)؛ أي
+// باقة بلا أي منهما (كباقات المطاعم) تُعتبر غير منتهية دائماً ──
+bool _isOfferExpired(Map<String, dynamic> data) {
+  final raw = data['expiresAt'] ?? data['expiryDate'];
+  if (raw is! Timestamp) return false;
+  return raw.toDate().isBefore(DateTime.now());
+}
+
 class PackagesTab extends StatefulWidget {
   const PackagesTab({super.key});
 
@@ -40,6 +49,7 @@ class _PackagesTabState extends State<PackagesTab> {
   Future<void> _loadLocation() async {
     setState(() => _locationLoading = true);
     final pos = await LocationService().getCurrentLocation();
+    if (!mounted) return;
     setState(() {
       _userPosition = pos;
       _locationLoading = false;
@@ -451,7 +461,11 @@ class _PackagesTabState extends State<PackagesTab> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final packages = _filterAndSort(snapshot.data!.docs);
+              final visibleDocs = snapshot.data!.docs
+                  .where((d) =>
+                      !_isOfferExpired(d.data() as Map<String, dynamic>))
+                  .toList();
+              final packages = _filterAndSort(visibleDocs);
 
               if (packages.isEmpty) {
                 return Center(

@@ -1,22 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:zad_app/utils/phone_formatter.dart';
 import '../theme/app_colors.dart';
 
 /// صف معلومة واحدة — أيقونة + عنوان + قيمة
+/// إن مُرِّر [onTap] يصبح الصف قابلاً للنقر بأسلوب بسيط يميّزه عن بقية الصفوف.
 class OfferInfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final bool isPhone;
+  final VoidCallback? onTap;
 
   const OfferInfoRow({
     super.key,
     required this.icon,
     required this.label,
     required this.value,
+    this.isPhone = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    final clickable = onTap != null;
+    final valueStyle = clickable
+        ? const TextStyle(
+            fontSize: 13,
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.underline,
+            height: 1.4,
+          )
+        : const TextStyle(
+            fontSize: 13,
+            color: AppColors.textLight,
+            height: 1.4,
+          );
+    final row = Padding(
       padding: const EdgeInsets.only(bottom: 7),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,17 +52,18 @@ class OfferInfoRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textLight,
-                height: 1.4,
-              ),
-            ),
+            child: isPhone
+                ? PhoneText(value, style: valueStyle)
+                : Text(value, style: valueStyle),
           ),
         ],
       ),
+    );
+    if (!clickable) return row;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: row,
     );
   }
 }

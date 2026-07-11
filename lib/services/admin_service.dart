@@ -96,20 +96,62 @@ class AdminService {
     });
   }
 
-  Future<void> approveUser(String userId) async {
-    await _firestore.collection('users').doc(userId).update({
+  // ── مجموعة التفاصيل الخاصة بدور المطعم/الجمعية إن وُجد ──
+  String? _roleCollectionFor(String? role) {
+    if (role == 'restaurant') return 'restaurants';
+    if (role == 'charity') return 'charities';
+    return null;
+  }
+
+  Future<void> approveUser(String userId, {String? role}) async {
+    final batch = _firestore.batch();
+    final roleCollection = _roleCollectionFor(role);
+    batch.update(_firestore.collection('users').doc(userId), {
       'isApproved': true,
       'status': 'active',
       'updatedAt': FieldValue.serverTimestamp(),
+      if (roleCollection != null) 'verificationStatus': 'approved',
+      if (roleCollection != null) 'rejectionReason': null,
     });
+    if (roleCollection != null) {
+      batch.set(
+        _firestore.collection(roleCollection).doc(userId),
+        {
+          'isVerified': true,
+          'verificationStatus': 'approved',
+          'rejectionReason': null,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+    await batch.commit();
   }
 
-  Future<void> rejectUser(String userId) async {
-    await _firestore.collection('users').doc(userId).update({
+  Future<void> rejectUser(String userId, {String? role, String? reason}) async {
+    final batch = _firestore.batch();
+    final roleCollection = _roleCollectionFor(role);
+    final rejectionReason = reason ?? 'تم رفض الحساب من قبل الإدارة';
+    batch.update(_firestore.collection('users').doc(userId), {
       'isApproved': false,
       'status': 'rejected',
       'updatedAt': FieldValue.serverTimestamp(),
+      if (roleCollection != null) 'verificationStatus': 'rejected',
+      if (roleCollection != null) 'rejectionReason': rejectionReason,
     });
+    if (roleCollection != null) {
+      batch.set(
+        _firestore.collection(roleCollection).doc(userId),
+        {
+          'isVerified': false,
+          'verificationStatus': 'rejected',
+          'rejectionReason': rejectionReason,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+    await batch.commit();
   }
 
   Future<void> suspendUser(String userId) async {
@@ -131,7 +173,7 @@ class AdminService {
     required String role,
     required String adminId,
   }) async {
-    await approveUser(userId);
+    await approveUser(userId, role: role);
 
     await logAdminAction(
       adminId: adminId,
@@ -147,7 +189,7 @@ class AdminService {
     required String role,
     required String adminId,
   }) async {
-    await rejectUser(userId);
+    await rejectUser(userId, role: role);
 
     await logAdminAction(
       adminId: adminId,

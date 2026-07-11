@@ -10,6 +10,15 @@ import '../../widgets/offer_widgets.dart';
 import 'offer_details_screen.dart';
 import 'qr_code_screen.dart';
 
+// ── يُخفي العروض المنتهية الصلاحية من قوائم التصفح: يدعم الحقل الجديد
+// expiresAt (العروض الفردية) والحقل القديم expiryDate (فائض الجمعيات)؛ أي
+// عرض بلا أي منهما (كعروض المطاعم) يُعتبر غير منتهٍ دائماً ──
+bool _isOfferExpired(Map<String, dynamic> data) {
+  final raw = data['expiresAt'] ?? data['expiryDate'];
+  if (raw is! Timestamp) return false;
+  return raw.toDate().isBefore(DateTime.now());
+}
+
 class OffersTab extends StatefulWidget {
   const OffersTab({super.key});
 
@@ -38,8 +47,21 @@ class _OffersTabState extends State<OffersTab> {
   }
 
   Future<void> _loadLocation() async {
+    if (!mounted) {
+      debugPrint(
+          '[OffersTab] _loadLocation: not mounted before starting — skipping setState');
+      return;
+    }
     setState(() => _locationLoading = true);
+
     final pos = await LocationService().getCurrentLocation();
+
+    if (!mounted) {
+      debugPrint(
+          '[OffersTab] _loadLocation: not mounted after getCurrentLocation() '
+          '— skipping setState');
+      return;
+    }
     setState(() {
       _userPosition = pos;
       _locationLoading = false;
@@ -542,7 +564,11 @@ class _OffersTabState extends State<OffersTab> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final sorted = _sortAndFilter(snapshot.data!.docs);
+              final visibleDocs = snapshot.data!.docs
+                  .where((d) =>
+                      !_isOfferExpired(d.data() as Map<String, dynamic>))
+                  .toList();
+              final sorted = _sortAndFilter(visibleDocs);
 
               if (sorted.isEmpty) {
                 return _EmptyState(

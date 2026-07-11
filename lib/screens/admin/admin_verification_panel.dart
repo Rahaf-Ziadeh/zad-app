@@ -51,6 +51,8 @@ class _PendingList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String roleCollection =
+        role == 'restaurant' ? 'restaurants' : 'charities';
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
@@ -79,10 +81,21 @@ class _PendingList extends StatelessWidget {
           itemBuilder: (_, i) {
             final doc = docs[i];
             final data = doc.data() as Map<String, dynamic>;
-            return _OrgVerificationCard(
-              docId: doc.id,
-              data: data,
-              role: role,
+            // ── جلب المستند التفصيلي (restaurants/charities) لعرض بيانات الترخيص والشعار ──
+            return FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection(roleCollection)
+                  .doc(doc.id)
+                  .get(),
+              builder: (context, roleSnap) {
+                final roleData =
+                    roleSnap.data?.data() as Map<String, dynamic>? ?? {};
+                return _OrgVerificationCard(
+                  docId: doc.id,
+                  data: {...data, ...roleData},
+                  role: role,
+                );
+              },
             );
           },
         );
@@ -153,7 +166,9 @@ class _OrgVerificationCardState extends State<_OrgVerificationCard> {
 
   String get _name =>
       widget.data['name'] ?? widget.data['fullName'] ?? 'غير محدد';
-  String get _logoUrl => (widget.data['logoUrl'] as String? ?? '');
+  String get _logoUrl => (widget.data['photoUrl'] as String? ?? '').isNotEmpty
+      ? widget.data['photoUrl'] as String
+      : (widget.data['logoUrl'] as String? ?? '');
   String get _ownerOrPerson => widget.role == 'restaurant'
       ? (widget.data['ownerName'] as String? ?? '—')
       : (widget.data['responsiblePerson'] as String? ?? '—');
@@ -164,20 +179,37 @@ class _OrgVerificationCardState extends State<_OrgVerificationCard> {
       ? (widget.data['businessLicenseUrl'] as String? ?? '')
       : (widget.data['charityDocumentUrl'] as String? ?? '');
 
+  String get _roleCollection =>
+      widget.role == 'restaurant' ? 'restaurants' : 'charities';
+
   Future<void> _approve() async {
     setState(() => _busy = true);
     try {
       final adminId = FirebaseAuth.instance.currentUser?.uid ?? '';
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.docId)
-          .update({
-        'verificationStatus': 'approved',
-        'isApproved': true,
-        'verificationReviewedBy': adminId,
-        'verificationReviewedAt': FieldValue.serverTimestamp(),
-        'rejectionReason': null,
-      });
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(widget.docId),
+        {
+          'verificationStatus': 'approved',
+          'isApproved': true,
+          'verificationReviewedBy': adminId,
+          'verificationReviewedAt': FieldValue.serverTimestamp(),
+          'rejectionReason': null,
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance
+            .collection(_roleCollection)
+            .doc(widget.docId),
+        {
+          'isVerified': true,
+          'verificationStatus': 'approved',
+          'rejectionReason': null,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       await NotificationService().sendNotification(
         userId: widget.docId,
         title: 'تم قبول حسابك ✅',
@@ -206,16 +238,30 @@ class _OrgVerificationCardState extends State<_OrgVerificationCard> {
     setState(() => _busy = true);
     try {
       final adminId = FirebaseAuth.instance.currentUser?.uid ?? '';
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.docId)
-          .update({
-        'verificationStatus': 'rejected',
-        'isApproved': false,
-        'verificationReviewedBy': adminId,
-        'verificationReviewedAt': FieldValue.serverTimestamp(),
-        'rejectionReason': reason,
-      });
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(widget.docId),
+        {
+          'verificationStatus': 'rejected',
+          'isApproved': false,
+          'verificationReviewedBy': adminId,
+          'verificationReviewedAt': FieldValue.serverTimestamp(),
+          'rejectionReason': reason,
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance
+            .collection(_roleCollection)
+            .doc(widget.docId),
+        {
+          'isVerified': false,
+          'verificationStatus': 'rejected',
+          'rejectionReason': reason,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       await NotificationService().sendNotification(
         userId: widget.docId,
         title: 'طلبك مرفوض',
@@ -377,14 +423,24 @@ class _IdentityVerificationCardState
     setState(() => _busy = true);
     try {
       final adminId = FirebaseAuth.instance.currentUser?.uid ?? '';
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.docId)
-          .update({
-        'identityVerificationStatus': 'approved',
-        'identityVerificationReviewedBy': adminId,
-        'identityVerificationReviewedAt': FieldValue.serverTimestamp(),
-      });
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(widget.docId),
+        {
+          'identityVerificationStatus': 'approved',
+          'identityVerificationReviewedBy': adminId,
+          'identityVerificationReviewedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('individuals').doc(widget.docId),
+        {
+          'verificationStatus': 'approved',
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       await NotificationService().sendNotification(
         userId: widget.docId,
         title: 'تم توثيق هويتك ✅',
@@ -413,15 +469,25 @@ class _IdentityVerificationCardState
     setState(() => _busy = true);
     try {
       final adminId = FirebaseAuth.instance.currentUser?.uid ?? '';
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.docId)
-          .update({
-        'identityVerificationStatus': 'rejected',
-        'identityVerificationReviewedBy': adminId,
-        'identityVerificationReviewedAt': FieldValue.serverTimestamp(),
-        'identityRejectionReason': reason,
-      });
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(widget.docId),
+        {
+          'identityVerificationStatus': 'rejected',
+          'identityVerificationReviewedBy': adminId,
+          'identityVerificationReviewedAt': FieldValue.serverTimestamp(),
+          'identityRejectionReason': reason,
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('individuals').doc(widget.docId),
+        {
+          'verificationStatus': 'rejected',
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       await NotificationService().sendNotification(
         userId: widget.docId,
         title: 'طلب التوثيق مرفوض',

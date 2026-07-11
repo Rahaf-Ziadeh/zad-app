@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:zad_app/utils/phone_formatter.dart';
 
 import '../../theme/app_colors.dart';
 
@@ -15,6 +16,7 @@ class ProfileAvatar extends StatefulWidget {
   final String? photoUrl;
   final Color color;
   final double radius;
+  final String? role; // ← restaurant/charity: يُزامن الصورة مع logoUrl أيضاً
   final ValueChanged<String>? onPhotoUpdated; // يرجع الـ URL الجديد
 
   const ProfileAvatar({
@@ -23,6 +25,7 @@ class ProfileAvatar extends StatefulWidget {
     this.photoUrl,
     this.color = AppColors.primary,
     this.radius = 52,
+    this.role,
     this.onPhotoUpdated,
   });
 
@@ -125,11 +128,28 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
       await ref.putFile(file);
       final url = await ref.getDownloadURL();
 
-      // حفظ الـ URL في Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'photoUrl': url});
+      // حفظ الـ URL في Firestore: users.photoUrl دائماً، ومرآة logoUrl لدور المطعم/الجمعية
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {'photoUrl': url},
+      );
+      final String? roleCollection = widget.role == 'restaurant'
+          ? 'restaurants'
+          : widget.role == 'charity'
+              ? 'charities'
+              : null;
+      if (roleCollection != null) {
+        batch.set(
+          FirebaseFirestore.instance.collection(roleCollection).doc(uid),
+          {
+            'logoUrl': url,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+      await batch.commit();
 
       setState(() => _localPhotoUrl = url);
       widget.onPhotoUpdated?.call(url);
@@ -564,6 +584,7 @@ class ProfileFieldWidget extends StatelessWidget {
   final bool isEditing;
   final bool readOnly;
   final TextInputType? keyboardType;
+  final bool isPhone;
 
   const ProfileFieldWidget({
     required this.icon,
@@ -572,6 +593,7 @@ class ProfileFieldWidget extends StatelessWidget {
     required this.isEditing,
     this.readOnly = false,
     this.keyboardType,
+    this.isPhone = false,
   });
 
   @override
@@ -605,12 +627,25 @@ class ProfileFieldWidget extends StatelessWidget {
                           border: UnderlineInputBorder(),
                         ),
                       )
-                    : Text(controller.text.isEmpty ? '—' : controller.text,
-                        style: TextStyle(
-                            fontSize: 14,
-                            color: readOnly
-                                ? AppColors.textLight
-                                : AppColors.textDark)),
+                    : controller.text.isEmpty
+                        ? const Text('—',
+                            style: TextStyle(
+                                fontSize: 14, color: AppColors.textDark))
+                        : isPhone
+                            ? PhoneText(
+                                controller.text,
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    color: readOnly
+                                        ? AppColors.textLight
+                                        : AppColors.textDark),
+                              )
+                            : Text(controller.text,
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    color: readOnly
+                                        ? AppColors.textLight
+                                        : AppColors.textDark)),
               ],
             ),
           ),

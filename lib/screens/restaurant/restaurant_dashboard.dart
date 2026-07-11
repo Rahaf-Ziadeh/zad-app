@@ -22,33 +22,86 @@ class RestaurantDashboard extends StatefulWidget {
 class _RestaurantDashboardState extends State<RestaurantDashboard> {
   int _selectedIndex = 0;
 
-  late final List<Widget> _pages;
+  // ── فلتر تبويب "عروضي" وتبويب "حجوزاتي" الفرعي، يُضبطان عبر بطاقات إحصائيات الرئيسية ──
+  String? _offersFilter;
+  int _reservationsTabIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _pages = [
-      RestaurantHomeScreen(
-        user: widget.user,
-        onNavigate: (i) => setState(() => _selectedIndex = i),
-      ),
-      const RestaurantOffersScreen(),
-      const RestaurantReservationsScreen(),
-      const AddOfferScreen(),
-      RestaurantProfileScreen(user: widget.user),
-    ];
+  // ── عدّادات تُستخدم لإجبار إعادة إنشاء التنقّل الداخلي للتبويب (تصفير أي شاشة
+  // مفتوحة داخله والعودة لأعلى المكدس) عند الوصول عبر بطاقات إحصائيات الرئيسية فقط ──
+  int _offersNavNonce = 0;
+  int _reservationsNavNonce = 0;
+
+  // ── تنقّل من الشاشة الرئيسية: يبدّل التبويب مع تطبيق الفلتر المطلوب فوراً ──
+  void _navigateFromHome(
+    int index, {
+    String? offersFilter,
+    int? reservationsTab,
+  }) {
+    setState(() {
+      _selectedIndex = index;
+      if (index == 1) {
+        _offersFilter = offersFilter;
+        _offersNavNonce++;
+      }
+      if (index == 2) {
+        _reservationsTabIndex = reservationsTab ?? 0;
+        _reservationsNavNonce++;
+      }
+    });
   }
+
+  // ── تنقّل عبر شريط التنقّل السفلي مباشرة: يعرض كل العروض/الحجوزات دون فلتر،
+  // مع الحفاظ على أي تنقّل داخلي سابق ضمن التبويب نفسه ──
+  void _onDestinationSelected(int index) {
+    setState(() {
+      _selectedIndex = index;
+      if (index == 1) _offersFilter = null;
+      if (index == 2) _reservationsTabIndex = 0;
+    });
+  }
+
+  List<Widget> get _pages => [
+        RestaurantHomeScreen(
+          user: widget.user,
+          onNavigate: _navigateFromHome,
+        ),
+        RestaurantOffersScreen(initialFilter: _offersFilter),
+        RestaurantReservationsScreen(initialTabIndex: _reservationsTabIndex),
+        const AddOfferScreen(),
+        RestaurantProfileScreen(user: widget.user),
+      ];
+
+  // ── مفاتيح كل تبويب: ثابتة للتبويبات التي لا تملك فلتراً، ومرتبطة بالعدّاد
+  // للتبويبات القابلة للفلترة كي يُعاد إنشاء التنقّل الداخلي عند تغييرها فقط ──
+  List<Key> get _tabKeys => [
+        const ValueKey('home'),
+        ValueKey('offers_$_offersNavNonce'),
+        ValueKey('reservations_$_reservationsNavNonce'),
+        const ValueKey('add_offer'),
+        const ValueKey('profile'),
+      ];
 
   @override
   Widget build(BuildContext context) {
+    final pages = _pages;
+    final keys = _tabKeys;
     return Scaffold(
-      body: IndexedStack(index: _selectedIndex, children: _pages),
+      // ── كل تبويب يحصل على Navigator مستقل خاص به: أي Navigator.push من
+      // داخل محتوى التبويب (مثل UserPublicProfileScreen) يُكدَّس فوق هذا
+      // الـ Navigator الداخلي فقط، فيبقى شريط التنقّل السفلي لهذه الشاشة ظاهراً ──
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: List.generate(
+          pages.length,
+          (i) => _RestaurantTabView(key: keys[i], child: pages[i]),
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         indicatorColor: AppColors.primaryLight.withValues(alpha: 0.25),
         backgroundColor: AppColors.card,
         elevation: 0,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        onDestinationSelected: _onDestinationSelected,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -77,6 +130,24 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Navigator مستقل لكل تبويب — يسمح بعمل Navigator.push داخل التبويب
+// (مثل فتح الملف الشخصي العام للمستخدم من شاشة الحجوزات) دون فقدان
+// شريط التنقّل السفلي الخاص بلوحة تحكم المطعم، ودون كسر زر الرجوع.
+// ─────────────────────────────────────────────
+class _RestaurantTabView extends StatelessWidget {
+  final Widget child;
+  const _RestaurantTabView({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      onGenerateRoute: (settings) =>
+          MaterialPageRoute(builder: (_) => child),
     );
   }
 }

@@ -27,40 +27,44 @@ class _UserDashboardState extends State<UserDashboard> {
   int _selectedIndex = 0;
   int _browseTabIndex = 0;
 
-  late List<Widget> _pages;
+  // ── عدّاد يُجبر إعادة إنشاء التنقّل الداخلي لتبويب "تصفح" (تصفير أي شاشة
+  // تفاصيل/ملف عام مفتوحة داخله) عند الوصول إليه عبر روابط الشاشة الرئيسية فقط ──
+  int _browseNavNonce = 0;
 
+  // ── التنقّل إلى تبويب فرعي داخل شاشة "تصفح"؛ تبويب "التبرع" هو الآن
+  // مركز تبرّع محايد (بطاقتا اختيار فقط) لا يحتاج توثيق هوية بحد ذاته —
+  // التحقق يتم داخل DonateTab نفسها قبل فتح أي من مسارَي التبرع/النشر ──
   void _goToBrowseTab(int tabIndex) {
     setState(() {
       _browseTabIndex = tabIndex;
       _selectedIndex = 1;
-      _buildPages();
+      _browseNavNonce++;
     });
   }
 
-  void _buildPages() {
-    _pages = [
-      UserHomeScreen(
-        user: widget.user,
-        onNavigate: (index) => setState(() => _selectedIndex = index),
-        onBrowseTab: _goToBrowseTab,
-      ),
-      UserBrowseTabsScreen(
-        key: ValueKey(_browseTabIndex),
-        initialIndex: _browseTabIndex,
-      ),
-      const UserOrdersScreen(),
-      UserProfileScreen(
-        user: widget.user,
-        onGoToDonate: () => _goToBrowseTab(2),
-      ),
-    ];
-  }
+  List<Widget> get _pages => [
+        UserHomeScreen(
+          user: widget.user,
+          onNavigate: (index) => setState(() => _selectedIndex = index),
+          onBrowseTab: _goToBrowseTab,
+        ),
+        UserBrowseTabsScreen(
+          key: ValueKey(_browseTabIndex),
+          initialIndex: _browseTabIndex,
+        ),
+        const UserOrdersScreen(),
+        UserProfileScreen(user: widget.user),
+      ];
 
-  @override
-  void initState() {
-    super.initState();
-    _buildPages();
-  }
+  // ── مفاتيح كل تبويب: ثابتة للتبويبات التي لا تملك تنقّلاً مُبرمَجاً من
+  // الخارج، ومرتبطة بالعدّاد لتبويب "تصفح" كي يُعاد إنشاء Navigator الداخلي
+  // فقط عند الوصول إليه عبر روابط الشاشة الرئيسية ──
+  List<Key> get _tabKeys => [
+        const ValueKey('home'),
+        ValueKey('browse_$_browseNavNonce'),
+        const ValueKey('orders'),
+        const ValueKey('profile'),
+      ];
 
   void _openChatbot() {
     final authUser = FirebaseAuth.instance.currentUser;
@@ -81,8 +85,19 @@ class _UserDashboardState extends State<UserDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final pages = _pages;
+    final keys = _tabKeys;
     return Scaffold(
-      body: IndexedStack(index: _selectedIndex, children: _pages),
+      // ── كل تبويب يحصل على Navigator مستقل خاص به: أي Navigator.push من
+      // داخل محتوى التبويب (مثل OfferDetailsScreen أو ProviderPublicProfileScreen)
+      // يُكدَّس فوق هذا الـ Navigator الداخلي فقط، فيبقى شريط التنقّل السفلي ظاهراً ──
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: List.generate(
+          pages.length,
+          (i) => _UserTabView(key: keys[i], child: pages[i]),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _openChatbot,
         backgroundColor: AppColors.primary,
@@ -119,6 +134,23 @@ class _UserDashboardState extends State<UserDashboard> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Navigator مستقل لكل تبويب — يسمح بعمل Navigator.push داخل التبويب
+// (مثل فتح تفاصيل عرض أو الملف العام لمزوّد) دون فقدان شريط التنقّل
+// السفلي الخاص بلوحة تحكم المستخدم، ودون كسر زر الرجوع.
+// ─────────────────────────────────────────────
+class _UserTabView extends StatelessWidget {
+  final Widget child;
+  const _UserTabView({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => child),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'charity_notification_service.dart';
+import '../../constants/app_constants.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/offer_widgets.dart';
 
@@ -260,6 +261,10 @@ class _DonationList extends StatelessWidget {
                 : (startTime.isNotEmpty && endTime.isNotEmpty
                     ? '$startTime - $endTime'
                     : '');
+            final allergens = AppConstants.parseAllergyInfo(data['allergyInfo']);
+            final hasKnownAllergens = allergens.isNotEmpty &&
+                !(allergens.length == 1 &&
+                    allergens.first == AppConstants.noKnownAllergens);
 
             return Card(
               margin: const EdgeInsets.only(bottom: 14),
@@ -353,6 +358,11 @@ class _DonationList extends StatelessWidget {
                               icon: Icons.notes_outlined,
                               label: 'ملاحظات',
                               value: notes.toString()),
+                        if (hasKnownAllergens)
+                          OfferInfoRow(
+                              icon: Icons.warning_amber_rounded,
+                              label: 'مسببات الحساسية',
+                              value: allergens.join('، ')),
 
                         const SizedBox(height: 14),
                         buildActions(context, doc, data),
