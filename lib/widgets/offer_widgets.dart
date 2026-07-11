@@ -89,7 +89,7 @@ class OfferPriceRow extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.10),
+          color: AppColors.primary.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(30),
         ),
         child: const Row(
@@ -169,9 +169,10 @@ Widget buildImagePlaceholder({required IconData icon, double height = 180}) {
   return Container(
     height: height,
     width: double.infinity,
-    color: AppColors.primary.withOpacity(0.07),
+    color: AppColors.primary.withValues(alpha: 0.07),
     child: Center(
-      child: Icon(icon, size: 56, color: AppColors.primary.withOpacity(0.4)),
+      child:
+          Icon(icon, size: 56, color: AppColors.primary.withValues(alpha: 0.4)),
     ),
   );
 }

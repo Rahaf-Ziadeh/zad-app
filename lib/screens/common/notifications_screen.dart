@@ -64,6 +64,8 @@ class NotificationsScreen extends StatelessWidget {
                 onTap: () async {
                   await notificationService.markAsRead(doc.id);
 
+                  if (!context.mounted) return;
+
                   if (onNotificationTap != null) {
                     onNotificationTap!(context, data);
                   }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+
 // ─────────────────────────────────────────────
 // سجل التبرعات
 // ─────────────────────────────────────────────
@@ -65,7 +66,8 @@ class CharityHistoryScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.history_rounded,
-                      size: 56, color: AppColors.primary.withOpacity(0.3)),
+                      size: 56,
+                      color: AppColors.primary.withValues(alpha: 0.3)),
                   const SizedBox(height: 12),
                   const Text('لا يوجد سجل حتى الآن',
                       style: TextStyle(color: AppColors.textLight)),
@@ -89,14 +91,14 @@ class CharityHistoryScreen extends StatelessWidget {
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(color: color.withOpacity(0.25)),
+                  side: BorderSide(color: color.withValues(alpha: 0.25)),
                 ),
                 child: ListTile(
                   leading: Container(
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.12),
+                      color: color.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.history_rounded, color: color, size: 20),
@@ -110,7 +112,7 @@ class CharityHistoryScreen extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.12),
+                      color: color.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(_statusLabel(status),

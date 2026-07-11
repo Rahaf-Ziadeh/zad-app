@@ -2,7 +2,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:zad_app/utils/phone_formatter.dart';
-import '../auth/WelcomeScreen.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/profile_widgets.dart';
@@ -190,7 +189,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.10),
+                    color: AppColors.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text('مدير النظام',
@@ -293,7 +292,8 @@ class _ProfileField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final valueStyle = TextStyle(
-        fontSize: 14, color: readOnly ? AppColors.textLight : AppColors.textDark);
+        fontSize: 14,
+        color: readOnly ? AppColors.textLight : AppColors.textDark);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(

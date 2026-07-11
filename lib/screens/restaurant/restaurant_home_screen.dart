@@ -56,7 +56,7 @@ class RestaurantHomeScreen extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.12),
+                color: AppColors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.eco_rounded,
@@ -154,8 +154,7 @@ class RestaurantHomeScreen extends StatelessWidget {
                       Expanded(
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-                          onTap: () =>
-                              onNavigate(1, offersFilter: 'available'),
+                          onTap: () => onNavigate(1, offersFilter: 'available'),
                           child: StatCard(
                             title: 'نشطة',
                             value: '$activeOffers',

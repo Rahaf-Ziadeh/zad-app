@@ -17,8 +17,7 @@ class UserDonationsHistoryScreen extends StatefulWidget {
       _UserDonationsHistoryScreenState();
 }
 
-class _UserDonationsHistoryScreenState
-    extends State<UserDonationsHistoryScreen>
+class _UserDonationsHistoryScreenState extends State<UserDonationsHistoryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
@@ -415,7 +414,7 @@ class UserRatingsScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.star_outline_rounded,
-                      size: 64, color: Colors.amber.withOpacity(0.4)),
+                      size: 64, color: Colors.amber.withValues(alpha: 0.4)),
                   const SizedBox(height: 14),
                   const Text(
                     'لم تقيّم أي طلب بعد',
@@ -627,7 +626,8 @@ class UserComplaintsScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.report_problem_outlined,
-                      size: 64, color: AppColors.primary.withOpacity(0.3)),
+                      size: 64,
+                      color: AppColors.primary.withValues(alpha: 0.3)),
                   const SizedBox(height: 14),
                   const Text(
                     'لا توجد شكاوى مسجّلة',
@@ -656,7 +656,7 @@ class UserComplaintsScreen extends StatelessWidget {
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: color.withOpacity(0.3)),
+                  side: BorderSide(color: color.withValues(alpha: 0.3)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -669,7 +669,7 @@ class UserComplaintsScreen extends StatelessWidget {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: color.withOpacity(0.12),
+                              color: color.withValues(alpha: 0.12),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -709,7 +709,7 @@ class UserComplaintsScreen extends StatelessWidget {
                               vertical: 5,
                             ),
                             decoration: BoxDecoration(
-                              color: color.withOpacity(0.12),
+                              color: color.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(

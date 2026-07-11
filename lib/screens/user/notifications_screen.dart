@@ -109,8 +109,7 @@ class NotificationsScreen extends StatelessWidget {
         stream: _notificationsStream(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const Center(
-                child: Text('حدث خطأ أثناء تحميل الإشعارات'));
+            return const Center(child: Text('حدث خطأ أثناء تحميل الإشعارات'));
           }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -124,7 +123,8 @@ class NotificationsScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.notifications_off_outlined,
-                      size: 64, color: AppColors.primary.withOpacity(0.3)),
+                      size: 64,
+                      color: AppColors.primary.withValues(alpha: 0.3)),
                   const SizedBox(height: 14),
                   const Text(
                     'لا توجد إشعارات حالياً',
@@ -158,14 +158,13 @@ class NotificationsScreen extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: isRead
-                        ? AppColors.card
-                        : color.withOpacity(0.06),
+                    color:
+                        isRead ? AppColors.card : color.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isRead
                           ? AppColors.border
-                          : color.withOpacity(0.25),
+                          : color.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Row(
@@ -175,7 +174,7 @@ class NotificationsScreen extends StatelessWidget {
                         width: 42,
                         height: 42,
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.12),
+                          color: color.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(_iconByType(type), color: color, size: 20),
@@ -202,8 +201,7 @@ class NotificationsScreen extends StatelessWidget {
                                 Text(
                                   _timeAgo(createdAt),
                                   style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textLight),
+                                      fontSize: 11, color: AppColors.textLight),
                                 ),
                               ],
                             ),

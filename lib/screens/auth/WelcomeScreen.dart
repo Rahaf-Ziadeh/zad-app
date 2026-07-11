@@ -254,7 +254,7 @@ class _OnboardingPageWidget extends StatelessWidget {
             width: 140,
             height: 140,
             decoration: BoxDecoration(
-              color: page.color.withOpacity(0.10),
+              color: page.color.withValues(alpha: 0.10),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -262,7 +262,7 @@ class _OnboardingPageWidget extends StatelessWidget {
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
-                  color: page.color.withOpacity(0.15),
+                  color: page.color.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: _pages.indexOf(page) == 0
@@ -353,12 +353,12 @@ class _PrimaryButton extends StatelessWidget {
       height: 56,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.85), color],
+          colors: [color.withValues(alpha: 0.85), color],
         ),
         borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.30),
+            color: color.withValues(alpha: 0.30),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),

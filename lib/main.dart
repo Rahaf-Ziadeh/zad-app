@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'models/user.dart';
-import 'screens/auth/WelcomeScreen.dart';
+import 'screens/auth/welcomeScreen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/user/user_dashboard.dart';
 import 'screens/restaurant/restaurant_dashboard.dart';
@@ -204,7 +204,7 @@ class _SplashScreenState extends State<_SplashScreen>
                   width: 96,
                   height: 96,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF059669).withOpacity(0.12),
+                    color: const Color(0xFF059669).withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Center(
@@ -270,7 +270,7 @@ class _PendingApprovalScreen extends StatelessWidget {
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withOpacity(0.12),
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(

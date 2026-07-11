@@ -11,6 +11,7 @@ class TypeCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const TypeCard({
+    super.key,
     required this.icon,
     required this.label,
     required this.subtitle,
@@ -27,7 +28,7 @@ class TypeCard extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.10) : AppColors.card,
+          color: selected ? color.withValues(alpha: 0.10) : AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? color : AppColors.border,
@@ -57,7 +58,7 @@ class TypeCard extends StatelessWidget {
 
 class SectionLabel extends StatelessWidget {
   final String text;
-  const SectionLabel({required this.text});
+  const SectionLabel({super.key, required this.text});
 
   @override
   Widget build(BuildContext context) {

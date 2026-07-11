@@ -73,7 +73,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.10),
+                  color: AppColors.primary.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.camera_alt_rounded,
@@ -87,7 +87,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF7C3AED).withOpacity(0.10),
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.photo_library_rounded,
@@ -180,7 +180,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
         // ── الصورة ──
         CircleAvatar(
           radius: widget.radius,
-          backgroundColor: widget.color.withOpacity(0.15),
+          backgroundColor: widget.color.withValues(alpha: 0.15),
           backgroundImage:
               _effectiveUrl.isNotEmpty ? NetworkImage(_effectiveUrl) : null,
           child: _uploading
@@ -214,7 +214,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
                 border: Border.all(color: Colors.white, width: 2.5),
                 boxShadow: [
                   BoxShadow(
-                    color: widget.color.withOpacity(0.3),
+                    color: widget.color.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -256,7 +256,7 @@ class ChangePasswordTile extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: AppColors.secondary.withOpacity(0.10),
+          color: AppColors.secondary.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Icon(Icons.lock_outline_rounded,
@@ -429,7 +429,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: AppColors.secondary.withOpacity(0.12),
+                      color: AppColors.secondary.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.lock_rounded,
@@ -587,6 +587,7 @@ class ProfileFieldWidget extends StatelessWidget {
   final bool isPhone;
 
   const ProfileFieldWidget({
+    super.key,
     required this.icon,
     required this.label,
     required this.controller,
@@ -662,6 +663,7 @@ class MenuTileWidget extends StatelessWidget {
   final VoidCallback onTap;
 
   const MenuTileWidget({
+    super.key,
     required this.icon,
     required this.title,
     required this.color,
@@ -676,7 +678,7 @@ class MenuTileWidget extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-            color: color.withOpacity(0.10),
+            color: color.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(10)),
         child: Icon(icon, color: color, size: 18),
       ),

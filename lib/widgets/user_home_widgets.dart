@@ -10,7 +10,7 @@ import '../screens/user/offer_details_screen.dart';
 // ─────────────────────────────────────────────
 class WelcomeCard extends StatelessWidget {
   final AppUser user;
-  const WelcomeCard({required this.user});
+  const WelcomeCard({super.key, required this.user});
 
   String _greeting() {
     final h = DateTime.now().hour;
@@ -32,7 +32,7 @@ class WelcomeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.30),
+            color: AppColors.primary.withValues(alpha: 0.30),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -42,7 +42,7 @@ class WelcomeCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 30,
-            backgroundColor: Colors.white.withOpacity(0.2),
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
             backgroundImage:
                 user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
             child: user.photoUrl == null
@@ -81,7 +81,7 @@ class WelcomeCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.18),
+                    color: Colors.white.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
@@ -109,6 +109,7 @@ class StatCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const StatCard({
+    super.key,
     required this.title,
     required this.value,
     required this.icon,
@@ -128,7 +129,7 @@ class StatCard extends StatelessWidget {
           border: Border.all(color: AppColors.border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -140,7 +141,7 @@ class StatCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.10),
+                color: color.withValues(alpha: 0.10),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: color, size: 22),
@@ -182,6 +183,7 @@ class BrowseCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const BrowseCard({
+    super.key,
     required this.title,
     required this.subtitle,
     required this.icon,
@@ -196,9 +198,9 @@ class BrowseCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.07),
+          color: color.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withOpacity(0.18)),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
         ),
         child: Column(
           children: [
@@ -206,7 +208,7 @@ class BrowseCard extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                  color: color.withOpacity(0.14), shape: BoxShape.circle),
+                  color: color.withValues(alpha: 0.14), shape: BoxShape.circle),
               child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(height: 8),
@@ -237,6 +239,7 @@ class ActionTile extends StatelessWidget {
   final Widget? badge;
 
   const ActionTile({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -260,7 +263,7 @@ class ActionTile extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.10),
+                  color: color.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child: Icon(icon, color: color, size: 23),
@@ -293,7 +296,7 @@ class ActionTile extends StatelessWidget {
                 ),
               ),
               Icon(Icons.arrow_forward_ios_rounded,
-                  size: 13, color: color.withOpacity(0.5)),
+                  size: 13, color: color.withValues(alpha: 0.5)),
             ],
           ),
         ),
@@ -307,7 +310,7 @@ class ActionTile extends StatelessWidget {
 // ─────────────────────────────────────────────
 class LatestOffersPreview extends StatelessWidget {
   final VoidCallback onViewAll;
-  const LatestOffersPreview({required this.onViewAll});
+  const LatestOffersPreview({super.key, required this.onViewAll});
 
   @override
   Widget build(BuildContext context) {
@@ -322,7 +325,7 @@ class LatestOffersPreview extends StatelessWidget {
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.05),
+              color: AppColors.primary.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Center(
@@ -363,7 +366,7 @@ class LatestOffersPreview extends StatelessWidget {
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.10),
+                      color: AppColors.primary.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -404,8 +407,8 @@ class LatestOffersPreview extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: isFree
-                          ? AppColors.success.withOpacity(0.12)
-                          : AppColors.primary.withOpacity(0.10),
+                          ? AppColors.success.withValues(alpha: 0.12)
+                          : AppColors.primary.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -437,6 +440,7 @@ class SectionHeader extends StatelessWidget {
   final VoidCallback? onAction;
 
   const SectionHeader({
+    super.key,
     required this.title,
     this.actionLabel,
     this.onAction,
@@ -472,14 +476,14 @@ class SectionHeader extends StatelessWidget {
 class BadgeWidget extends StatelessWidget {
   final String label;
   final Color color;
-  const BadgeWidget({required this.label, required this.color});
+  const BadgeWidget({super.key, required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label,

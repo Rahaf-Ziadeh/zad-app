@@ -286,7 +286,7 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.10),
+                    color: AppColors.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text('مطعم',
@@ -407,7 +407,8 @@ class _EditableField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final valueStyle = TextStyle(
-        fontSize: 14, color: readOnly ? AppColors.textLight : AppColors.textDark);
+        fontSize: 14,
+        color: readOnly ? AppColors.textLight : AppColors.textDark);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -503,7 +504,8 @@ class _WorkingHoursField extends StatelessWidget {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: onPickStart,
-                          child: Text(start != null ? _format(start!) : 'البداية'),
+                          child:
+                              Text(start != null ? _format(start!) : 'البداية'),
                         ),
                       ),
                       const SizedBox(width: 8),

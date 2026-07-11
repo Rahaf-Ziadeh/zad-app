@@ -12,7 +12,6 @@ class AppTheme {
       primary: AppColors.primary,
       secondary: AppColors.secondary,
       error: AppColors.danger,
-      background: AppColors.background,
       surface: AppColors.card,
     ),
 
@@ -183,7 +182,7 @@ class AppTheme {
       surfaceTintColor: Colors.transparent,
       elevation: 8,
       shadowColor: Colors.black12,
-      indicatorColor: AppColors.primaryLight.withOpacity(0.22),
+      indicatorColor: AppColors.primaryLight.withValues(alpha: 0.22),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(
@@ -222,7 +221,7 @@ class AppTheme {
 
     // ── Chip ──
     chipTheme: ChipThemeData(
-      backgroundColor: AppColors.primaryLight.withOpacity(0.12),
+      backgroundColor: AppColors.primaryLight.withValues(alpha: 0.12),
       selectedColor: AppColors.primary,
       labelStyle: const TextStyle(
         fontFamily: 'Cairo',
