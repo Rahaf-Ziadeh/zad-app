@@ -24,16 +24,20 @@ class SupportService {
       'userRole': userRole,
       'issueCategory': issueCategory,
       'firstMessage': issueCategory,
+      'lastMessage': issueCategory,
       'status': 'waiting',
       'assignedAdminId': null,
+      'unreadForAdmin': true,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+      'lastMessageAt': FieldValue.serverTimestamp(),
     });
 
     await ref.collection('messages').add({
       'senderId': userId,
       'senderRole': 'user',
       'text': issueCategory,
+      'isReadByAdmin': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -60,14 +64,23 @@ class SupportService {
   }) async {
     final chatRef = _db.collection('support_chats').doc(chatId);
 
+    final isUserMsg = senderRole == 'user';
+
     await chatRef.collection('messages').add({
       'senderId': senderId,
       'senderRole': senderRole,
       'text': text,
+      'isReadByAdmin': !isUserMsg,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    await chatRef.update({'updatedAt': FieldValue.serverTimestamp()});
+    await chatRef.update({
+      'updatedAt': FieldValue.serverTimestamp(),
+      'lastMessage': text.length > 80 ? '${text.substring(0, 80)}…' : text,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      if (isUserMsg) 'unreadForAdmin': true,
+      if (!isUserMsg) 'unreadForAdmin': false,
+    });
 
     final preview = text.length > 60 ? '${text.substring(0, 60)}...' : text;
 
@@ -97,8 +110,16 @@ class SupportService {
     await _db.collection('support_chats').doc(chatId).update({
       'assignedAdminId': adminId,
       'status': 'active',
+      'unreadForAdmin': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<void> markReadByAdmin(String chatId) async {
+    await _db
+        .collection('support_chats')
+        .doc(chatId)
+        .update({'unreadForAdmin': false});
   }
 
   // ── Admin: close a chat ───────────────────────────────────────────────────

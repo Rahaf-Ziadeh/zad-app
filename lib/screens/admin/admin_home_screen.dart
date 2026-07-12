@@ -4,8 +4,11 @@ import 'package:zad_app/models/user.dart';
 import 'package:zad_app/screens/common/notifications_screen.dart';
 import 'package:zad_app/theme/app_colors.dart';
 import '../../services/admin_service.dart';
+import 'admin_complaint_details_screen.dart';
+import 'admin_identity_details_screen.dart';
 import 'admin_offers_screen.dart';
 import 'admin_stats_detail_screen.dart';
+import 'admin_support_chat_screen.dart';
 import 'admin_support_panel.dart';
 import 'admin_verification_details_screen.dart';
 import 'admin_widgets.dart';
@@ -64,13 +67,80 @@ Future<bool> _openAdminNotification(
       }
       goToTab(1);
       return true;
+    case 'identity_verification_request':
+      final userId = (data['relatedId'] as String? ?? '').trim();
+      if (userId.isNotEmpty) {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+        if (!context.mounted) return false;
+        if (doc.exists) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminIdentityDetailsScreen(
+                docId: userId,
+                data: doc.data() as Map<String, dynamic>,
+              ),
+            ),
+          );
+          return true;
+        }
+      }
+      goToTab(1);
+      return true;
     case 'complaint':
+      goToTab(2);
+      return true;
+    case 'new_complaint':
+      final complaintId = (data['relatedId'] as String? ?? '').trim();
+      if (complaintId.isNotEmpty) {
+        final doc = await FirebaseFirestore.instance
+            .collection('complaints')
+            .doc(complaintId)
+            .get();
+        if (!context.mounted) return false;
+        if (doc.exists) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminComplaintDetailsScreen(
+                docId: complaintId,
+                data: doc.data() as Map<String, dynamic>,
+              ),
+            ),
+          );
+          return true;
+        }
+      }
       goToTab(2);
       return true;
     case 'report':
       goToTab(3);
       return true;
     case 'support':
+      final chatId = (data['relatedId'] as String? ?? '').trim();
+      if (chatId.isNotEmpty) {
+        final doc = await FirebaseFirestore.instance
+            .collection('support_chats')
+            .doc(chatId)
+            .get();
+        if (!context.mounted) return false;
+        if (doc.exists) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminSupportChatScreen(
+                chatId: chatId,
+                chatData: doc.data() as Map<String, dynamic>,
+                admin: admin,
+              ),
+            ),
+          );
+          return true;
+        }
+      }
       await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => AdminSupportPanel(user: admin)),

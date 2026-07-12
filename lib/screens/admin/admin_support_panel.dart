@@ -160,7 +160,9 @@ class _AdminChatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final userName = data['userName'] as String? ?? 'مستخدم';
     final issueCategory = data['issueCategory'] as String? ?? 'طلب دعم';
+    final lastMessage = data['lastMessage'] as String? ?? '';
     final status = data['status'] as String? ?? 'waiting';
+    final hasUnread = data['unreadForAdmin'] == true;
 
     final (statusLabel, statusColor) = switch (status) {
       'active' => ('نشطة', AppColors.success),
@@ -173,9 +175,13 @@ class _AdminChatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: hasUnread
+              ? AppColors.primary.withValues(alpha: 0.04)
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(
+            color: hasUnread ? AppColors.primary.withValues(alpha: 0.3) : AppColors.border,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -186,17 +192,35 @@ class _AdminChatCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-              child: Text(
-                userName.isNotEmpty ? userName[0] : 'م',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                  child: Text(
+                    userName.isNotEmpty ? userName[0] : 'م',
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                 ),
-              ),
+                if (hasUnread)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: const BoxDecoration(
+                        color: AppColors.danger,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -205,20 +229,21 @@ class _AdminChatCard extends StatelessWidget {
                 children: [
                   Text(
                     userName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
+                    style: TextStyle(
+                      fontWeight: hasUnread ? FontWeight.bold : FontWeight.w600,
                       color: AppColors.textDark,
                       fontSize: 14,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
-                    issueCategory,
-                    style: const TextStyle(
-                      color: AppColors.textLight,
+                    lastMessage.isNotEmpty ? lastMessage : issueCategory,
+                    style: TextStyle(
+                      color: hasUnread ? AppColors.textDark : AppColors.textLight,
                       fontSize: 12,
+                      fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
