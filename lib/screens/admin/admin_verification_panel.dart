@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
+import 'admin_identity_details_screen.dart';
 import 'admin_verification_details_screen.dart';
 
 class AdminVerificationPanel extends StatelessWidget {
@@ -479,9 +480,37 @@ class _IdentityVerificationCardState
   String get _name =>
       widget.data['name'] ?? widget.data['fullName'] ?? 'مستخدم';
   String get _idNumber =>
-      widget.data['identityNumber'] as String? ?? '—';
-  String get _docUrl =>
-      widget.data['identityDocumentUrl'] as String? ?? '';
+      (widget.data['identityNumber'] as String? ??
+       widget.data['nationalId'] as String? ?? '—');
+  // Support all known field names for backward compat:
+  //   identityDocumentUrl  — written by both screens after the NationalIdStepScreen fix
+  //   nationalIdImageUrl   — written by NationalIdStepScreen before the fix
+  //   identityImageUrl     — written by IdentityVerificationScreen to individuals doc (mirrored)
+  //   idImageUrl           — legacy
+  String get _docUrl {
+    for (final key in [
+      'identityDocumentUrl',
+      'nationalIdImageUrl',
+      'identityImageUrl',
+      'idImageUrl',
+    ]) {
+      final v = (widget.data[key] as String? ?? '').trim();
+      if (v.isNotEmpty) return v;
+    }
+    return '';
+  }
+
+  void _openDetails(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminIdentityDetailsScreen(
+          docId: widget.docId,
+          data: widget.data,
+        ),
+      ),
+    );
+  }
 
   Future<void> _approve() async {
     setState(() => _busy = true);
@@ -590,39 +619,50 @@ class _IdentityVerificationCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                child: Text(
-                  _name.isNotEmpty ? _name[0].toUpperCase() : 'م',
-                  style: const TextStyle(
-                      color: AppColors.primary, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          GestureDetector(
+            onTap: () => _openDetails(context),
+            behavior: HitTestBehavior.translucent,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(_name,
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                      child: Text(
+                        _name.isNotEmpty ? _name[0].toUpperCase() : 'م',
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppColors.textDark)),
-                    Text('رقم الهوية: $_idNumber',
-                        style: const TextStyle(
-                            fontSize: 12, color: AppColors.textLight)),
+                            color: AppColors.primary, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: AppColors.textDark)),
+                          Text('رقم الهوية: $_idNumber',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.textLight)),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded,
+                        size: 14, color: AppColors.textLight),
                   ],
                 ),
-              ),
-            ],
+                if (_docUrl.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _DocumentPreview(url: _docUrl, label: 'وثيقة الهوية'),
+                ],
+              ],
+            ),
           ),
-          if (_docUrl.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _DocumentPreview(url: _docUrl, label: 'وثيقة الهوية'),
-          ],
           const SizedBox(height: 12),
           Row(
             children: [

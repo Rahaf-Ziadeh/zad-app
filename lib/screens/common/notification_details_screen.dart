@@ -21,8 +21,10 @@ IconData _iconByType(String type) {
     case 'donation':
       return Icons.volunteer_activism_rounded;
     case 'account':
+    case 'identity_verification_request':
       return Icons.verified_user_rounded;
     case 'complaint':
+    case 'new_complaint':
     case 'report':
       return Icons.report_problem_rounded;
     case 'offer':
@@ -45,8 +47,10 @@ Color _colorByType(String type) {
     case 'donation':
       return const Color(0xFFE11D48);
     case 'account':
+    case 'identity_verification_request':
       return AppColors.secondary;
     case 'complaint':
+    case 'new_complaint':
     case 'report':
       return AppColors.danger;
     case 'offer':
@@ -68,7 +72,10 @@ String _typeLabel(String type) {
       return 'تبرع';
     case 'account':
       return 'الحساب';
+    case 'identity_verification_request':
+      return 'توثيق هوية';
     case 'complaint':
+    case 'new_complaint':
       return 'شكوى';
     case 'report':
       return 'بلاغ';

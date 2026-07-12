@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 
 // ─────────────────────────────────────────────
@@ -54,7 +55,9 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
       final userId    = currentUser.uid;
       final userEmail = (currentUser.email ?? '').trim();
 
-      // Fetch user name + role for denormalization (avoids extra reads on admin side)
+      debugPrint('[Complaint] authUid=$userId');
+
+      // ── Step 1: users/{uid} — canonical source ──
       String userName = '';
       String userRole = 'individual';
       try {
@@ -62,28 +65,102 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
             .collection('users')
             .doc(userId)
             .get();
+        debugPrint('[Complaint] usersDocExists=${userDoc.exists}');
         if (userDoc.exists) {
           final ud = userDoc.data()!;
+          debugPrint('[Complaint] usersData=${ud.keys.toList()}');
           final fullName = (ud['fullName'] as String? ?? '').trim();
           final name    = (ud['name']     as String? ?? '').trim();
           userName = fullName.isNotEmpty ? fullName : name;
           userRole = (ud['role'] as String? ?? 'individual');
         }
-      } catch (_) {
-        // non-critical — complaint is still submitted without name
+      } catch (e) {
+        // Log the real error — catch (_) hides Firestore permission failures
+        debugPrint('[Complaint] usersDoc error: $e');
       }
 
-      await FirebaseFirestore.instance.collection('complaints').add({
-        'userId': userId,
+      // ── Step 2: individuals/{uid} enrichment — only if name still missing ──
+      // Dual-collection users may store their display name only here.
+      // A failure here must never prevent complaint creation or notification.
+      if (userName.isEmpty) {
+        try {
+          Map<String, dynamic>? indivData;
+
+          // Primary path: doc ID == Firebase Auth UID
+          final byId = await FirebaseFirestore.instance
+              .collection('individuals')
+              .doc(userId)
+              .get();
+          debugPrint('[Complaint] individualsDocExists=${byId.exists}');
+          debugPrint('[Complaint] individualsDocId=$userId');
+
+          if (byId.exists) {
+            indivData = byId.data();
+          } else {
+            // Fallback: some accounts have a different doc ID — query by uid field
+            final q = await FirebaseFirestore.instance
+                .collection('individuals')
+                .where('uid', isEqualTo: userId)
+                .limit(1)
+                .get();
+            if (q.docs.isNotEmpty) indivData = q.docs.first.data();
+          }
+
+          debugPrint('[Complaint] individualsUidField='
+              '${indivData?['userId'] ?? indivData?['uid']}');
+
+          if (indivData != null) {
+            final fullName = (indivData['fullName'] as String? ?? '').trim();
+            final name    = (indivData['name']     as String? ?? '').trim();
+            final enriched = fullName.isNotEmpty ? fullName : name;
+            if (enriched.isNotEmpty) userName = enriched;
+          }
+        } catch (e) {
+          // Non-critical — proceed without individuals enrichment
+          debugPrint('[Complaint] individualsDoc error: $e');
+        }
+      }
+
+      debugPrint('[Complaint] finalComplainantId=$userId');
+      debugPrint('[Complaint] finalComplainantName=$userName');
+
+      final displayName = userName.isNotEmpty
+          ? userName
+          : userEmail.isNotEmpty
+              ? userEmail
+              : 'مستخدم';
+
+      final docRef = await FirebaseFirestore.instance
+          .collection('complaints')
+          .add({
+        'userId':        userId,
+        'complainantId': userId,    // always Firebase Auth UID — never individuals doc ID
         if (userName.isNotEmpty)  'userName':  userName,
         if (userRole.isNotEmpty)  'userRole':  userRole,
         if (userEmail.isNotEmpty) 'userEmail': userEmail,
-        'type': _selectedType ?? 'مشكلة أخرى',
-        'description': _descController.text.trim(),
+        'type':           _selectedType ?? 'مشكلة أخرى',
+        'description':    _descController.text.trim(),
         'relatedOfferId': _offerIdController.text.trim(),
-        'status': 'open',
-        'createdAt': FieldValue.serverTimestamp(),
+        'status':         'open',
+        'createdAt':      FieldValue.serverTimestamp(),
       });
+      debugPrint('[Complaint] complaintCreated=${docRef.id}');
+
+      // ── Notify admins ──
+      try {
+        await NotificationService().notifyAdminsAboutComplaint(
+          complaintId:      docRef.id,
+          complainantId:    userId,
+          complainantName:  displayName,
+          complainantEmail: userEmail,
+          complaintType:    _selectedType ?? 'مشكلة أخرى',
+        );
+      } catch (e, st) {
+        debugPrint('[ComplaintNotification] error=$e');
+        debugPrint('[ComplaintNotification] writeSuccess=false');
+        debugPrintStack(stackTrace: st);
+      }
+
       setState(() => _submitted = true);
     } catch (e) {
       if (!mounted) return;

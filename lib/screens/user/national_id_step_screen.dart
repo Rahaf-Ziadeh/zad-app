@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../services/cloudinary_service.dart';
+import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 
 // ─────────────────────────────────────────────
@@ -218,12 +219,24 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
       }
 
       final nationalId = _idController.text.trim();
+
+      debugPrint('[Identity] authUid=$uid');
+      debugPrint('[Identity] uploadUrl=$imageUrl');
+      debugPrint('[Identity] writeDocId=$uid');
+      debugPrint('[Identity] writeCollection=users + individuals');
+      debugPrint('[Identity] writeField=identityDocumentUrl,nationalIdImageUrl');
+
       final batch = FirebaseFirestore.instance.batch();
       batch.update(
         FirebaseFirestore.instance.collection('users').doc(uid),
         {
           'nationalId': nationalId,
           'nationalIdImageUrl': imageUrl,
+          // Canonical fields the admin query and read side rely on:
+          // identityVerificationStatus drives the admin pending list query;
+          // identityDocumentUrl is the field the admin card reads for the image.
+          'identityDocumentUrl': imageUrl,
+          'identityVerificationStatus': 'pending',
           'updatedAt': FieldValue.serverTimestamp(),
         },
       );
@@ -232,11 +245,33 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
         {
           'nationalId': nationalId,
           'nationalIdImageUrl': imageUrl,
+          'identityDocumentUrl': imageUrl,
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
       );
       await batch.commit();
+
+      // Notify admins — non-critical; failure must not block the user
+      String notifName = 'مستخدم';
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        final ud = snap.data() ?? {};
+        final n =
+            (ud['fullName'] as String? ?? ud['name'] as String? ?? '').trim();
+        if (n.isNotEmpty) notifName = n;
+      } catch (_) {}
+      try {
+        await NotificationService().notifyAdminsAboutIdentityVerification(
+          userUid: uid,
+          userName: notifName,
+        );
+      } catch (e) {
+        debugPrint('[Identity] admin notification error: $e');
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

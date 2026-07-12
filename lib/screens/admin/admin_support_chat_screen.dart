@@ -37,10 +37,13 @@ class _AdminSupportChatScreenState extends State<AdminSupportChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-assign this admin when they open a waiting chat
     final status = widget.chatData['status'] as String? ?? 'waiting';
     if (status == 'waiting') {
+      // assignAdmin sets status→active and unreadForAdmin→false
       _svc.assignAdmin(widget.chatId, widget.admin.uid);
+    } else {
+      // For active chats, just clear the unread flag
+      _svc.markReadByAdmin(widget.chatId);
     }
   }
 

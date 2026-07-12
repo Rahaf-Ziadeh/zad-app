@@ -1,5 +1,50 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// ── Shared admin account state classification ──────────────────────────────
+// Single classification priority used by admin_users_screen for tab filtering,
+// badge labels, and action buttons. Keeps orgs and individuals consistent.
+//
+// Priority: suspended > rejected > pending-verification > active
+//
+// For restaurant/charity:
+//   verificationStatus:'pending'              → pending
+//   verificationStatus missing + isApproved:false → pending (legacy compat)
+//   verificationStatus:'rejected'             → rejected
+//   verificationStatus:'approved' or isApproved:true → active
+//
+// For individual/user:
+//   identityVerificationStatus:'pending'  → pending
+//   identityVerificationStatus:'rejected' → rejected
+//   missing identityVerificationStatus    → active (no verification required yet)
+//
+// status:'rejected' set by AdminService.rejectUser → rejected (any role)
+// status:'suspended'                               → suspended (highest priority)
+
+enum AdminAccountState { pending, active, rejected, suspended }
+
+AdminAccountState resolveAdminAccountState(Map<String, dynamic> data) {
+  final status = data['status'] as String? ?? 'active';
+  final role = data['role'] as String? ?? '';
+
+  if (status == 'suspended') return AdminAccountState.suspended;
+  if (status == 'rejected') return AdminAccountState.rejected;
+
+  if (role == 'restaurant' || role == 'charity') {
+    final vs = data['verificationStatus'] as String?;
+    final isApproved = data['isApproved'] as bool? ?? false;
+    if (vs == 'pending') return AdminAccountState.pending;
+    // Legacy accounts without verificationStatus: fall back to isApproved
+    if (vs == null && !isApproved) return AdminAccountState.pending;
+    if (vs == 'rejected') return AdminAccountState.rejected;
+  } else {
+    final ivs = data['identityVerificationStatus'] as String?;
+    if (ivs == 'pending') return AdminAccountState.pending;
+    if (ivs == 'rejected') return AdminAccountState.rejected;
+  }
+
+  return AdminAccountState.active;
+}
+
 class AdminService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -77,6 +122,40 @@ class AdminService {
     }
 
     return query.snapshots();
+  }
+
+  // Individual users whose identity verification is pending
+  Stream<QuerySnapshot> getPendingIdentityVerificationUsers() {
+    return _firestore
+        .collection('users')
+        .where('identityVerificationStatus', isEqualTo: 'pending')
+        .snapshots();
+  }
+
+  // Broad role-filtered stream used by admin_users_screen for client-side
+  // classification via resolveAdminAccountState(). Returns all users of the
+  // given role so the UI can assign each doc to the correct tab in real time.
+  // filter: 'restaurant' | 'charity' | 'individual' | 'all'
+  Stream<QuerySnapshot> getUsersStream(String filter) {
+    switch (filter) {
+      case 'restaurant':
+        return _firestore
+            .collection('users')
+            .where('role', isEqualTo: 'restaurant')
+            .snapshots();
+      case 'charity':
+        return _firestore
+            .collection('users')
+            .where('role', isEqualTo: 'charity')
+            .snapshots();
+      case 'individual':
+        return _firestore
+            .collection('users')
+            .where('role', whereIn: ['individual', 'user'])
+            .snapshots();
+      default: // 'all'
+        return _firestore.collection('users').snapshots();
+    }
   }
 
   Future<void> logAdminAction({
