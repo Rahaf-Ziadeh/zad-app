@@ -44,7 +44,7 @@ class CharityPublishSurplusScreen extends StatelessWidget {
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const _PublishNewSurplusScreen()),
+            MaterialPageRoute(builder: (_) => const PublishNewSurplusScreen()),
           ),
           backgroundColor: AppColors.primary,
           icon: const Icon(Icons.add_rounded, color: Colors.white),
@@ -76,7 +76,22 @@ class _AvailableSurplusTab extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final docs = snap.data!.docs;
+        final currentCharityId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+        final docs = snap.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          final targetCharityId =
+              data['targetCharityId']?.toString().trim() ?? '';
+          final charityId = data['charityId']?.toString().trim() ?? '';
+          final charityUserId = data['charityUserId']?.toString().trim() ?? '';
+          final reviewedBy = data['reviewedBy']?.toString().trim() ?? '';
+
+          return targetCharityId == currentCharityId ||
+              charityId == currentCharityId ||
+              charityUserId == currentCharityId ||
+              reviewedBy == currentCharityId;
+        }).toList();
 
         if (docs.isEmpty) {
           return Center(
@@ -84,7 +99,7 @@ class _AvailableSurplusTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.inventory_2_outlined,
-                    size: 64, color: AppColors.primary.withValues(alpha:0.3)),
+                    size: 64, color: AppColors.primary.withValues(alpha: 0.3)),
                 const SizedBox(height: 14),
                 const Text('لا يوجد فائض جاهز للنشر',
                     style: TextStyle(color: AppColors.textLight, fontSize: 14)),
@@ -146,7 +161,7 @@ class _PublishedSurplusTab extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.share_outlined,
-                    size: 64, color: AppColors.primary.withValues(alpha:0.3)),
+                    size: 64, color: AppColors.primary.withValues(alpha: 0.3)),
                 const SizedBox(height: 14),
                 const Text('لم تنشري أي عرض بعد',
                     style: TextStyle(color: AppColors.textLight, fontSize: 14)),
@@ -197,7 +212,7 @@ class _SurplusCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: AppColors.success.withValues(alpha:0.3)),
+        side: BorderSide(color: AppColors.success.withValues(alpha: 0.3)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -211,7 +226,7 @@ class _SurplusCard extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha:0.12),
+                    color: AppColors.success.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.volunteer_activism_rounded,
@@ -237,7 +252,7 @@ class _SurplusCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha:0.12),
+                    color: AppColors.success.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text('جاهز للنشر',
@@ -277,7 +292,7 @@ class _SurplusCard extends StatelessWidget {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => _PublishNewSurplusScreen(
+                    builder: (_) => PublishNewSurplusScreen(
                       prefillDonationId: donationId,
                       prefillData: data,
                     ),
@@ -370,7 +385,7 @@ class _PublishedOfferCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: color.withValues(alpha:0.3)),
+        side: BorderSide(color: color.withValues(alpha: 0.3)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -383,7 +398,7 @@ class _PublishedOfferCard extends StatelessWidget {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha:0.10),
+                    color: AppColors.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.fastfood_rounded,
@@ -407,7 +422,7 @@ class _PublishedOfferCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha:0.12),
+                    color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(_statusLabel(status),
@@ -478,28 +493,27 @@ class _PublishedOfferCard extends StatelessWidget {
 // ─────────────────────────────────────────────
 // شاشة نشر عرض جديد من الفائض
 // ─────────────────────────────────────────────
-class _PublishNewSurplusScreen extends StatefulWidget {
+class PublishNewSurplusScreen extends StatefulWidget {
   final String? prefillDonationId;
   final Map<String, dynamic>? prefillData;
 
-  const _PublishNewSurplusScreen({
+  const PublishNewSurplusScreen({
     this.prefillDonationId,
     this.prefillData,
   });
 
   @override
-  State<_PublishNewSurplusScreen> createState() =>
+  State<PublishNewSurplusScreen> createState() =>
       _PublishNewSurplusScreenState();
 }
 
-class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
+class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
   late final TextEditingController _quantityController;
   late final TextEditingController _locationController;
 
-  bool _isFree = true;
   bool _isLoading = false;
   DateTime? _expiryDate;
   double? _latitude;
@@ -579,8 +593,7 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
     if (locationText.isEmpty && _latitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-              'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+          content: Text('يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
         ),
       );
       return;
@@ -593,14 +606,15 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
       var resolvedLocation = locationText;
       if (resolvedLocation.isEmpty && _latitude != null) {
         final address = await LocationService().getAddressFromCoordinates(
-          _latitude!, _longitude!,
+          _latitude!,
+          _longitude!,
         );
         if (!mounted) return;
         if (address.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                  'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+              content:
+                  Text('يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
             ),
           );
           return;
@@ -633,7 +647,7 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
         'discountPrice': 0,
         'price': 0,
         'currency': 'ILS',
-        'isFree': _isFree,
+        'isFree': true,
         'status': 'available',
         'pickupLocation': resolvedLocation,
         'latitude': _latitude,
@@ -758,9 +772,10 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha:0.07),
+                  color: AppColors.success.withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.success.withValues(alpha:0.3)),
+                  border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -783,31 +798,56 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
               const SizedBox(height: 14),
             ],
 
-            // ── مجاني أو رمزي ──
-            Row(
-              children: [
-                Expanded(
-                  child: _TypeButton(
-                    icon: Icons.volunteer_activism_rounded,
-                    label: 'مجاني',
-                    subtitle: 'للمستفيدين مجاناً',
-                    selected: _isFree,
-                    color: AppColors.success,
-                    onTap: () => setState(() => _isFree = true),
-                  ),
+            // ── نوع التوزيع (ثابت للجمعيات) ──
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.30),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _TypeButton(
-                    icon: Icons.local_offer_rounded,
-                    label: 'بسعر رمزي',
-                    subtitle: 'بأقل من التكلفة',
-                    selected: !_isFree,
-                    color: AppColors.primary,
-                    onTap: () => setState(() => _isFree = false),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.volunteer_activism_rounded,
+                      color: AppColors.success,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'التوزيع مجاني',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: AppColors.success,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'يتم توزيع هذا الطعام مجانًا على المستفيدين.',
+                          style: TextStyle(
+                            color: AppColors.textLight,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 16),
@@ -909,13 +949,13 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
                             horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
                           color: _latitude != null
-                              ? AppColors.success.withValues(alpha:0.08)
-                              : AppColors.primary.withValues(alpha:0.07),
+                              ? AppColors.success.withValues(alpha: 0.08)
+                              : AppColors.primary.withValues(alpha: 0.07),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: _latitude != null
-                                ? AppColors.success.withValues(alpha:0.4)
-                                : AppColors.primary.withValues(alpha:0.3),
+                                ? AppColors.success.withValues(alpha: 0.4)
+                                : AppColors.primary.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(
@@ -990,62 +1030,6 @@ class _PublishNewSurplusScreenState extends State<_PublishNewSurplusScreen> {
               ),
             ),
             const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// زر اختيار النوع
-// ─────────────────────────────────────────────
-class _TypeButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _TypeButton({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.selected,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-        decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha:0.10) : AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? color : AppColors.border,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: selected ? color : AppColors.textLight, size: 26),
-            const SizedBox(height: 6),
-            Text(label,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: selected ? color : AppColors.textDark)),
-            const SizedBox(height: 2),
-            Text(subtitle,
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(fontSize: 10, color: AppColors.textLight)),
           ],
         ),
       ),

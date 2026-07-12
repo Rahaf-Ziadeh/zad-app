@@ -6,6 +6,7 @@ import 'charity_notification_service.dart';
 import '../../constants/app_constants.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/offer_widgets.dart';
+import 'charity_publish_surplus_screen.dart';
 
 // ─────────────────────────────────────────────
 // شاشة التبرعات — بانتظار المراجعة
@@ -144,14 +145,19 @@ class CharityDonationsScreen extends StatelessWidget {
               buildActions: (context, doc, data) => SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () => _updateStatus(
+                  onPressed: () {
+                    Navigator.push(
                       context,
-                      doc.id,
-                      'redistributed',
-                      data['userId'] ?? data['donorUserId'] ?? '',
-                      data['foodName'] ?? data['title'] ?? ''),
-                  icon: const Icon(Icons.share_rounded, size: 16),
-                  label: const Text('تأكيد إعادة التوزيع'),
+                      MaterialPageRoute(
+                        builder: (_) => PublishNewSurplusScreen(
+                          prefillDonationId: doc.id,
+                          prefillData: data,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.publish_rounded, size: 16),
+                  label: const Text('نشر التبرع للمستفيدين'),
                 ),
               ),
               emptyMessage: 'لا توجد تبرعات مقبولة حالياً',

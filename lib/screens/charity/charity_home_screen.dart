@@ -192,7 +192,7 @@ class CharityHomeScreen extends StatelessWidget {
                 title: 'سجل التبرعات',
                 subtitle: 'عرض التبرعات المقبولة والمرفوضة والموزّعة',
                 color: const Color(0xFF7C3AED),
-                onTap: () => onNavigate(3),
+                onTap: () => onNavigate(4),
               ),
               _ActionTile(
                 icon: Icons.share_rounded,
