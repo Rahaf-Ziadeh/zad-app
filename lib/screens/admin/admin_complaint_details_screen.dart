@@ -214,49 +214,49 @@ class _AdminComplaintDetailsScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── معلومات الشكوى ──
-            _SectionCard(
+            ComplaintSectionCard(
               title: 'معلومات الشكوى',
               icon: Icons.report_outlined,
               children: [
-                _InfoRow(label: 'رقم الشكوى', value: '#${widget.docId}'),
-                _InfoRow(
+                ComplaintInfoRow(label: 'رقم الشكوى', value: '#${widget.docId}'),
+                ComplaintInfoRow(
                   label: 'الحالة',
                   value: isOpen ? 'مفتوحة' : 'تم الحل',
                   valueColor: isOpen ? AppColors.danger : AppColors.success,
                 ),
                 if (desc.isNotEmpty)
-                  _InfoRow(
+                  ComplaintInfoRow(
                       label: 'نص الشكوى',
                       value: desc,
                       multiline: true),
-                _InfoRow(
+                ComplaintInfoRow(
                   label: 'تاريخ الإرسال',
                   value: _formatDateTime(d['createdAt']),
                 ),
                 if (d['updatedAt'] != null)
-                  _InfoRow(
+                  ComplaintInfoRow(
                       label: 'آخر تعديل',
                       value: _formatDateTime(d['updatedAt'])),
                 if (d['resolvedAt'] != null)
-                  _InfoRow(
+                  ComplaintInfoRow(
                       label: 'تاريخ الحل',
                       value: _formatDateTime(d['resolvedAt'])),
                 if ((d['resolvedBy'] as String? ?? '').isNotEmpty)
-                  _InfoRow(
+                  ComplaintInfoRow(
                       label: 'حُلّت بواسطة',
                       value: d['resolvedBy'] as String),
                 if ((d['resolutionNote'] as String? ?? '').isNotEmpty)
-                  _InfoRow(
+                  ComplaintInfoRow(
                     label: 'ملاحظة الحل',
                     value: d['resolutionNote'] as String,
                     multiline: true,
                   ),
                 if ((d['relatedOfferId'] as String? ?? '').isNotEmpty)
-                  _InfoRow(
+                  ComplaintInfoRow(
                       label: 'العرض المرتبط',
                       value: d['relatedOfferId'] as String),
                 if ((d['relatedReservationId'] as String? ?? '').isNotEmpty)
-                  _InfoRow(
+                  ComplaintInfoRow(
                       label: 'الحجز المرتبط',
                       value: d['relatedReservationId'] as String),
               ],
@@ -264,7 +264,7 @@ class _AdminComplaintDetailsScreenState
             const SizedBox(height: 12),
 
             // ── مقدم الشكوى ──
-            _SectionCard(
+            ComplaintSectionCard(
               title: 'مقدم الشكوى',
               icon: Icons.person_outline_rounded,
               children: _buildComplainantRows(),
@@ -273,7 +273,7 @@ class _AdminComplaintDetailsScreenState
             // ── صور مرفقة ──
             if (images.isNotEmpty) ...[
               const SizedBox(height: 12),
-              _SectionCard(
+              ComplaintSectionCard(
                 title: 'الصور المرفقة',
                 icon: Icons.image_outlined,
                 children: [
@@ -447,7 +447,7 @@ class _AdminComplaintDetailsScreenState
 
   List<Widget> _buildComplainantRows() {
     final rows = <Widget>[
-      _InfoRow(label: 'الاسم', value: _complainantName),
+      ComplaintInfoRow(label: 'الاسم', value: _complainantName),
     ];
 
     // Role: try complaint doc first, then user doc
@@ -455,11 +455,11 @@ class _AdminComplaintDetailsScreenState
         (widget.data['userRole'] as String? ?? '').trim();
     if (roleFromComplaint.isNotEmpty) {
       rows.add(
-          _InfoRow(label: 'الدور', value: _roleLabel(roleFromComplaint)));
+          ComplaintInfoRow(label: 'الدور', value: _roleLabel(roleFromComplaint)));
     } else if (_userData != null) {
       final r = (_userData!['role'] as String? ?? '').trim();
       if (r.isNotEmpty) {
-        rows.add(_InfoRow(label: 'الدور', value: _roleLabel(r)));
+        rows.add(ComplaintInfoRow(label: 'الدور', value: _roleLabel(r)));
       }
     }
 
@@ -479,12 +479,12 @@ class _AdminComplaintDetailsScreenState
     final u = _userData;
     if (u != null) {
       if ((u['email'] as String? ?? '').trim().isNotEmpty) {
-        rows.add(_InfoRow(
+        rows.add(ComplaintInfoRow(
             label: 'البريد الإلكتروني', value: u['email'] as String));
       }
       if ((u['phone'] as String? ?? '').trim().isNotEmpty) {
         rows.add(
-            _InfoRow(label: 'الهاتف', value: u['phone'] as String));
+            ComplaintInfoRow(label: 'الهاتف', value: u['phone'] as String));
       }
     }
     return rows;
@@ -493,12 +493,13 @@ class _AdminComplaintDetailsScreenState
 
 // ─── Shared private widgets ───────────────────────────────────────────────────
 
-class _SectionCard extends StatelessWidget {
+class ComplaintSectionCard extends StatelessWidget {
   final String       title;
   final IconData     icon;
   final List<Widget> children;
 
-  const _SectionCard({
+  const ComplaintSectionCard({
+    super.key,
     required this.title,
     required this.icon,
     required this.children,
@@ -545,13 +546,14 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
+class ComplaintInfoRow extends StatelessWidget {
   final String  label;
   final String  value;
   final Color?  valueColor;
   final bool    multiline;
 
-  const _InfoRow({
+  const ComplaintInfoRow({
+    super.key,
     required this.label,
     required this.value,
     this.valueColor,

@@ -5,6 +5,11 @@ import 'package:flutter/material.dart';
 import '../../services/location_service.dart';
 import '../../services/support_service.dart';
 import '../../theme/app_colors.dart';
+import '../restaurant/restaurant_complaints_history_screen.dart';
+import '../restaurant/restaurant_donate_to_charity_screen.dart';
+import '../restaurant/restaurant_reviews_screen.dart';
+import '../restaurant/scan_qr_screen.dart';
+import 'chatbot_role_config.dart';
 import 'support_chat_screen.dart';
 import 'user_support_list_screen.dart';
 
@@ -24,19 +29,42 @@ class _ChatMessage {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+/// مساعد زاد — شاشة واحدة مشتركة بين كل الأدوار (فرد/مطعم، وقابلة للتوسّع
+/// لاحقاً بجمعية)، تُحدَّد محتوياتها (رسالة الترحيب، الأسئلة المقترحة،
+/// الردود، رسالة الفشل) بالكامل من [ChatbotRoleConfig] حسب [userRole] —
+/// لا يوجد أي فرع "if role == restaurant" داخل build() نفسها. التنقّل
+/// الفعلي (تبديل تبويب في اللوحة الأم، أو فتح شاشة مباشرة) يبقى هنا فقط،
+/// عبر خرائط استدعاءات (callbacks) يُمرّرها كل Dashboard حسب دوره.
 class ChatbotScreen extends StatefulWidget {
-  final VoidCallback? onGoToOffers;
+  // ── الدور — يُفضَّل تمريره صراحةً من الشاشة الأم (لا حاجة لأي قراءة
+  // إضافية من Firestore هنا). أي قيمة غير معروفة تُعامَل كفرد (individual) ──
+  final String userRole;
+
+  // ── تنقّل مشترك بين الأدوار (نفس المعنى وإن اختلفت التسمية المعروضة) ──
+  final VoidCallback? onGoToOffers; // "عروضي" (مطعم) أو "العروض" (فرد)
+  final VoidCallback? onGoToOrders; // "حجوزاتي" (مطعم) أو "طلباتي" (فرد)
+  final VoidCallback? onGoToNotifications; // مشتركة — كل لوحة تفتح شاشتها الخاصة
+
+  // ── خاصة بالفرد ──
   final VoidCallback? onGoToPackages;
-  final VoidCallback? onGoToOrders;
+  final VoidCallback? onGoToDonate;
+
+  // ── خاصة بالمطعم ──
+  final VoidCallback? onGoToAddOffer;
+
   // Null when user is anonymous — disables contact-admin flow
   final String? userId;
   final String? userName;
 
   const ChatbotScreen({
     super.key,
+    this.userRole = 'individual',
     this.onGoToOffers,
-    this.onGoToPackages,
     this.onGoToOrders,
+    this.onGoToNotifications,
+    this.onGoToPackages,
+    this.onGoToDonate,
+    this.onGoToAddOffer,
     this.userId,
     this.userName,
   });
@@ -55,15 +83,8 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   bool _awaitingIssueCategory = false;
   String? _lastCreatedChatId;
 
-  static const List<String> _defaultChips = [
-    'كيف أحجز عرض؟',
-    'أقرب العروض',
-    'الفرق بين العروض والباقات',
-    'أين حجوزاتي؟',
-    'مشكلة في QR',
-    'إلغاء الحجز',
-    'التواصل مع الإدارة',
-  ];
+  late final ChatbotRole _role;
+  late final ChatbotRoleConfig _config;
 
   static const List<String> _issueCategories = [
     'مشكلة في الحجز',
@@ -77,10 +98,9 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   @override
   void initState() {
     super.initState();
-    _addBotMessage(
-      'مرحباً بك في مساعد زاد 🌿\nكيف يمكنني مساعدتك اليوم؟',
-      chips: _defaultChips,
-    );
+    _role = chatbotRoleFromString(widget.userRole);
+    _config = configForRole(_role);
+    _addBotMessage(_config.welcomeMessage, chips: _config.defaultChips);
   }
 
   @override
@@ -129,32 +149,17 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   }
 
   Future<void> _processIntent(String text) async {
-    // ── Contact-admin sub-flow: waiting for issue category ────────────────
+    // ── Contact-admin sub-flow: waiting for issue category (مشتركة) ────────
     if (_awaitingIssueCategory) {
       await _handleIssueCategorySelected(text);
       return;
     }
 
-    // ── Exact chip matches (navigation + special actions) ─────────────────
-    if (text == 'اذهب إلى العروض' || text == 'تصفح كل العروض') {
-      _doNavigateToOffers();
-      return;
-    }
-    if (text == 'اذهب إلى الباقات') {
-      _doNavigateToPackages();
-      return;
-    }
-    if (text == 'اذهب إلى طلباتي') {
-      _doNavigateToOrders();
-      return;
-    }
+    // ── أزرار/إجراءات مشتركة بين كل الأدوار، خارج نطاق ChatbotRoleConfig
+    // لأنها تدفّقات حالة (state) وليست ردوداً نصية ثابتة ──
     if (text == 'رجوع للقائمة') {
       setState(() => _awaitingIssueCategory = false);
-      _addBotMessage('ما الذي تودّ الاستفسار عنه؟', chips: _defaultChips);
-      return;
-    }
-    if (text == 'التواصل مع الإدارة') {
-      _replyContactAdmin();
+      _addBotMessage('ما الذي تودّ الاستفسار عنه؟', chips: _config.defaultChips);
       return;
     }
     if (text == 'فتح المحادثة' && _lastCreatedChatId != null) {
@@ -174,59 +179,90 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       return;
     }
 
-    // ── Keyword matching on normalised text ───────────────────────────────
-    final n = _normalise(text);
+    // ── المُحلِّل المشترك — يطابق ضمن نيّات هذا الدور فقط، بلا خلط مع
+    // الدور الآخر (Part 10) ──
+    final response = resolveIntent(role: _role, message: text);
 
-    if (_any(n, ['احجز', 'حجز', 'كيف', 'خطوات', 'طريقه', 'طريقة'])) {
-      _replyReservationGuide();
-    } else if (_any(n, ['قريب', 'اقرب', 'قربي', 'منطقتي', 'توصيه', 'بالقرب'])) {
-      await _replyNearestOffers();
-    } else if (_any(n, ['فرق', 'الفرق', 'غامضه', 'واضح'])) {
-      _replyDifference();
-    } else if (_any(n, ['حجوزاتي', 'طلباتي', 'اين', 'اجد', 'متابعه'])) {
-      _replyWhereOrders();
-    } else if (_any(n, ['qr', 'رمز', 'مشكله', 'لا يعمل', 'خطا'])) {
-      _replyQRProblem();
-    } else if (_any(n, ['الغاء', 'الغ', 'ارجاع'])) {
-      _replyCancelGuide();
-    } else if (_any(n, ['تواصل', 'اداره', 'ادمن', 'مسؤول', 'دعم', 'support'])) {
-      _replyContactAdmin();
-    } else {
-      _addBotMessage(
-        'عذراً، لم أفهم سؤالك جيداً.\nيمكنك اختيار أحد الخيارات أدناه أو إعادة الصياغة.',
-        chips: _defaultChips,
-      );
+    if (response != null && response.navigationActionId != null) {
+      await _dispatchNavigation(response.navigationActionId!);
+      return;
+    }
+    if (response != null && response.text != null) {
+      _addBotMessage(response.text!, chips: response.chips);
+      return;
+    }
+
+    // ── لم يُطابَق أي شيء — رسالة الفشل الخاصة بالدور مع الأسئلة المقترحة
+    // من جديد (Part 11) ──
+    _addBotMessage(_config.fallbackMessage, chips: _config.defaultChips);
+  }
+
+  // ─── Navigation dispatch ────────────────────────────────────────────────
+  //
+  // يُنفَّذ التنقّل الفعلي هنا فقط (وليس داخل chatbot_role_config.dart، التي
+  // لا تعرف شيئاً عن BuildContext أو Navigator). الإجراءات المشتركة بين
+  // الأدوار (offers/orders/notifications) تستخدم استدعاءات اللوحة الأم؛
+  // الشاشات الثابتة الخاصة بالمطعم (QR/التبرع لجمعية/التقييمات/الشكاوى)
+  // تُفتَح مباشرة هنا لأنها نفس الوجهة دائماً بصرف النظر عن اللوحة الأم،
+  // فلا داعي لتمرير 4 استدعاءات إضافية عبر كل Dashboard لمجرّد فتحها.
+
+  Future<void> _dispatchNavigation(String actionId) async {
+    switch (actionId) {
+      case kNavContactAdmin:
+        _replyContactAdmin();
+        return;
+      case kNearestOffersAsync:
+        await _replyNearestOffers();
+        return;
+      case kNavOffers:
+        _popThenCall(widget.onGoToOffers);
+        return;
+      case kNavPackages:
+        _popThenCall(widget.onGoToPackages);
+        return;
+      case kNavOrders:
+        _popThenCall(widget.onGoToOrders);
+        return;
+      case kNavDonate:
+        _popThenCall(widget.onGoToDonate);
+        return;
+      case kNavAddOffer:
+        _popThenCall(widget.onGoToAddOffer);
+        return;
+      case kNavNotifications:
+        _popThenCall(widget.onGoToNotifications);
+        return;
+      case kNavScanQr:
+        _pushDirect(const ScanQrScreen());
+        return;
+      case kNavDonateToCharity:
+        _pushDirect(const RestaurantDonateToCharityScreen());
+        return;
+      case kNavReviews:
+        _pushDirect(const RestaurantReviewsScreen());
+        return;
+      case kNavComplaints:
+        _pushDirect(const RestaurantComplaintsHistoryScreen());
+        return;
     }
   }
 
-  String _normalise(String text) {
-    return text
-        .toLowerCase()
-        .replaceAll('أ', 'ا')
-        .replaceAll('إ', 'ا')
-        .replaceAll('آ', 'ا')
-        .replaceAll('ة', 'ه')
-        .replaceAll('ى', 'ي');
+  /// يُغلق شاشة المساعد ثم يستدعي استدعاء اللوحة الأم (لتبديل تبويب مثلاً)؛
+  /// إن كان الاستدعاء غير مُمرَّر (null) — لا شيء يحدث بعد الإغلاق.
+  void _popThenCall(VoidCallback? callback) {
+    Navigator.pop(context);
+    callback?.call();
   }
 
-  bool _any(String text, List<String> keywords) {
-    return keywords.any((k) => text.contains(k));
+  /// يفتح شاشة ثابتة مباشرة فوق نفس Navigator الذي تعيش عليه شاشة المساعد
+  /// نفسها (بدل إغلاقها أولاً) — نفس نمط فتح المحادثات (فتح المحادثة/عرض
+  /// محادثاتي) أعلاه.
+  void _pushDirect(Widget screen) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
-  // ─── Intent handlers ──────────────────────────────────────────────────────
-
-  void _replyReservationGuide() {
-    _addBotMessage(
-      'لحجز عرض في زاد، اتبع هذه الخطوات:\n\n'
-      '١. انتقل إلى تبويب «تصفح» في الشريط السفلي\n'
-      '٢. اختر «العروض» للطعام الواضح، أو «الباقات» للمفاجآت\n'
-      '٣. اضغط على العرض الذي يناسبك\n'
-      '٤. اختر الكمية ثم اضغط «احجز الآن»\n'
-      '٥. اختر طريقة الدفع وأكّد الحجز\n'
-      '٦. ستصلك رسالة تأكيد ورمز QR للاستلام',
-      chips: ['اذهب إلى العروض', 'اذهب إلى الباقات', 'رجوع للقائمة'],
-    );
-  }
+  // ─── نية غير متزامنة خاصة بالفرد: أقرب العروض (Firestore + GPS) ──────────
+  // منسوخة دون أي تغيير عن السلوك الأصلي لمساعد المستخدم ──
 
   Future<void> _replyNearestOffers() async {
     setState(() => _isTyping = true);
@@ -242,7 +278,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         '• تفعيل خدمة الموقع (GPS) على الجهاز\n'
         '• منح التطبيق إذن الوصول للموقع\n\n'
         'يمكنك تصفح جميع العروض يدوياً.',
-        chips: ['تصفح كل العروض', 'رجوع للقائمة'],
+        chips: const ['تصفح كل العروض', 'رجوع للقائمة'],
       );
       return;
     }
@@ -291,7 +327,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       if (top.isEmpty) {
         _addBotMessage(
           'لا توجد عروض متاحة قريبة منك حالياً.\nيمكنك تصفح جميع العروض.',
-          chips: ['تصفح كل العروض', 'رجوع للقائمة'],
+          chips: const ['تصفح كل العروض', 'رجوع للقائمة'],
         );
         return;
       }
@@ -306,78 +342,32 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
       _addBotMessage(
         sb.toString().trim(),
-        chips: ['تصفح كل العروض', 'رجوع للقائمة'],
+        chips: const ['تصفح كل العروض', 'رجوع للقائمة'],
       );
     } catch (_) {
       if (!mounted) return;
       setState(() => _isTyping = false);
       _addBotMessage(
         'حدث خطأ أثناء جلب العروض. يرجى المحاولة مجدداً.',
-        chips: _defaultChips,
+        chips: _config.defaultChips,
       );
     }
   }
 
-  void _replyDifference() {
-    _addBotMessage(
-      'الفرق بين العروض والباقات في زاد:\n\n'
-      '🍽️ العروض (واضحة المحتوى)\n'
-      '• تعرف ماذا ستحصل عليه مسبقاً\n'
-      '• سعر مخفّض مقارنةً بالسعر الأصلي\n'
-      '• مناسبة إذا كان لديك حساسية غذائية\n\n'
-      '🎁 الباقات (غامضة)\n'
-      '• مفاجأة! لا تعرف المحتوى قبل الاستلام\n'
-      '• سعر خاص جداً\n'
-      '• مغامرة لتجربة أطعمة متنوعة',
-      chips: ['اذهب إلى العروض', 'اذهب إلى الباقات', 'رجوع للقائمة'],
-    );
-  }
-
-  void _replyWhereOrders() {
-    _addBotMessage(
-      'يمكنك متابعة حجوزاتك من خلال:\n\n'
-      '• تبويب «طلباتي» في الشريط السفلي\n'
-      '• ستجد الحجوزات النشطة والمكتملة\n'
-      '• يمكنك عرض رمز QR لكل حجز من هناك',
-      chips: ['اذهب إلى طلباتي', 'رجوع للقائمة'],
-    );
-  }
-
-  void _replyQRProblem() {
-    _addBotMessage(
-      'إذا واجهتك مشكلة في رمز QR:\n\n'
-      '١. تأكد من أن الحجز لا يزال بحالة «محجوز»\n'
-      '٢. حاول تحديث الصفحة بالسحب للأسفل\n'
-      '٣. تحقق من اتصالك بالإنترنت\n'
-      '٤. أظهر تفاصيل الحجز للمطعم مباشرة\n'
-      '٥. إذا استمرت المشكلة، تواصل مع الإدارة',
-      chips: ['أين حجوزاتي؟', 'التواصل مع الإدارة', 'رجوع للقائمة'],
-    );
-  }
-
-  void _replyCancelGuide() {
-    _addBotMessage(
-      'لإلغاء حجز في زاد:\n\n'
-      '١. انتقل إلى تبويب «طلباتي»\n'
-      '٢. اختر الحجز الذي تريد إلغاءه\n'
-      '٣. اضغط زر «إلغاء الحجز»\n'
-      '٤. أكّد الإلغاء في النافذة الظاهرة\n\n'
-      '⚠️ يُسترجع المخزون تلقائياً عند الإلغاء',
-      chips: ['اذهب إلى طلباتي', 'رجوع للقائمة'],
-    );
-  }
-
-  // ─── Contact-admin flow ───────────────────────────────────────────────────
+  // ─── Contact-admin flow (مشتركة بين كل الأدوار) ──────────────────────────
+  //
+  // نفس التدفّق الأصلي تماماً، مع فرقين فقط: userRole يُمرَّر للخدمة كما هو
+  // (بدل 'user' الثابتة)، ويُتحقَّق أولاً من وجود محادثة مفتوحة لنفس
+  // المستخدم لتفادي إنشاء أكثر من محادثة مفتوحة واحدة (Part 9).
 
   void _replyContactAdmin() {
-    final isAnonymous =
-        FirebaseAuth.instance.currentUser?.isAnonymous ?? true;
+    final isAnonymous = FirebaseAuth.instance.currentUser?.isAnonymous ?? true;
     final hasUserId = widget.userId != null && widget.userId!.isNotEmpty;
 
     if (isAnonymous || !hasUserId) {
       _addBotMessage(
         'يجب تسجيل الدخول بحساب حقيقي للتواصل مع الإدارة.',
-        chips: _defaultChips,
+        chips: _config.defaultChips,
       );
       return;
     }
@@ -390,17 +380,35 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   }
 
   Future<void> _handleIssueCategorySelected(String category) async {
-    // If user typed something that's not a category, treat as free-text category
     setState(() {
       _awaitingIssueCategory = false;
       _isTyping = true;
     });
 
     try {
+      // ── تفادي محادثة مفتوحة مكرّرة لنفس المستخدم (Part 9) ──
+      final existingChatId =
+          await SupportService().findOpenChatId(widget.userId!);
+      if (!mounted) return;
+
+      if (existingChatId != null) {
+        setState(() {
+          _isTyping = false;
+          _lastCreatedChatId = existingChatId;
+        });
+        _addBotMessage(
+          'لديك محادثة دعم مفتوحة بالفعل، سيتم متابعتها بدلاً من إنشاء '
+          'محادثة جديدة.',
+          chips: const ['فتح المحادثة', 'عرض محادثاتي', 'رجوع للقائمة'],
+        );
+        return;
+      }
+
       final chatId = await SupportService().createSupportChat(
         userId: widget.userId!,
         userName: widget.userName ?? 'مستخدم',
-        userRole: 'user',
+        userRole: widget.userRole,
+        userEmail: FirebaseAuth.instance.currentUser?.email,
         issueCategory: category,
       );
       if (!mounted) return;
@@ -413,33 +421,16 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         'سيتم التواصل معك من قبل الإدارة في أقرب وقت ممكن.\n\n'
         'جميع المسؤولين مشغولون حالياً.\n'
         'تم تسجيل طلبك وسيتم التواصل معك لاحقاً.',
-        chips: ['فتح المحادثة', 'عرض محادثاتي', 'رجوع للقائمة'],
+        chips: const ['فتح المحادثة', 'عرض محادثاتي', 'رجوع للقائمة'],
       );
     } catch (_) {
       if (!mounted) return;
       setState(() => _isTyping = false);
       _addBotMessage(
         'حدث خطأ أثناء إنشاء الطلب. يرجى المحاولة مجدداً.',
-        chips: _defaultChips,
+        chips: _config.defaultChips,
       );
     }
-  }
-
-  // ─── Navigation ───────────────────────────────────────────────────────────
-
-  void _doNavigateToOffers() {
-    Navigator.pop(context);
-    widget.onGoToOffers?.call();
-  }
-
-  void _doNavigateToPackages() {
-    Navigator.pop(context);
-    widget.onGoToPackages?.call();
-  }
-
-  void _doNavigateToOrders() {
-    Navigator.pop(context);
-    widget.onGoToOrders?.call();
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -469,19 +460,19 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            const Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'مساعد زاد',
-                  style: TextStyle(
+                  _role == ChatbotRole.restaurant ? 'مساعد المطعم' : 'مساعد زاد',
+                  style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textDark,
                   ),
                 ),
-                Text(
+                const Text(
                   'متصل',
                   style: TextStyle(
                     fontSize: 11,

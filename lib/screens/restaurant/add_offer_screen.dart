@@ -535,61 +535,16 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   const SizedBox(height: 10),
 
                   // 6 ── تحديد موقع الاستلام على الخريطة ──
-                  GestureDetector(
+                  LocationPickerRow(
+                    hasLocation: _latitude != null,
+                    latitude: _latitude,
+                    longitude: _longitude,
                     onTap: _openLocationPicker,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _latitude != null
-                            ? AppColors.success.withValues(alpha: 0.08)
-                            : AppColors.primary.withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: _latitude != null
-                              ? AppColors.success.withValues(alpha: 0.4)
-                              : AppColors.primary.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _latitude != null
-                                ? Icons.my_location_rounded
-                                : Icons.map_outlined,
-                            color: _latitude != null
-                                ? AppColors.success
-                                : AppColors.primary,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _latitude != null
-                                  ? 'تم تحديد الموقع ✓ (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})'
-                                  : 'تحديد موقع الاستلام على الخريطة',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: _latitude != null
-                                    ? AppColors.success
-                                    : AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          if (_latitude != null)
-                            GestureDetector(
-                              onTap: () => setState(() {
-                                _latitude = null;
-                                _longitude = null;
-                                _locationSource = 'manual';
-                              }),
-                              child: const Icon(Icons.close_rounded,
-                                  size: 16, color: AppColors.textLight),
-                            ),
-                        ],
-                      ),
-                    ),
+                    onClear: () => setState(() {
+                      _latitude = null;
+                      _longitude = null;
+                      _locationSource = 'manual';
+                    }),
                   ),
                   const SizedBox(height: 14),
 

@@ -6,13 +6,17 @@ class SupportService {
   final _db = FirebaseFirestore.instance;
   final _ns = NotificationService();
 
-  // ── Create a new support ticket and its first message ────────────────────
+  // ── Create a new support ticket and its first message. userEmail is
+  // optional (anonymous/legacy callers may not have one) but is always
+  // written to the parent doc so admins can see the requester's email
+  // without an extra users/{uid} read ──────────────────────────────────────
 
   Future<String> createSupportChat({
     required String userId,
     required String userName,
     required String userRole,
     required String issueCategory,
+    String? userEmail,
   }) async {
     final ref = _db.collection('support_chats').doc();
     final chatId = ref.id;
@@ -21,6 +25,7 @@ class SupportService {
       'chatId': chatId,
       'userId': userId,
       'userName': userName,
+      if (userEmail != null && userEmail.isNotEmpty) 'userEmail': userEmail,
       'userRole': userRole,
       'issueCategory': issueCategory,
       'firstMessage': issueCategory,
@@ -51,6 +56,25 @@ class SupportService {
     } catch (_) {}
 
     return chatId;
+  }
+
+  // ── يبحث عن محادثة دعم مفتوحة (غير مغلقة) لنفس المستخدم لتفادي إنشاء
+  // أكثر من محادثة مفتوحة واحدة في نفس الوقت؛ فلتر مساواة وحيد (بلا orderBy)
+  // لتفادي فهرس مركّب، والفرز/الاختيار يتم على العميل ──
+  Future<String?> findOpenChatId(String userId) async {
+    final snap =
+        await _db.collection('support_chats').where('userId', isEqualTo: userId).get();
+    final openDocs = snap.docs.where((d) {
+      final status = (d.data()['status'] as String?) ?? 'waiting';
+      return status != 'closed';
+    }).toList();
+    if (openDocs.isEmpty) return null;
+    openDocs.sort((a, b) {
+      final at = (a.data()['updatedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+      final bt = (b.data()['updatedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+      return bt.compareTo(at);
+    });
+    return openDocs.first.id;
   }
 
   // ── Send a message and trigger the appropriate notification ───────────────

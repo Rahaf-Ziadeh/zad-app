@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'add_offer_screen.dart';
 import 'restaurant_home_screen.dart';
@@ -6,6 +7,8 @@ import 'restaurant_reservations_screen.dart';
 import 'restaurant_offers_screen.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
+import '../common/notifications_screen.dart';
+import '../user/chatbot_screen.dart';
 
 // ─────────────────────────────────────────────
 // Dashboard الرئيسي
@@ -99,6 +102,37 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
         RestaurantProfileScreen(user: widget.user),
       ];
 
+  // ── فتح مساعد المطعم — نفس ChatbotScreen المشتركة المستخدمة في لوحة
+  // المستخدم، بفرق واحد فقط: userRole: 'restaurant'، الذي يُحدِّد وحده كل
+  // محتوى الشاشة (الترحيب، الأسئلة المقترحة، الردود) عبر ChatbotRoleConfig
+  // — لا يوجد أي فرع دور داخل هذه اللوحة نفسها ──
+  void _openChatbot() {
+    final authUser = FirebaseAuth.instance.currentUser;
+    final isAnonymous = authUser?.isAnonymous ?? true;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatbotScreen(
+          userRole: 'restaurant',
+          userId: isAnonymous ? null : widget.user.uid,
+          userName: widget.user.name,
+          onGoToOffers: () => _navigateFromHome(1),
+          onGoToOrders: () => _navigateFromHome(2),
+          onGoToAddOffer: () => _navigateFromHome(3),
+          onGoToNotifications: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => NotificationsScreen(
+                onOpenRelated: (ctx, data) =>
+                    openRestaurantRelatedNotification(ctx, widget.user, data),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── مفاتيح كل تبويب: ثابتة للتبويبات التي لا تملك فلتراً، ومرتبطة بالعدّاد
   // للتبويبات القابلة للفلترة كي يُعاد إنشاء التنقّل الداخلي عند تغييرها فقط ──
   List<Key> get _tabKeys => [
@@ -128,6 +162,15 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
             child: pages[i],
           ),
         ),
+      ),
+      // ── نفس موضع FAB الافتراضي المستخدم في لوحة المستخدم (أعلى شريط
+      // التنقّل السفلي مباشرة، بهامش Scaffold المدمج) — لا يوجد أي FAB أو
+      // زر عائم آخر في هذه اللوحة، فلا تعارض مع أي زر آخر ──
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openChatbot,
+        backgroundColor: AppColors.primary,
+        tooltip: 'مساعد المطعم',
+        child: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,

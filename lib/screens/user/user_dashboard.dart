@@ -6,6 +6,7 @@ import '../../theme/app_colors.dart';
 
 import 'chatbot_screen.dart';
 import 'donate_tab.dart';
+import 'notifications_screen.dart';
 import 'offers_tab.dart';
 import 'packages_tab.dart';
 import 'user_home_screen.dart';
@@ -91,11 +92,17 @@ class _UserDashboardState extends State<UserDashboard> {
       context,
       MaterialPageRoute(
         builder: (_) => ChatbotScreen(
+          userRole: 'individual',
           userId: isAnonymous ? null : widget.user.uid,
           userName: widget.user.name,
           onGoToOffers: () => _goToBrowseTab(0),
           onGoToPackages: () => _goToBrowseTab(1),
           onGoToOrders: () => setState(() => _selectedIndex = 2),
+          onGoToDonate: () => _goToBrowseTab(2),
+          onGoToNotifications: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+          ),
         ),
       ),
     );

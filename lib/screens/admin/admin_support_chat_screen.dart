@@ -34,6 +34,16 @@ class _AdminSupportChatScreenState extends State<AdminSupportChatScreen> {
   String get _chatUserName =>
       widget.chatData['userName'] as String? ?? 'مستخدم';
 
+  // ── يميّز الأدمن بين طلب دعم فرد أو مطعم أثناء الرد (Part 9) ──
+  String get _chatUserRoleLabel {
+    final role = widget.chatData['userRole'] as String? ?? 'user';
+    return switch (role) {
+      'restaurant' => 'مطعم',
+      'charity' => 'جمعية',
+      _ => 'مستخدم',
+    };
+  }
+
   @override
   void initState() {
     super.initState();
@@ -134,13 +144,35 @@ class _AdminSupportChatScreenState extends State<AdminSupportChatScreen> {
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _chatUserName,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _chatUserName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _chatUserRoleLabel,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(

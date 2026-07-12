@@ -10,6 +10,10 @@ import 'package:zad_app/widgets/fullscreen_image_viewer.dart';
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/profile_widgets.dart';
+import '../common/location_picker_screen.dart';
+import 'restaurant_complaints_history_screen.dart';
+import 'restaurant_reviews_screen.dart';
+import 'restaurant_widgets.dart';
 
 class RestaurantProfileScreen extends StatefulWidget {
   final AppUser user;
@@ -52,6 +56,17 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
   // المستخدم في AuthService.login وشاشات الإدارة) ──
   String? _verificationStatus;
   String? _rejectionReason;
+
+  // ── إحداثيات موقع المطعم — اختيارية، تُحمَّل من restaurants/{uid} إن
+  // وُجدت، وتُحفَظ عند حفظ التعديلات؛ _savedLatitude/_savedLongitude تُستخدم
+  // لاستعادة القيم عند إلغاء التعديل. نفس LocationPickerScreen المستخدمة في
+  // إضافة/تعديل العرض — لا يوجد مُنتقٍ ثانٍ ──
+  double? _latitude;
+  double? _longitude;
+  String _locationSource = 'manual';
+  double? _savedLatitude;
+  double? _savedLongitude;
+  String _savedLocationSource = 'manual';
 
   @override
   void initState() {
@@ -109,6 +124,11 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
         end = _parseTime(workingHours['end'] as String?);
       }
 
+      final latitude = (data['latitude'] as num?)?.toDouble();
+      final longitude = (data['longitude'] as num?)?.toDouble();
+      final locationSource =
+          (data['locationSource'] as String? ?? 'manual').trim();
+
       setState(() {
         if (address.isNotEmpty) _addressController.text = address;
         _ownerNameController.text = ownerName;
@@ -122,6 +142,12 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
         if (end != null) _workingHoursEnd = end;
         _savedWorkingHoursStart = _workingHoursStart;
         _savedWorkingHoursEnd = _workingHoursEnd;
+        _latitude = latitude;
+        _longitude = longitude;
+        _locationSource = locationSource.isEmpty ? 'manual' : locationSource;
+        _savedLatitude = _latitude;
+        _savedLongitude = _longitude;
+        _savedLocationSource = _locationSource;
       });
 
       // ── users.photoUrl هو المصدر الأساسي، والرجوع إلى logoUrl عند غيابها ──
@@ -197,6 +223,31 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
       return;
     }
     openFullScreenImage(context, url, title: 'وثيقة الرخصة');
+  }
+
+  // ── فتح شاشة اختيار الموقع على الخريطة (نفس الشاشة المستخدمة في إضافة
+  // عرض)؛ تُمرَّر الإحداثيات الحالية إن وُجدت كي تُعرض مبدئياً وتكون قابلة
+  // للتحديث دون الحاجة لإعادة كتابة العنوان يدوياً ──
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLatitude: _latitude,
+          initialLongitude: _longitude,
+          initialAddress: _addressController.text.trim().isNotEmpty
+              ? _addressController.text.trim()
+              : null,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _addressController.text = result.address;
+      _locationSource = result.locationSource;
+    });
   }
 
   Future<bool> _isLicenseNumberTaken(String licenseNumber, String uid) async {
@@ -333,6 +384,10 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
           'ownerName': ownerName,
           'description': description,
           'address': _addressController.text.trim(),
+          'latitude': _latitude,
+          'longitude': _longitude,
+          'hasLocation': _latitude != null && _longitude != null,
+          'locationSource': _latitude != null ? _locationSource : 'manual',
           'licenseNumber': licenseNumber,
           'businessLicenseUrl': newBusinessLicenseUrl,
           'workingHours': {
@@ -365,6 +420,9 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
       _savedOwnerName = ownerName;
       _savedDescription = description;
       _savedLicenseNumber = licenseNumber;
+      _savedLatitude = _latitude;
+      _savedLongitude = _longitude;
+      _savedLocationSource = _locationSource;
       _businessLicenseUrl = newBusinessLicenseUrl;
       _pickedLicenseFile = null;
       if (licenseDataChanged) {
@@ -406,6 +464,9 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
       _licenseNumberController.text = _savedLicenseNumber;
       _workingHoursStart = _savedWorkingHoursStart;
       _workingHoursEnd = _savedWorkingHoursEnd;
+      _latitude = _savedLatitude;
+      _longitude = _savedLongitude;
+      _locationSource = _savedLocationSource;
       _pickedLicenseFile = null;
     });
   }
@@ -575,6 +636,20 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
                       label: 'عنوان المطعم',
                       controller: _addressController,
                       isEditing: _isEditing),
+                  if (_isEditing) ...[
+                    const SizedBox(height: 8),
+                    LocationPickerRow(
+                      hasLocation: _latitude != null,
+                      latitude: _latitude,
+                      longitude: _longitude,
+                      onTap: _openLocationPicker,
+                      onClear: () => setState(() {
+                        _latitude = null;
+                        _longitude = null;
+                        _locationSource = 'manual';
+                      }),
+                    ),
+                  ],
                   const Divider(),
                   _EditableField(
                       icon: Icons.description_outlined,
@@ -632,6 +707,48 @@ class _RestaurantProfileScreenState extends State<RestaurantProfileScreen> {
                   ),
                 ],
               ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── سجلّ الشكاوى وسجلّ التقييمات — عرض فقط، بلا أي تعديل أو حذف ──
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.report_outlined,
+                      color: AppColors.primary),
+                  title: const Text('سجل الشكاوى'),
+                  trailing: const Icon(Icons.chevron_left_rounded,
+                      color: AppColors.textLight),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const RestaurantComplaintsHistoryScreen(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.star_outline_rounded,
+                      color: AppColors.primary),
+                  title: const Text('التقييمات والآراء'),
+                  trailing: const Icon(Icons.chevron_left_rounded,
+                      color: AppColors.textLight),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const RestaurantReviewsScreen(),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 

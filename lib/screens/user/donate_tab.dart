@@ -418,7 +418,7 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _CharityPickerSheet(
+      builder: (_) => CharityPickerSheet(
         selectedId: _selectedCharityId,
         onSelected: (id, name) {
           setState(() {
@@ -1251,12 +1251,13 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 // ─────────────────────────────────────────────
 // Bottom Sheet اختيار الجمعية
 // ─────────────────────────────────────────────
-class _CharityPickerSheet extends StatelessWidget {
+class CharityPickerSheet extends StatelessWidget {
   final String? selectedId;
   final void Function(String id, String name) onSelected;
   final VoidCallback onClear;
 
-  const _CharityPickerSheet({
+  const CharityPickerSheet({
+    super.key,
     required this.selectedId,
     required this.onSelected,
     required this.onClear,

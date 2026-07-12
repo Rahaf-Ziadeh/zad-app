@@ -163,11 +163,20 @@ class _AdminChatCard extends StatelessWidget {
     final lastMessage = data['lastMessage'] as String? ?? '';
     final status = data['status'] as String? ?? 'waiting';
     final hasUnread = data['unreadForAdmin'] == true;
+    final userRole = data['userRole'] as String? ?? 'user';
 
     final (statusLabel, statusColor) = switch (status) {
       'active' => ('نشطة', AppColors.success),
       'closed' => ('مغلقة', AppColors.textLight),
       _ => ('انتظار', AppColors.secondary),
+    };
+
+    // ── يميّز الأدمن بين طلبات الدعم القادمة من مستخدم فرد أو مطعم دون
+    // فتح المحادثة (Part 9) ──
+    final (roleLabel, roleColor) = switch (userRole) {
+      'restaurant' => ('مطعم', Color(0xFF7C3AED)),
+      'charity' => ('جمعية', Color(0xFFE11D48)),
+      _ => ('مستخدم', AppColors.primary),
     };
 
     return GestureDetector(
@@ -227,15 +236,39 @@ class _AdminChatCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    userName,
-                    style: TextStyle(
-                      fontWeight: hasUnread ? FontWeight.bold : FontWeight.w600,
-                      color: AppColors.textDark,
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          userName,
+                          style: TextStyle(
+                            fontWeight:
+                                hasUnread ? FontWeight.bold : FontWeight.w600,
+                            color: AppColors.textDark,
+                            fontSize: 14,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: roleColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          roleLabel,
+                          style: TextStyle(
+                            color: roleColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(

@@ -14,6 +14,7 @@ import '../../theme/app_colors.dart';
 import '../../utils/offer_utils.dart';
 import '../../utils/verification_utils.dart';
 import '../../widgets/allergy_checkbox_panel.dart';
+import '../common/location_picker_screen.dart';
 
 class EditOfferScreen extends StatefulWidget {
   final String offerId;
@@ -48,6 +49,12 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
   // يُغيَّر ──
   DateTime? _expiresAt;
 
+  // ── إحداثيات مكان الاستلام — تُحمَّل من العرض الحالي إن وُجدت، وتبقى
+  // قابلة للتحديث عبر شاشة اختيار الموقع (نفس شاشة إضافة عرض) ──
+  double? _latitude;
+  double? _longitude;
+  String _locationSource = 'manual';
+
   @override
   void initState() {
     super.initState();
@@ -65,6 +72,35 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     _selectedAllergens = AppConstants.parseAllergyCheckboxes(d['allergyInfo']);
     final rawExpiry = d['expiresAt'] ?? d['expiryDate'];
     if (rawExpiry is Timestamp) _expiresAt = rawExpiry.toDate();
+    _latitude = (d['latitude'] as num?)?.toDouble();
+    _longitude = (d['longitude'] as num?)?.toDouble();
+    _locationSource = (d['locationSource'] as String? ?? 'manual').trim();
+    if (_locationSource.isEmpty) _locationSource = 'manual';
+  }
+
+  // ── فتح شاشة اختيار الموقع على الخريطة (نفس الشاشة المستخدمة في إضافة
+  // عرض) — تُمرَّر الإحداثيات الحالية إن وُجدت كي تُعرض مبدئياً وتكون قابلة
+  // للتحديث ──
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLatitude: _latitude,
+          initialLongitude: _longitude,
+          initialAddress: _pickupController.text.trim().isNotEmpty
+              ? _pickupController.text.trim()
+              : null,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _pickupController.text = result.address;
+      _locationSource = result.locationSource;
+    });
   }
 
   @override
@@ -268,6 +304,10 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
         'price': discountPrice,
         'isFree': discountPrice == 0,
         'pickupLocation': pickup,
+        'latitude': _latitude,
+        'longitude': _longitude,
+        'hasLocation': _latitude != null && _longitude != null,
+        'locationSource': _latitude != null ? _locationSource : 'manual',
         'allergyInfo': allergyInfo,
         'expiresAt': Timestamp.fromDate(expiresAt),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -426,6 +466,20 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                     label: 'مكان الاستلام',
                     hint: 'العنوان أو المنطقة',
                     icon: Icons.location_on_outlined,
+                  ),
+                  const SizedBox(height: 10),
+
+                  // 5.1 ── تحديد/تحديث موقع الاستلام على الخريطة ──
+                  LocationPickerRow(
+                    hasLocation: _latitude != null,
+                    latitude: _latitude,
+                    longitude: _longitude,
+                    onTap: _openLocationPicker,
+                    onClear: () => setState(() {
+                      _latitude = null;
+                      _longitude = null;
+                      _locationSource = 'manual';
+                    }),
                   ),
                   const SizedBox(height: 14),
 

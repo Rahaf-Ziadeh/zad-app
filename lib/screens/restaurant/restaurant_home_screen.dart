@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:zad_app/models/user.dart';
+import 'package:zad_app/screens/restaurant/restaurant_donate_to_charity_screen.dart';
 import 'package:zad_app/screens/restaurant/restaurant_offer_details_screen.dart';
 import 'package:zad_app/screens/restaurant/restaurant_profile_screen.dart';
 import 'package:zad_app/screens/restaurant/restaurant_reservations_screen.dart';
@@ -45,114 +46,13 @@ class RestaurantHomeScreen extends StatelessWidget {
           .where('status', isEqualTo: 'reserved')
           .snapshots();
 
-  void _cannotOpen(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('لا يمكن فتح محتوى هذا الإشعار'),
-        backgroundColor: AppColors.danger,
-      ),
-    );
-  }
-
-  // ── يفتح المحتوى المرتبط بإشعار مطعم حسب نوعه (Part 13) — يتحقق دائماً
-  // من وجود السجل المرتبط فعلياً قبل التنقّل، ولا يترك أي نوع بلا معالجة
-  // (أي نوع غير معروف يعرض رسالة واضحة بدل عدم فعل شيء) ──
+  // ── يُفوَّض إلى الدالة المشتركة openRestaurantRelatedNotification حتى
+  // تُستخدم نفس منطق فتح الإشعارات من مصدر واحد (هنا ومن مساعد المطعم) ──
   Future<bool> _openRelatedNotification(
     BuildContext context,
     Map<String, dynamic> data,
-  ) async {
-    final type = (data['type'] as String? ?? '').trim();
-    final relatedId = (data['relatedId'] as String? ?? '').trim();
-
-    try {
-      switch (type) {
-        case 'reservation':
-        case 'pickup':
-          if (relatedId.isEmpty) {
-            _cannotOpen(context);
-            return false;
-          }
-          final doc = await FirebaseFirestore.instance
-              .collection('reservations')
-              .doc(relatedId)
-              .get();
-          if (!context.mounted) return false;
-          if (!doc.exists) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('لم يتم العثور على هذا الحجز')),
-            );
-            return false;
-          }
-          final resStatus =
-              (doc.data()?['status'] as String?) ?? 'reserved';
-          // ── تبويب "بانتظار الاستلام" للحجوزات النشطة، وإلا التبويب
-          // المطابق لحالتها الفعلية ──
-          final tabIndex = resStatus == 'reserved' || resStatus == 'confirmed'
-              ? 1
-              : resStatus == 'picked_up'
-                  ? 2
-                  : resStatus == 'cancelled'
-                      ? 3
-                      : 0;
-          if (!context.mounted) return false;
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  RestaurantReservationsScreen(initialTabIndex: tabIndex),
-            ),
-          );
-          return true;
-
-        case 'offer':
-          if (relatedId.isEmpty) {
-            _cannotOpen(context);
-            return false;
-          }
-          final doc = await FirebaseFirestore.instance
-              .collection('offers')
-              .doc(relatedId)
-              .get();
-          if (!context.mounted) return false;
-          if (!doc.exists) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('هذا العرض لم يعد متوفرًا.')),
-            );
-            return false;
-          }
-          if (!context.mounted) return false;
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => RestaurantOfferDetailsScreen(
-                offerId: doc.id,
-                offerData: doc.data() as Map<String, dynamic>,
-              ),
-            ),
-          );
-          return true;
-
-        case 'account':
-          // ── قرار إداري بخصوص حساب المطعم نفسه (اعتماد/رفض/إعادة مراجعة) —
-          // شاشة "حسابي" تعرض حالة التحقق الحالية وسبب الرفض إن وُجد ──
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => RestaurantProfileScreen(user: user),
-            ),
-          );
-          return true;
-
-        default:
-          _cannotOpen(context);
-          return false;
-      }
-    } catch (e) {
-      if (!context.mounted) return false;
-      _cannotOpen(context);
-      return false;
-    }
-  }
+  ) =>
+      openRestaurantRelatedNotification(context, user, data);
 
   Stream<DocumentSnapshot> _userStream() =>
       FirebaseFirestore.instance.collection('users').doc(_uid).snapshots();
@@ -335,9 +235,132 @@ class RestaurantHomeScreen extends StatelessWidget {
             color: AppColors.secondary,
             onTap: () => onNavigate(2),
           ),
+          ActionTile(
+            icon: Icons.volunteer_activism_rounded,
+            title: 'تبرع لجمعية',
+            subtitle: 'تبرّع بفائض الطعام مباشرة لجمعية خيرية',
+            color: const Color(0xFFE11D48),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const RestaurantDonateToCharityScreen(),
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+}
+
+void _cannotOpenRestaurantNotification(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('لا يمكن فتح محتوى هذا الإشعار'),
+      backgroundColor: AppColors.danger,
+    ),
+  );
+}
+
+// ── يفتح المحتوى المرتبط بإشعار مطعم حسب نوعه (Part 13) — يتحقق دائماً من
+// وجود السجل المرتبط فعلياً قبل التنقّل، ولا يترك أي نوع بلا معالجة (أي نوع
+// غير معروف يعرض رسالة واضحة بدل عدم فعل شيء). دالة مشتركة (وليست خاصة
+// بـ RestaurantHomeScreen) حتى تُستخدم أيضاً من مساعد المطعم (ChatbotScreen)
+// عند فتح الإشعارات، دون تكرار هذا المنطق في مكانين ──
+Future<bool> openRestaurantRelatedNotification(
+  BuildContext context,
+  AppUser user,
+  Map<String, dynamic> data,
+) async {
+  final type = (data['type'] as String? ?? '').trim();
+  final relatedId = (data['relatedId'] as String? ?? '').trim();
+
+  try {
+    switch (type) {
+      case 'reservation':
+      case 'pickup':
+        if (relatedId.isEmpty) {
+          _cannotOpenRestaurantNotification(context);
+          return false;
+        }
+        final doc = await FirebaseFirestore.instance
+            .collection('reservations')
+            .doc(relatedId)
+            .get();
+        if (!context.mounted) return false;
+        if (!doc.exists) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('لم يتم العثور على هذا الحجز')),
+          );
+          return false;
+        }
+        final resStatus = (doc.data()?['status'] as String?) ?? 'reserved';
+        // ── تبويب "بانتظار الاستلام" للحجوزات النشطة، وإلا التبويب المطابق
+        // لحالتها الفعلية ──
+        final tabIndex = resStatus == 'reserved' || resStatus == 'confirmed'
+            ? 1
+            : resStatus == 'picked_up'
+                ? 2
+                : resStatus == 'cancelled'
+                    ? 3
+                    : 0;
+        if (!context.mounted) return false;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                RestaurantReservationsScreen(initialTabIndex: tabIndex),
+          ),
+        );
+        return true;
+
+      case 'offer':
+        if (relatedId.isEmpty) {
+          _cannotOpenRestaurantNotification(context);
+          return false;
+        }
+        final doc = await FirebaseFirestore.instance
+            .collection('offers')
+            .doc(relatedId)
+            .get();
+        if (!context.mounted) return false;
+        if (!doc.exists) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('هذا العرض لم يعد متوفرًا.')),
+          );
+          return false;
+        }
+        if (!context.mounted) return false;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RestaurantOfferDetailsScreen(
+              offerId: doc.id,
+              offerData: doc.data() as Map<String, dynamic>,
+            ),
+          ),
+        );
+        return true;
+
+      case 'account':
+        // ── قرار إداري بخصوص حساب المطعم نفسه (اعتماد/رفض/إعادة مراجعة) —
+        // شاشة "حسابي" تعرض حالة التحقق الحالية وسبب الرفض إن وُجد ──
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RestaurantProfileScreen(user: user),
+          ),
+        );
+        return true;
+
+      default:
+        _cannotOpenRestaurantNotification(context);
+        return false;
+    }
+  } catch (e) {
+    if (!context.mounted) return false;
+    _cannotOpenRestaurantNotification(context);
+    return false;
   }
 }
 

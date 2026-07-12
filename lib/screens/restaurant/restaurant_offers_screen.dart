@@ -14,42 +14,110 @@ import 'package:zad_app/widgets/offer_widgets.dart';
 const List<String?> _kFilterKeys = [null, 'available', 'expired', 'closed', 'sold_out'];
 const List<String> _kTabLabels = ['الكل', 'نشطة', 'منتهية', 'مغلقة', 'نفدت الكمية'];
 
-// ── يطابق عرضاً واحداً مع الفلتر المطلوب اعتماداً على effectiveOfferStatus
-// (الحالة الفعلية بعد اعتبار انتهاء الصلاحية) وليس حقل status الخام مباشرة؛
-// هذا يضمن أن فلتر "نشطة" يستثني المنتهية، وأن فلتر "منتهية" يعمل فعلياً رغم
-// عدم وجود أي مستند بحقل status حرفي = "expired" (فالانتهاء يُحسب دائماً من
-// expiresAt/expiryDate على العميل ولا يُكتب كحالة منفصلة في Firestore).
+// ── نتيجة معالجة عرض واحد محسوبة مرة واحدة فقط لكل مستند عند كل لقطة
+// Firestore (بدل إعادة حساب isOfferExpired/effectiveOfferStatus حتى 5 مرات:
+// مرة لكل تبويب من التبويبات الأربعة المُفلترة + مرة لشارة الحالة على
+// البطاقة). هذا هو سبب بطء تبويب "منتهية" ملموساً عن غيره: فحص انتهاء
+// الصلاحية (تحويل Timestamp إلى DateTime ومقارنته بـ DateTime.now) كان
+// يُعاد تنفيذه لكل مستند مرات متعددة على كل إعادة بناء، وبما أن العروض
+// المنتهية تتراكم لدى المطعم بمرور الوقت (لا تُؤرشَف أو تُحذف تلقائياً)
+// فهي غالباً أكبر التبويبات، فتتضاعف كلفة إعادة الحساب هذه فيها أكثر من
+// غيرها. حساب واحد بسيط (expired/remaining/status) لكل مستند هنا يكفي
+// لتغذية كل التبويبات والشارة معاً، دون أي تغيير في نتيجة الفلترة ──
+class _OfferEntry {
+  final QueryDocumentSnapshot doc;
+  final Map<String, dynamic> data;
+  final bool expired;
+  final int remaining;
+  final String effective; // 'expired' أو حقل status الخام (أو 'available')
+  final String badgeStatus;
+  // ── null لأي مستند بلا createdAt صالح — تُرتَّب هذه دائماً في الآخر بصرف
+  // النظر عن كونها الأحدث أو الأقدم فعلياً، لأن تاريخها الحقيقي غير معروف ──
+  final int? createdAtMillis;
+
+  _OfferEntry({
+    required this.doc,
+    required this.data,
+    required this.expired,
+    required this.remaining,
+    required this.effective,
+    required this.badgeStatus,
+    required this.createdAtMillis,
+  });
+
+  factory _OfferEntry.from(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final expired = isOfferExpired(data);
+    final remaining = (data['remainingQuantity'] as num?)?.toInt() ?? 0;
+    final rawStatus = data['status'] as String?;
+    final effective = expired ? 'expired' : (rawStatus ?? 'available');
+    final String badgeStatus;
+    if (expired) {
+      badgeStatus = 'expired';
+    } else if (rawStatus == 'closed') {
+      badgeStatus = 'closed';
+    } else if (remaining <= 0) {
+      badgeStatus = 'sold_out';
+    } else if (rawStatus == 'available') {
+      badgeStatus = 'available';
+    } else {
+      badgeStatus =
+          (rawStatus == null || rawStatus.isEmpty) ? 'unknown' : rawStatus;
+    }
+    final createdAtRaw = data['createdAt'];
+    final createdAtMillis =
+        createdAtRaw is Timestamp ? createdAtRaw.millisecondsSinceEpoch : null;
+    return _OfferEntry(
+      doc: doc,
+      data: data,
+      expired: expired,
+      remaining: remaining,
+      effective: effective,
+      badgeStatus: badgeStatus,
+      createdAtMillis: createdAtMillis,
+    );
+  }
+}
+
+/// ترتيب "الأحدث أولاً" — أي عرض بلا createdAt صالح يُوضَع في نهاية القائمة
+/// دائماً بدل استبعاده أو ترتيبه عشوائياً.
+int _compareNewestFirst(_OfferEntry a, _OfferEntry b) {
+  final am = a.createdAtMillis;
+  final bm = b.createdAtMillis;
+  if (am == null && bm == null) return 0;
+  if (am == null) return 1;
+  if (bm == null) return -1;
+  return bm.compareTo(am);
+}
+
+// ── يطابق عرضاً واحداً (بحقوله المحسوبة مسبقاً) مع الفلتر المطلوب اعتماداً
+// على الحالة الفعلية بعد اعتبار انتهاء الصلاحية وليس حقل status الخام
+// مباشرة؛ هذا يضمن أن فلتر "نشطة" يستثني المنتهية، وأن فلتر "منتهية" يعمل
+// فعلياً رغم عدم وجود أي مستند بحقل status حرفي = "expired" (فالانتهاء
+// يُحسب دائماً من expiresAt/expiryDate على العميل ولا يُكتب كحالة منفصلة
+// في Firestore).
 //
 // "نشطة" (available): status الفعلي 'available' + كمية متبقية > 0 — نفس
 // الشرط الثلاثي المستخدم في بطاقات إحصائيات الرئيسية والإحصائيات، حتى لا
 // يظهر في هذه القائمة عرض لم يُحتسَب كـ"نشط" هناك (أو العكس).
 //
+// "مغلقة" (closed): الحالة الفعلية == 'closed' فقط — الحقل الخام المستخدم
+// فعلياً في المشروع لإغلاق عرض هو 'closed' (راجع toggleOfferStatus في
+// offer_actions.dart)، وليس completed/inactive/cancelled/sold_out؛ الأخيرة
+// حالة منفصلة تماماً (نفدت الكمية) لها تبويبها الخاص أدناه.
+//
 // "sold_out" (نفدت الكمية): أي عرض غير منتهي الصلاحية نفدت كميته بالكامل —
 // سواء كانت حالته المخزَّنة 'reserved' (الحالة القياسية التي يضبطها
 // ReservationService عند نفاد remainingQuantity)، أو 'available' بكمية
 // متبقية صفر في حالات نادرة (كتعديل يدوي للكمية دون تحديث الحالة) ──
-bool _matchesFilter(Map<String, dynamic> data, String filter) {
-  final effective = effectiveOfferStatus(data);
-  final remaining = (data['remainingQuantity'] as num?)?.toInt() ?? 0;
-
-  if (filter == 'available') return effective == 'available' && remaining > 0;
-  if (filter == 'sold_out') {
-    return !isOfferExpired(data) && remaining <= 0;
+bool _matchesFilter(_OfferEntry entry, String filter) {
+  if (filter == 'available') {
+    return entry.effective == 'available' && entry.remaining > 0;
   }
-  return effective == filter;
-}
-
-// ── الحالة الفعلية المعروضة على شارة البطاقة — نفس منطق الفلترة أعلاه
-// بالضبط، محوَّلاً إلى قيمة واحدة بدل فحص كل فلتر على حدة، حتى تبقى شارة كل
-// بطاقة متّسقة تماماً مع التبويب الذي تظهر ضمنه ──
-String _effectiveBadgeStatus(Map<String, dynamic> data) {
-  if (isOfferExpired(data)) return 'expired';
-  final remaining = (data['remainingQuantity'] as num?)?.toInt() ?? 0;
-  final rawStatus = (data['status'] as String?) ?? '';
-  if (rawStatus == 'closed') return 'closed';
-  if (remaining <= 0) return 'sold_out';
-  if (rawStatus == 'available') return 'available';
-  return rawStatus.isEmpty ? 'unknown' : rawStatus;
+  if (filter == 'sold_out') {
+    return !entry.expired && entry.remaining <= 0;
+  }
+  return entry.effective == filter;
 }
 
 Color _badgeColor(String status) {
@@ -121,10 +189,14 @@ class _RestaurantOffersScreenState extends State<RestaurantOffersScreen>
 
   String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
 
+  // ── فلتر مساواة وحيد بلا orderBy عمداً: Firestore يستبعد كلياً من نتائج
+  // الاستعلام أي مستند لا يملك حقل الترتيب (createdAt)، فلو وُجد عرض قديم
+  // بلا createdAt لاختفى من كل التبويبات دون أي تنبيه. الترتيب "الأحدث
+  // أولاً" يتم بدلاً من ذلك على العميل بعد الجلب (انظر SortByCreatedAt
+  // أدناه)، وهذا يُلغي أيضاً الحاجة لفهرس مركّب (providerUserId+createdAt) ──
   Stream<QuerySnapshot> _myOffersStream() => FirebaseFirestore.instance
       .collection('offers')
       .where('providerUserId', isEqualTo: _uid)
-      .orderBy('createdAt', descending: true)
       .snapshots();
 
   @override
@@ -156,19 +228,20 @@ class _RestaurantOffersScreenState extends State<RestaurantOffersScreen>
           }
 
           // ── ستريم واحد فقط يُشترَك بين كل التبويبات؛ كل تبويب يُصفّي
-          // نفس القائمة محلياً، بلا استعلامات Firestore إضافية ──
-          final allDocs = snapshot.data!.docs;
+          // نفس القائمة محلياً، بلا استعلامات Firestore إضافية. حالة كل
+          // عرض (منتهي/متبقٍّ/شارة) تُحسب مرة واحدة هنا بدل إعادة حسابها
+          // لكل تبويب على حدة، وهو ما كان يجعل تبويب "منتهية" (أكبر تبويب
+          // عادةً لأن العروض المنتهية تتراكم ولا تُحذف) أبطأ ملموساً ──
+          final entries = snapshot.data!.docs.map(_OfferEntry.from).toList()
+            ..sort(_compareNewestFirst);
 
           return TabBarView(
             controller: _tabController,
             children: _kFilterKeys.map((filter) {
-              final docs = filter == null
-                  ? allDocs
-                  : allDocs.where((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      return _matchesFilter(data, filter);
-                    }).toList();
-              return _OffersListView(docs: docs);
+              final rows = filter == null
+                  ? entries
+                  : entries.where((e) => _matchesFilter(e, filter)).toList();
+              return _OffersListView(entries: rows);
             }).toList(),
           );
         },
@@ -181,12 +254,12 @@ class _RestaurantOffersScreenState extends State<RestaurantOffersScreen>
 // قائمة بطاقات العروض لتبويب واحد
 // ─────────────────────────────────────────────
 class _OffersListView extends StatelessWidget {
-  final List<QueryDocumentSnapshot> docs;
-  const _OffersListView({required this.docs});
+  final List<_OfferEntry> entries;
+  const _OffersListView({required this.entries});
 
   @override
   Widget build(BuildContext context) {
-    if (docs.isEmpty) {
+    if (entries.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -209,10 +282,11 @@ class _OffersListView extends StatelessWidget {
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: docs.length,
+      itemCount: entries.length,
       itemBuilder: (context, index) {
-        final doc = docs[index];
-        final data = doc.data() as Map<String, dynamic>;
+        final entry = entries[index];
+        final doc = entry.doc;
+        final data = entry.data;
 
         final title = data['title'] ?? 'باقة طعام';
         final description = data['description'] ?? '';
@@ -223,8 +297,8 @@ class _OffersListView extends StatelessWidget {
         final discountPrice = data['discountPrice'] ?? data['price'] ?? 0;
         final currency = data['currency'] ?? 'ILS';
         final rawStatus = (data['status'] as String?) ?? 'unknown';
-        final expired = isOfferExpired(data);
-        final badgeStatus = _effectiveBadgeStatus(data);
+        final expired = entry.expired;
+        final badgeStatus = entry.badgeStatus;
         final pickupLocation = data['pickupLocation'] ?? 'غير محدد';
         final isFree = data['isFree'] == true || discountPrice == 0;
 

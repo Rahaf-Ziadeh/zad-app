@@ -395,6 +395,76 @@ class ExpiryDateTimeField extends StatelessWidget {
   }
 }
 
+/// زر تحديد/تحديث موقع على الخريطة — يعرض الإحداثيات الحالية إن وُجدت مع
+/// خيار مسحها، أو دعوة لتحديد الموقع الحالي/على الخريطة إن لم تُحدَّد بعد.
+/// يُستخدم في ملف تعريف المطعم وشاشات إضافة/تعديل العرض والتبرع للجمعية —
+/// نفس الشاشة المشتركة LocationPickerScreen في كل مكان، بلا أي مُنتقٍ ثانٍ.
+class LocationPickerRow extends StatelessWidget {
+  final bool hasLocation;
+  final double? latitude;
+  final double? longitude;
+  final VoidCallback onTap;
+  final VoidCallback onClear;
+
+  const LocationPickerRow({
+    super.key,
+    required this.hasLocation,
+    required this.latitude,
+    required this.longitude,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: hasLocation
+              ? AppColors.success.withValues(alpha: 0.08)
+              : AppColors.primary.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: hasLocation
+                ? AppColors.success.withValues(alpha: 0.4)
+                : AppColors.primary.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              hasLocation ? Icons.my_location_rounded : Icons.map_outlined,
+              color: hasLocation ? AppColors.success : AppColors.primary,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                hasLocation
+                    ? 'تم تحديد الموقع ✓ (${latitude!.toStringAsFixed(4)}, ${longitude!.toStringAsFixed(4)})'
+                    : 'اختيار الموقع من الخريطة / استخدام موقعي الحالي',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: hasLocation ? AppColors.success : AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (hasLocation)
+              GestureDetector(
+                onTap: onClear,
+                child: const Icon(Icons.close_rounded,
+                    size: 16, color: AppColors.textLight),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class EditableField extends StatelessWidget {
   final IconData icon;
   final String label;
