@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:zad_app/models/user.dart';
 import 'package:zad_app/theme/app_colors.dart';
@@ -27,16 +28,10 @@ class WelcomeCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: Colors.white.withValues(alpha: 0.2),
-            child: Text(
-              user.name.isNotEmpty ? user.name[0].toUpperCase() : 'م',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold),
-            ),
+          _RestaurantLogoAvatar(
+            uid: user.uid,
+            photoUrl: user.photoUrl,
+            name: user.name,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -59,6 +54,70 @@ class WelcomeCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── يعرض شعار/صورة المطعم داخل دائرة الترحيب إن وُجدت (users.photoUrl هو
+// المصدر الأساسي، وإلا restaurants/{uid}.logoUrl كاحتياط — نفس الحقلين
+// المستخدمين فعلياً في RestaurantProfileScreen، دون اختراع حقل جديد)؛
+// عند غياب الصورة أو فشل تحميلها يُعرض الحرف الأول من الاسم كما كان سابقاً ──
+class _RestaurantLogoAvatar extends StatelessWidget {
+  final String uid;
+  final String? photoUrl;
+  final String name;
+
+  const _RestaurantLogoAvatar({
+    required this.uid,
+    required this.photoUrl,
+    required this.name,
+  });
+
+  String get _initial => name.isNotEmpty ? name[0].toUpperCase() : 'م';
+
+  Widget _fallback() => Text(
+        _initial,
+        style: const TextStyle(
+            color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+      );
+
+  Widget _circle(Widget child) => Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.2),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: child,
+      );
+
+  Widget _image(String url) => ClipOval(
+        child: Image.network(
+          url,
+          width: 56,
+          height: 56,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _circle(_fallback()),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final directUrl = photoUrl;
+    if (directUrl != null && directUrl.isNotEmpty) {
+      return _image(directUrl);
+    }
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('restaurants').doc(uid).get(),
+      builder: (context, snap) {
+        final logoUrl =
+            (snap.data?.data() as Map<String, dynamic>?)?['logoUrl'] as String?;
+        if (logoUrl != null && logoUrl.isNotEmpty) {
+          return _image(logoUrl);
+        }
+        return _circle(_fallback());
+      },
     );
   }
 }

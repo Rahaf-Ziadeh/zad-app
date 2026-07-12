@@ -162,7 +162,11 @@ class RestaurantHomeScreen extends StatelessWidget {
                       Expanded(
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-                          onTap: () => onNavigate(1),
+                          onTap: () {
+                            debugPrint(
+                                '[RestaurantHome] tapped all offers -> RestaurantOffersScreen(initialFilter: null / الكل)');
+                            onNavigate(1);
+                          },
                           child: StatCard(
                             title: 'كل العروض',
                             value: '${offers.length}',
@@ -175,7 +179,11 @@ class RestaurantHomeScreen extends StatelessWidget {
                       Expanded(
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-                          onTap: () => onNavigate(1, offersFilter: 'available'),
+                          onTap: () {
+                            debugPrint(
+                                "[RestaurantHome] tapped active offers -> RestaurantOffersScreen(initialFilter: 'available' / نشطة)");
+                            onNavigate(1, offersFilter: 'available');
+                          },
                           child: StatCard(
                             title: 'نشطة',
                             value: '$activeOffers',
@@ -189,7 +197,11 @@ class RestaurantHomeScreen extends StatelessWidget {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
                           // ── تبويب "بانتظار الاستلام" داخل شاشة حجوزاتي (index 1) ──
-                          onTap: () => onNavigate(2, reservationsTab: 1),
+                          onTap: () {
+                            debugPrint(
+                                '[RestaurantHome] tapped waiting reservations -> RestaurantReservationsScreen(initialTabIndex: 1 / بانتظار الاستلام)');
+                            onNavigate(2, reservationsTab: 1);
+                          },
                           child: StatCard(
                             title: 'بانتظار',
                             value: '$pendingRes',

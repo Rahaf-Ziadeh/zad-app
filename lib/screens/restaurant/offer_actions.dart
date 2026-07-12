@@ -11,18 +11,29 @@ import '../../utils/verification_utils.dart';
 /// التحقق من الحجوزات النشطة قبل الحذف في أكثر من مكان.
 
 Future<void> confirmDeleteOffer(BuildContext context, String offerId) async {
+  // ── حارس يمنع استدعاء pop مرتين لنفس الحوار (نقر مزدوج سريع على نفس الزر) ──
+  var dialogPopped = false;
   final confirm = await showDialog<bool>(
     context: context,
-    builder: (_) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       title: const Text('حذف العرض'),
       content: const Text('هل أنت متأكد من حذف هذا العرض؟ لا يمكن التراجع.'),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء')),
+          onPressed: () {
+            if (dialogPopped) return;
+            dialogPopped = true;
+            Navigator.of(dialogContext).pop(false);
+          },
+          child: const Text('إلغاء'),
+        ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
-          onPressed: () => Navigator.pop(context, true),
+          onPressed: () {
+            if (dialogPopped) return;
+            dialogPopped = true;
+            Navigator.of(dialogContext).pop(true);
+          },
           child: const Text('حذف'),
         ),
       ],
@@ -49,9 +60,10 @@ Future<void> confirmDeleteOffer(BuildContext context, String offerId) async {
           : 'لا يمكن حذف هذا العرض لأنه تم استلامه من قبل أحد المستخدمين.';
 
       if (!context.mounted) return;
+      var infoDialogPopped = false;
       await showDialog<void>(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           title: const Row(
@@ -69,7 +81,11 @@ Future<void> confirmDeleteOffer(BuildContext context, String offerId) async {
                   color: AppColors.textDark, fontSize: 14, height: 1.6)),
           actions: [
             ElevatedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                if (infoDialogPopped) return;
+                infoDialogPopped = true;
+                Navigator.of(dialogContext).pop();
+              },
               child: const Text('حسناً'),
             ),
           ],

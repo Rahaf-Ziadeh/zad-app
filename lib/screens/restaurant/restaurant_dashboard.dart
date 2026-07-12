@@ -56,12 +56,26 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
         _profileNavigatorKey,
       ];
 
-  // ── تنقّل من الشاشة الرئيسية: يبدّل التبويب مع تطبيق الفلتر المطلوب فوراً ──
+  // ── تنقّل من الشاشة الرئيسية: يبدّل التبويب مع تطبيق الفلتر المطلوب فوراً.
+  //
+  // ملاحظة جذر المشكلة: تغيير ValueKey الخاص بـ _RestaurantTabView (عبر
+  // العدّادات أعلاه) وحده لا يكفي لإجبار Navigator الداخلي على إعادة بناء
+  // أول Route فيه — GlobalKey الخاص بذلك الـ Navigator (_offersNavigatorKey/
+  // _reservationsNavigatorKey) يبقى بلا تغيير، فيقوم Flutter بإعادة استخدام
+  // (reparenting) نفس الـ NavigatorState القديم بمكدّسه القديم بدل إنشاء واحد
+  // جديد؛ ولأن onGenerateRoute يُستدعى مرة واحدة فقط عند إنشاء أول Route، يبقى
+  // ذلك الـ Route عالقاً بالفلتر/التبويب من أول مرة عُرض فيها التبويب، بغض
+  // النظر عن أي بطاقة إحصائية ضُغطت لاحقاً — وهذا هو السبب الفعلي وراء عدم
+  // تفعيل الفلتر الصحيح عند الضغط على البطاقات. الحل: استبدال محتوى ذلك
+  // الـ Navigator صراحةً عبر pushAndRemoveUntil مباشرة بعد كل ضغطة، فيُبنى
+  // Route جديد بالفلتر/التبويب الصحيح في كل مرة ──
   void _navigateFromHome(
     int index, {
     String? offersFilter,
     int? reservationsTab,
   }) {
+    debugPrint(
+        '[RestaurantHome] onNavigate($index, offersFilter: $offersFilter, reservationsTab: $reservationsTab)');
     setState(() {
       _selectedIndex = index;
       if (index == 1) {
@@ -73,6 +87,28 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
         _reservationsNavNonce++;
       }
     });
+
+    if (index == 1) {
+      debugPrint(
+          '[RestaurantHome] resetting عروضي navigator -> initialFilter: $offersFilter');
+      _offersNavigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => RestaurantOffersScreen(initialFilter: offersFilter),
+        ),
+        (route) => false,
+      );
+    } else if (index == 2) {
+      final tabIndex = reservationsTab ?? 0;
+      debugPrint(
+          '[RestaurantHome] resetting حجوزاتي navigator -> initialTabIndex: $tabIndex');
+      _reservationsNavigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) =>
+              RestaurantReservationsScreen(initialTabIndex: tabIndex),
+        ),
+        (route) => false,
+      );
+    }
   }
 
   // ── تنقّل عبر شريط التنقّل السفلي مباشرة: يعرض كل العروض/الحجوزات دون فلتر،
