@@ -69,6 +69,7 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
         userId: userId,
         status: newStatus,
         foodName: foodName,
+        donationId: donationId,
       );
 
       if (!context.mounted) return;

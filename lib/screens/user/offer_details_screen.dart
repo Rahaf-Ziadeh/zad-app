@@ -6,6 +6,9 @@ import '../../constants/app_constants.dart';
 import '../../services/reservation_service.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/offer_utils.dart';
+import '../../widgets/active_reservation_dialog.dart';
+import '../../widgets/fullscreen_image_viewer.dart';
 import '../../widgets/offer_widgets.dart';
 import 'provider_public_profile_screen.dart';
 import 'qr_code_screen.dart';
@@ -69,15 +72,21 @@ class OfferDetailsScreen extends StatelessWidget {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  imageUrl.isNotEmpty
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => buildImagePlaceholder(
-                              icon: Icons.restaurant_rounded, height: 280),
-                        )
-                      : buildImagePlaceholder(
-                          icon: Icons.restaurant_rounded, height: 280),
+                  TappableOfferImage(
+                    imageUrl: imageUrl,
+                    title: title,
+                    child: imageUrl.isNotEmpty
+                        ? Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                buildImagePlaceholder(
+                                    icon: Icons.restaurant_rounded,
+                                    height: 280),
+                          )
+                        : buildImagePlaceholder(
+                            icon: Icons.restaurant_rounded, height: 280),
+                  ),
                   // gradient overlay
                   Positioned(
                     bottom: 0,
@@ -343,6 +352,23 @@ class _ReserveButtonState extends State<_ReserveButton> {
   bool _loading = false;
 
   Future<void> _proceed() async {
+    // ── تحقق مسبق من انتهاء صلاحية العرض قبل فتح نافذة اختيار الكمية/الدفع؛
+    // التحقق داخل ReservationService.reserveOffer (ضمن المعاملة) يبقى كشبكة
+    // أمان احتياطية نهائية ──
+    if (isOfferExpired(widget.data)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('انتهت مدة هذا العرض ولم يعد متاحًا للحجز.')),
+      );
+      return;
+    }
+
+    // ── تحقق مسبق من وجود حجز نشط لهذا العرض قبل فتح نافذة اختيار الكمية/
+    // التأكيد أصلاً؛ التحقق داخل ReservationService.reserveOffer يبقى كشبكة
+    // أمان احتياطية دون تغيير ──
+    final hasActive = await hasActiveReservationForOffer(context, widget.docId);
+    if (hasActive || !mounted) return;
+
     final (confirmed, qty) = await _showConfirmationDialog();
     if (!confirmed || !mounted) return;
 

@@ -7,18 +7,12 @@ import '../../services/location_service.dart';
 import '../../services/reservation_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_constants.dart';
+import '../../utils/offer_utils.dart';
+import '../../widgets/active_reservation_dialog.dart';
+import '../../widgets/fullscreen_image_viewer.dart';
 import '../../widgets/offer_widgets.dart';
 import 'offer_details_screen.dart';
 import 'qr_code_screen.dart';
-
-// ── يُخفي الباقات المنتهية الصلاحية من قوائم التصفح: يدعم الحقل الجديد
-// expiresAt (العروض الفردية) والحقل القديم expiryDate (فائض الجمعيات)؛ أي
-// باقة بلا أي منهما (كباقات المطاعم) تُعتبر غير منتهية دائماً ──
-bool _isOfferExpired(Map<String, dynamic> data) {
-  final raw = data['expiresAt'] ?? data['expiryDate'];
-  if (raw is! Timestamp) return false;
-  return raw.toDate().isBefore(DateTime.now());
-}
 
 class PackagesTab extends StatefulWidget {
   const PackagesTab({super.key});
@@ -463,7 +457,7 @@ class _PackagesTabState extends State<PackagesTab> {
 
               final visibleDocs = snapshot.data!.docs
                   .where((d) =>
-                      !_isOfferExpired(d.data() as Map<String, dynamic>))
+                      !isOfferExpired(d.data() as Map<String, dynamic>))
                   .toList();
               final packages = _filterAndSort(visibleDocs);
 
@@ -557,17 +551,21 @@ class _PackageCard extends StatelessWidget {
           children: [
             Stack(
               children: [
-                imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        height: 175,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => buildImagePlaceholder(
-                            icon: Icons.card_giftcard_rounded, height: 175),
-                      )
-                    : buildImagePlaceholder(
-                        icon: Icons.card_giftcard_rounded, height: 175),
+                TappableOfferImage(
+                  imageUrl: imageUrl,
+                  title: title,
+                  child: imageUrl.isNotEmpty
+                      ? Image.network(
+                          imageUrl,
+                          height: 175,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => buildImagePlaceholder(
+                              icon: Icons.card_giftcard_rounded, height: 175),
+                        )
+                      : buildImagePlaceholder(
+                          icon: Icons.card_giftcard_rounded, height: 175),
+                ),
                 Positioned(
                   top: 12,
                   right: 12,
@@ -760,6 +758,19 @@ class _ReserveButtonState extends State<_ReserveButton> {
       );
       return;
     }
+
+    if (isOfferExpired(widget.data)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('انتهت مدة هذا العرض ولم يعد متاحًا للحجز.')),
+      );
+      return;
+    }
+
+    // ── تحقق مسبق من وجود حجز نشط لهذه الباقة قبل فتح صحيفة اختيار الكمية؛
+    // التحقق داخل ReservationService.reserveOffer يبقى كشبكة أمان احتياطية ──
+    final hasActive = await hasActiveReservationForOffer(context, widget.docId);
+    if (hasActive || !mounted) return;
 
     final maxQty = (widget.data['remainingQuantity'] as num?)?.toInt() ?? 1;
     final selectedQty = await _askQuantity(maxQty);

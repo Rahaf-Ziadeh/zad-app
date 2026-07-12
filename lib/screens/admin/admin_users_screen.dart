@@ -45,6 +45,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
       title: 'تم قبول الحساب ✅',
       message: 'تمت الموافقة على حسابك ويمكنك الآن استخدام التطبيق.',
       type: 'account',
+      relatedId: userId,
     );
     if (!mounted) return;
 
@@ -68,6 +69,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
       title: 'تم رفض الحساب',
       message: 'عذراً، تم رفض طلب إنشاء حسابك.',
       type: 'account',
+      relatedId: userId,
     );
     if (!mounted) return;
 
@@ -94,6 +96,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
         title: 'تم تعليق الحساب',
         message: 'تم تعليق حسابك مؤقتاً من قبل الإدارة.',
         type: 'account',
+        relatedId: userId,
       );
     } else {
       await NotificationService().sendNotification(
@@ -101,6 +104,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
         title: 'تمت إعادة تفعيل الحساب ✅',
         message: 'تمت إعادة تفعيل حسابك ويمكنك استخدام التطبيق مجدداً.',
         type: 'account',
+        relatedId: userId,
       );
     }
 

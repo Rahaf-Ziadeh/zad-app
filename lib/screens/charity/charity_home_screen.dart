@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
-import 'charity_notifications_screen.dart';
 import 'charity_donations_screen.dart';
+import 'charity_notifications_screen.dart';
 import 'charity_publish_surplus_screen.dart';
 
 class CharityHomeScreen extends StatelessWidget {

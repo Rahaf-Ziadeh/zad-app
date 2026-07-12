@@ -196,6 +196,10 @@ class _OrgVerificationCardState extends State<_OrgVerificationCard> {
           'verificationReviewedBy': adminId,
           'verificationReviewedAt': FieldValue.serverTimestamp(),
           'rejectionReason': null,
+          // ── علامة دائمة لا تُعاد أبداً إلى false: تُستخدَم لاحقاً للسماح
+          // بدخول محدود إن رُفض تحديث لاحق (كتعديل الرخصة) بدل حظر كامل —
+          // راجع AuthService.login وmain.dart ──
+          'wasEverApproved': true,
         },
       );
       batch.set(
@@ -263,6 +267,35 @@ class _OrgVerificationCardState extends State<_OrgVerificationCard> {
         SetOptions(merge: true),
       );
       await batch.commit();
+
+      // ── إخفاء/تعليق العروض العامة النشطة لهذا المزوّد فور الرفض (Part 9
+      // item 79): إغلاقها بضبط status='closed' يكفي لإخفائها تلقائياً من
+      // كل شاشات التصفح العامة (كلها تُصفّي status=='available' بالفعل)
+      // دون أي تعديل عليها. الحجوزات القائمة قبل الرفض تبقى تعمل — هذا
+      // يمنع فقط حجوزات جديدة (reserveOffer يرفض أي عرض status != available
+      // أصلاً). عملية غير حرجة: فشلها لا يُبطل قرار الرفض نفسه ──
+      try {
+        final activeOffers = await FirebaseFirestore.instance
+            .collection('offers')
+            .where('providerUserId', isEqualTo: widget.docId)
+            .where('status', isEqualTo: 'available')
+            .get();
+        if (activeOffers.docs.isNotEmpty) {
+          final offersBatch = FirebaseFirestore.instance.batch();
+          for (final doc in activeOffers.docs) {
+            offersBatch.update(doc.reference, {
+              'status': 'closed',
+              'closedDueToRejection': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+          await offersBatch.commit();
+        }
+      } catch (e) {
+        debugPrint('[AdminVerificationPanel] failed to hide offers after '
+            'rejection (non-critical): $e');
+      }
+
       await NotificationService().sendNotification(
         userId: widget.docId,
         title: 'طلبك مرفوض',

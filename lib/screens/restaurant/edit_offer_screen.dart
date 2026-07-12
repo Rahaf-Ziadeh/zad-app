@@ -11,6 +11,8 @@ import 'package:zad_app/services/notification_service.dart';
 
 import '../../constants/app_constants.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/offer_utils.dart';
+import '../../utils/verification_utils.dart';
 import '../../widgets/allergy_checkbox_panel.dart';
 
 class EditOfferScreen extends StatefulWidget {
@@ -41,6 +43,11 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
   bool _uploadingImage = false;
   bool _isLoading = false;
 
+  // ── تاريخ ووقت انتهاء العرض — يُحمَّل من القيمة الحالية (expiresAt، مع
+  // الرجوع إلى الحقل القديم expiryDate للعروض السابقة) ويبقى كما هو إن لم
+  // يُغيَّر ──
+  DateTime? _expiresAt;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +63,8 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
         TextEditingController(text: '${d['discountPrice'] ?? ''}');
     _pickupController = TextEditingController(text: d['pickupLocation'] ?? '');
     _selectedAllergens = AppConstants.parseAllergyCheckboxes(d['allergyInfo']);
+    final rawExpiry = d['expiresAt'] ?? d['expiryDate'];
+    if (rawExpiry is Timestamp) _expiresAt = rawExpiry.toDate();
   }
 
   @override
@@ -171,6 +180,16 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
       return;
     }
 
+    if (_expiresAt != null && !_expiresAt!.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('يجب أن يكون تاريخ ووقت انتهاء العرض في المستقبل.'),
+        ),
+      );
+      return;
+    }
+
     // التحقق من تسجيل الدخول — قبل أي await
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -178,6 +197,44 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
         const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
       );
       return;
+    }
+
+    // ── يُحتفَظ بالقيمة الحالية إن لم تُغيَّر؛ إن حُذفت (null) يُطبَّق
+    // الانتهاء التلقائي بعد 24 ساعة من هذا التعديل ──
+    final expiresAt =
+        _expiresAt ?? DateTime.now().add(const Duration(hours: 24));
+
+    // ── يُمنع الحفظ إن كان سيعيد تفعيل عرض لم يكن نشطاً قبل التعديل (مغلق،
+    // منتهي، أو نافد الكمية) بينما الحساب قيد إعادة المراجعة أو مرفوض؛
+    // بما أن هذه الشاشة لا تُعدّل حقل status، فالتفعيل هنا يحدث فقط عبر رفع
+    // الكمية المتبقية عن صفر و/أو تمديد تاريخ الانتهاء لعرض كان منتهياً —
+    // ولأن expiresAt الجديد يُشترَط دائماً أن يكون بالمستقبل (تحقق أعلاه)،
+    // فتعديل أي عرض منتهي يُعيد تفعيله تلقائياً إن بقيت حالته الخام 'available' ──
+    final rawStatus = (widget.offerData['status'] as String?) ?? 'available';
+    final wasActiveBefore = rawStatus == 'available' &&
+        !isOfferExpired(widget.offerData) &&
+        ((widget.offerData['remainingQuantity'] as num?)?.toInt() ?? 0) > 0;
+    final willBeActiveAfter = rawStatus == 'available' && quantity > 0;
+
+    if (!wasActiveBefore && willBeActiveAfter) {
+      final uid = user.uid;
+      final canReactivate = await canPublishOrReactivateOffers(uid);
+      if (!mounted) return;
+      if (!canReactivate) {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        if (!mounted) return;
+        final vs = doc.data()?['verificationStatus'] as String?;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(publishBlockedMessage(vs)),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+        return;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -212,6 +269,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
         'isFree': discountPrice == 0,
         'pickupLocation': pickup,
         'allergyInfo': allergyInfo,
+        'expiresAt': Timestamp.fromDate(expiresAt),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -222,6 +280,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
           title: 'تم تعديل العرض',
           message: 'تم تحديث بيانات العرض "$title"',
           type: 'offer',
+          relatedId: widget.offerId,
         );
       } catch (_) {}
 
@@ -367,6 +426,13 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                     label: 'مكان الاستلام',
                     hint: 'العنوان أو المنطقة',
                     icon: Icons.location_on_outlined,
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 5.5 ── تاريخ ووقت انتهاء العرض ──
+                  ExpiryDateTimeField(
+                    value: _expiresAt,
+                    onChanged: (v) => setState(() => _expiresAt = v),
                   ),
                   const SizedBox(height: 14),
 

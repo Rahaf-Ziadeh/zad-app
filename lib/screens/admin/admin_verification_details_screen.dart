@@ -110,6 +110,10 @@ class _AdminVerificationDetailsScreenState
           'verificationReviewedBy': adminId,
           'verificationReviewedAt': FieldValue.serverTimestamp(),
           'rejectionReason': null,
+          // ── علامة دائمة لا تُعاد أبداً إلى false: تُستخدَم لاحقاً للسماح
+          // بدخول محدود إن رُفض تحديث لاحق (كتعديل الرخصة) بدل حظر كامل —
+          // راجع AuthService.login وmain.dart ──
+          'wasEverApproved': true,
         },
       );
       batch.set(
@@ -179,6 +183,32 @@ class _AdminVerificationDetailsScreenState
         SetOptions(merge: true),
       );
       await batch.commit();
+
+      // ── إخفاء/تعليق العروض العامة النشطة لهذا المزوّد فور الرفض (Part 9
+      // item 79) — نفس المنطق المستخدم في admin_verification_panel.dart،
+      // غير حرج: فشله لا يُبطل قرار الرفض نفسه ──
+      try {
+        final activeOffers = await FirebaseFirestore.instance
+            .collection('offers')
+            .where('providerUserId', isEqualTo: widget.docId)
+            .where('status', isEqualTo: 'available')
+            .get();
+        if (activeOffers.docs.isNotEmpty) {
+          final offersBatch = FirebaseFirestore.instance.batch();
+          for (final doc in activeOffers.docs) {
+            offersBatch.update(doc.reference, {
+              'status': 'closed',
+              'closedDueToRejection': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+          await offersBatch.commit();
+        }
+      } catch (e) {
+        debugPrint('[AdminVerificationDetails] failed to hide offers after '
+            'rejection (non-critical): $e');
+      }
+
       await NotificationService().sendNotification(
         userId: widget.docId,
         title: 'طلبك مرفوض',

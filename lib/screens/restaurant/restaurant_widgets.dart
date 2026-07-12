@@ -300,6 +300,101 @@ class FormFieldWidget extends StatelessWidget {
   }
 }
 
+/// حقل اختيار تاريخ ووقت انتهاء العرض — اختياري، بنفس نمط حقل تاريخ
+/// انتهاء الصلاحية المستخدم في نشر فائض الجمعيات (InkWell + Container).
+class ExpiryDateTimeField extends StatelessWidget {
+  final DateTime? value;
+  final ValueChanged<DateTime?> onChanged;
+
+  const ExpiryDateTimeField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  Future<void> _pick(BuildContext context) async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      firstDate: now,
+      lastDate: DateTime(now.year + 5),
+      initialDate: (value != null && value!.isAfter(now)) ? value! : now,
+    );
+    if (pickedDate == null || !context.mounted) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime:
+          value != null ? TimeOfDay.fromDateTime(value!) : TimeOfDay.now(),
+    );
+    if (pickedTime == null) return;
+    onChanged(DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    ));
+  }
+
+  String _format(DateTime dt) =>
+      '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} - '
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => _pick(context),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.event_busy_rounded,
+                    size: 20, color: AppColors.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    value == null
+                        ? 'تاريخ ووقت انتهاء العرض'
+                        : _format(value!),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: value == null
+                          ? AppColors.textLight
+                          : AppColors.textDark,
+                    ),
+                  ),
+                ),
+                if (value != null)
+                  GestureDetector(
+                    onTap: () => onChanged(null),
+                    child: const Icon(Icons.close_rounded,
+                        size: 16, color: AppColors.textLight),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'إذا لم يتم تحديد وقت الانتهاء، سينتهي العرض تلقائيًا بعد 24 '
+          'ساعة من نشره.',
+          style:
+              TextStyle(fontSize: 11.5, color: AppColors.textLight, height: 1.4),
+        ),
+      ],
+    );
+  }
+}
+
 class EditableField extends StatelessWidget {
   final IconData icon;
   final String label;

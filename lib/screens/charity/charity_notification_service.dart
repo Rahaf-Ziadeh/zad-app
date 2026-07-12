@@ -6,6 +6,7 @@ class CharityNotificationService {
     required String userId,
     required String status,
     required String foodName,
+    String? donationId,
   }) async {
     final notification = _buildNotification(status, foodName);
 
@@ -14,6 +15,7 @@ class CharityNotificationService {
       title: notification.title,
       message: notification.message,
       type: 'donation',
+      relatedId: donationId,
     );
   }
 

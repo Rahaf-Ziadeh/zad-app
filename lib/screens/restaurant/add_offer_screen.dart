@@ -12,6 +12,7 @@ import 'package:zad_app/services/notification_service.dart';
 import 'package:zad_app/theme/app_colors.dart';
 import 'package:zad_app/theme/app_constants.dart';
 import '../../constants/app_constants.dart';
+import '../../utils/verification_utils.dart';
 import '../../widgets/allergy_checkbox_panel.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -38,6 +39,10 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   bool _uploadingImage = false;
   bool _isLoading = false;
   bool _isMysteryPackage = false;
+
+  // ── تاريخ ووقت انتهاء العرض — اختياري؛ إن لم يُحدَّد يُطبَّق انتهاء
+  // تلقائي بعد 24 ساعة من النشر ──
+  DateTime? _expiresAt;
 
   // ── إحداثيات مكان الاستلام ──
   double? _latitude;
@@ -132,6 +137,28 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   }
 
   Future<void> _addOffer() async {
+    // ── يُمنع نشر أي عرض/باقة جديدة أثناء إعادة المراجعة أو بعد الرفض؛
+    // يُتحقَّق من Firestore مباشرة (وليس من حالة مخزَّنة محلياً) كخط دفاع
+    // فعلي على مستوى الكتابة، وليس مجرد تعطيل الزر في الواجهة ──
+    final guardUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final canPublish = await canPublishOrReactivateOffers(guardUid);
+    if (!mounted) return;
+    if (!canPublish) {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(guardUid)
+          .get();
+      final vs = doc.data()?['verificationStatus'] as String?;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(publishBlockedMessage(vs)),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
+    }
+
     // ── جمع قيم الحقول وتحقق منها قبل أي await ──
     final title = _titleController.text.trim();
     final desc = _descController.text.trim();
@@ -170,6 +197,16 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         const SnackBar(
           content: Text(
               'يرجى إدخال اسم موقع الاستلام أو تحديد الموقع الحالي.'),
+        ),
+      );
+      return;
+    }
+
+    if (_expiresAt != null && !_expiresAt!.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('يجب أن يكون تاريخ ووقت انتهاء العرض في المستقبل.'),
         ),
       );
       return;
@@ -257,9 +294,13 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         imageUrl = AppConstants.defaultMysteryPackageImageUrl;
       }
 
+      final expiresAt =
+          _expiresAt ?? DateTime.now().add(const Duration(hours: 24));
+
       final docRef = FirebaseFirestore.instance.collection('offers').doc();
       await docRef.set({
         'offerId': docRef.id,
+        'expiresAt': Timestamp.fromDate(expiresAt),
         'providerUserId': uid,
         'providerRole': 'restaurant',
         'offerType': _isMysteryPackage ? 'mystery_package' : 'clear_offer',
@@ -296,6 +337,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
           title: 'تم نشر العرض',
           message: 'تم نشر الباقة "$title" بنجاح',
           type: 'offer',
+          relatedId: docRef.id,
         );
       } catch (_) {}
 
@@ -315,6 +357,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         _latitude = null;
         _longitude = null;
         _locationSource = 'manual';
+        _expiresAt = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -589,6 +632,13 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                             '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
                       }
                     },
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 8.5 ── تاريخ ووقت انتهاء العرض ──
+                  ExpiryDateTimeField(
+                    value: _expiresAt,
+                    onChanged: (v) => setState(() => _expiresAt = v),
                   ),
                   const SizedBox(height: 14),
 

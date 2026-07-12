@@ -31,6 +31,24 @@ class _UserDashboardState extends State<UserDashboard> {
   // تفاصيل/ملف عام مفتوحة داخله) عند الوصول إليه عبر روابط الشاشة الرئيسية فقط ──
   int _browseNavNonce = 0;
 
+  // ── مفتاح Navigator مستقل ثابت لكل تبويب سفلي؛ يُستخدم لإعادة التبويب
+  // إلى شاشته الجذرية (popUntil) عند الضغط على تبويب محدد حالياً بالفعل،
+  // دون التأثير على مكدّس بقية التبويبات ──
+  final GlobalKey<NavigatorState> _homeNavigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _browseNavigatorKey =
+      GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _ordersNavigatorKey =
+      GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _profileNavigatorKey =
+      GlobalKey<NavigatorState>();
+
+  List<GlobalKey<NavigatorState>> get _navigatorKeys => [
+        _homeNavigatorKey,
+        _browseNavigatorKey,
+        _ordersNavigatorKey,
+        _profileNavigatorKey,
+      ];
+
   // ── التنقّل إلى تبويب فرعي داخل شاشة "تصفح"؛ تبويب "التبرع" هو الآن
   // مركز تبرّع محايد (بطاقتا اختيار فقط) لا يحتاج توثيق هوية بحد ذاته —
   // التحقق يتم داخل DonateTab نفسها قبل فتح أي من مسارَي التبرع/النشر ──
@@ -87,6 +105,7 @@ class _UserDashboardState extends State<UserDashboard> {
   Widget build(BuildContext context) {
     final pages = _pages;
     final keys = _tabKeys;
+    final navigatorKeys = _navigatorKeys;
     return Scaffold(
       // ── كل تبويب يحصل على Navigator مستقل خاص به: أي Navigator.push من
       // داخل محتوى التبويب (مثل OfferDetailsScreen أو ProviderPublicProfileScreen)
@@ -95,7 +114,11 @@ class _UserDashboardState extends State<UserDashboard> {
         index: _selectedIndex,
         children: List.generate(
           pages.length,
-          (i) => _UserTabView(key: keys[i], child: pages[i]),
+          (i) => _UserTabView(
+            key: keys[i],
+            navigatorKey: navigatorKeys[i],
+            child: pages[i],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -107,6 +130,12 @@ class _UserDashboardState extends State<UserDashboard> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) {
+          if (i == _selectedIndex) {
+            // ── التبويب المحدد بالفعل: إعادة تصفّحه إلى شاشته الجذرية فقط،
+            // دون تبديل تبويب ودون التأثير على مكدّسات التبويبات الأخرى ──
+            _navigatorKeys[i].currentState?.popUntil((route) => route.isFirst);
+            return;
+          }
           setState(() {
             _selectedIndex = i;
           });
@@ -145,11 +174,17 @@ class _UserDashboardState extends State<UserDashboard> {
 // ─────────────────────────────────────────────
 class _UserTabView extends StatelessWidget {
   final Widget child;
-  const _UserTabView({super.key, required this.child});
+  final GlobalKey<NavigatorState> navigatorKey;
+  const _UserTabView({
+    super.key,
+    required this.child,
+    required this.navigatorKey,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Navigator(
+      key: navigatorKey,
       onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => child),
     );
   }

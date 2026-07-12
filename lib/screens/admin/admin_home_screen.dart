@@ -7,7 +7,85 @@ import '../../services/admin_service.dart';
 import 'admin_offers_screen.dart';
 import 'admin_stats_detail_screen.dart';
 import 'admin_support_panel.dart';
+import 'admin_verification_details_screen.dart';
 import 'admin_widgets.dart';
+
+// ── يفتح المحتوى المرتبط بإشعار أدمن حسب نوعه (Part 13). أنواع 'account'
+// و'complaint' و'report' تُبدّل تبويب اللوحة نفسها (لا تملك شاشة تفاصيل
+// مستقلة لكل عنصر بعد)، لذا تُغلَق شاشتا الإشعارات/التفاصيل المفتوحتان أولاً
+// حتى يظهر التبويب الجديد فوراً بدل البقاء خلفهما. لا يُترَك أي نوع بلا
+// معالجة — أي نوع غير معروف يعرض رسالة واضحة ──
+Future<bool> _openAdminNotification(
+  BuildContext context,
+  Map<String, dynamic> data,
+  AppUser admin,
+  ValueChanged<int> onNavigate,
+) async {
+  final type = (data['type'] as String? ?? '').trim();
+
+  void goToTab(int index) {
+    onNavigate(index);
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  switch (type) {
+    case 'account':
+      final relatedId = (data['relatedId'] as String? ?? '').trim();
+      final relatedRole = (data['relatedRole'] as String? ?? '').trim();
+      // ── إشعار عن حساب مطعم/جمعية جديد بانتظار المراجعة: يفتح شاشة
+      // تفاصيله مباشرة إن توفّر المعرّف والدور؛ وإلا (كقرار عن حساب الأدمن
+      // نفسه) يُكتفى بتبويب "المستخدمون" ──
+      if (relatedId.isNotEmpty &&
+          (relatedRole == 'restaurant' || relatedRole == 'charity')) {
+        final roleCollection =
+            relatedRole == 'restaurant' ? 'restaurants' : 'charities';
+        final doc = await FirebaseFirestore.instance
+            .collection(roleCollection)
+            .doc(relatedId)
+            .get();
+        if (!context.mounted) return false;
+        if (!doc.exists) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('لم يتم العثور على هذا الحساب')),
+          );
+          return false;
+        }
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AdminVerificationDetailsScreen(
+              docId: relatedId,
+              data: doc.data() as Map<String, dynamic>,
+              role: relatedRole,
+            ),
+          ),
+        );
+        return true;
+      }
+      goToTab(1);
+      return true;
+    case 'complaint':
+      goToTab(2);
+      return true;
+    case 'report':
+      goToTab(3);
+      return true;
+    case 'support':
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => AdminSupportPanel(user: admin)),
+      );
+      return true;
+    default:
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن فتح محتوى هذا الإشعار'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return false;
+  }
+}
 
 class AdminHomeScreen extends StatelessWidget {
   final AppUser user;
@@ -159,19 +237,8 @@ class AdminHomeScreen extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (_) => NotificationsScreen(
-                            onNotificationTap: (context, data) {
-                              final type = data['type'];
-                              if (type == 'account') {
-                                onNavigate(1);
-                                Navigator.pop(context);
-                              } else if (type == 'complaint') {
-                                onNavigate(2);
-                                Navigator.pop(context);
-                              } else if (type == 'report') {
-                                onNavigate(3);
-                                Navigator.pop(context);
-                              }
-                            },
+                            onOpenRelated: (ctx, data) =>
+                                _openAdminNotification(ctx, data, user, onNavigate),
                           ),
                         ),
                       );

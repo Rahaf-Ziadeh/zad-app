@@ -11,12 +11,16 @@ class NotificationService {
         .snapshots();
   }
 
-  // ── إشعار لمستخدم واحد ──
+  // ── إشعار لمستخدم واحد. relatedId/relatedRole اختياريان: يحملان معرّف
+  // السجل المرتبط (رقم حجز، معرّف عرض، معرّف مزوّد...) ودوره إن وُجد، حتى
+  // تتمكن شاشة الإشعارات من فتح الصفحة المرتبطة مباشرة عند الضغط ──
   Future<void> sendNotification({
     required String userId,
     required String title,
     required String message,
     String type = 'general',
+    String? relatedId,
+    String? relatedRole,
   }) async {
     if (userId.isEmpty) return;
 
@@ -25,6 +29,9 @@ class NotificationService {
       'title': title,
       'message': message,
       'type': type,
+      if (relatedId != null && relatedId.isNotEmpty) 'relatedId': relatedId,
+      if (relatedRole != null && relatedRole.isNotEmpty)
+        'relatedRole': relatedRole,
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -36,6 +43,8 @@ class NotificationService {
     required String title,
     required String message,
     String type = 'general',
+    String? relatedId,
+    String? relatedRole,
   }) async {
     if (userIds.isEmpty) return;
 
@@ -48,6 +57,9 @@ class NotificationService {
         'title': title,
         'message': message,
         'type': type,
+        if (relatedId != null && relatedId.isNotEmpty) 'relatedId': relatedId,
+        if (relatedRole != null && relatedRole.isNotEmpty)
+          'relatedRole': relatedRole,
         'isRead': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -82,6 +94,8 @@ class NotificationService {
     required String title,
     required String message,
     String type = 'account',
+    String? relatedId,
+    String? relatedRole,
   }) async {
     final admins = await FirebaseFirestore.instance
         .collection('users')
@@ -94,6 +108,8 @@ class NotificationService {
         title: title,
         message: message,
         type: type,
+        relatedId: relatedId,
+        relatedRole: relatedRole,
       );
     }
   }

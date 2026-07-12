@@ -42,6 +42,7 @@ class SupportService {
         title: 'طلب دعم جديد',
         message: '$userName: $issueCategory',
         type: 'support',
+        relatedId: chatId,
       );
     } catch (_) {}
 
@@ -77,12 +78,14 @@ class SupportService {
           title: 'رد من الإدارة',
           message: preview,
           type: 'support',
+          relatedId: chatId,
         );
       } else if (senderRole == 'user') {
         await _ns.notifyAdmins(
           title: 'رسالة دعم جديدة',
           message: preview,
           type: 'support',
+          relatedId: chatId,
         );
       }
     } catch (_) {}
@@ -113,6 +116,7 @@ class SupportService {
           title: 'تم إغلاق المحادثة',
           message: 'تم إغلاق محادثة الدعم من قبل الإدارة.',
           type: 'support',
+          relatedId: chatId,
         );
       } catch (_) {}
     }

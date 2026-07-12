@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/user.dart';
 import '../theme/app_colors.dart';
+import '../utils/offer_utils.dart';
 import '../screens/user/offer_details_screen.dart';
 
 // ─────────────────────────────────────────────
@@ -315,13 +316,19 @@ class LatestOffersPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
+      // ── يُجلب أكثر من 3 لتعويض ما قد يُستبعَد لاحقاً كعروض منتهية الصلاحية ──
       stream: FirebaseFirestore.instance
           .collection('offers')
           .where('status', isEqualTo: 'available')
-          .limit(3)
+          .limit(10)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData || snap.data!.docs.isEmpty) {
+        final visibleDocs = (snap.data?.docs ?? [])
+            .where((d) => !isOfferExpired(d.data() as Map<String, dynamic>))
+            .take(3)
+            .toList();
+
+        if (!snap.hasData || visibleDocs.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -336,7 +343,7 @@ class LatestOffersPreview extends StatelessWidget {
         }
 
         return Column(
-          children: snap.data!.docs.map((doc) {
+          children: visibleDocs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final title = data['title'] ?? 'عرض طعام';
             final location = data['pickupLocation'] ?? 'غير محدد';

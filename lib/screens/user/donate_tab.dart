@@ -587,7 +587,7 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
       await docRef.update({'donationId': docRef.id});
       if (!mounted) return;
 
-      await _notifyCharity(title, charityId);
+      await _notifyCharity(title, charityId, docRef.id);
       if (!mounted) return;
 
       if (!mounted) return;
@@ -618,7 +618,8 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
     }
   }
 
-  Future<void> _notifyCharity(String title, String charityId) async {
+  Future<void> _notifyCharity(
+      String title, String charityId, String donationId) async {
     const notifTitle = 'تبرع طعام جديد';
     final msg = 'تبرع جديد بانتظار مراجعتك: "$title"';
     if (charityId.isNotEmpty) {
@@ -627,6 +628,7 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
         title: notifTitle,
         message: msg,
         type: 'donation',
+        relatedId: donationId,
       );
     } else {
       final charities = await FirebaseFirestore.instance
@@ -641,6 +643,7 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
           title: notifTitle,
           message: msg,
           type: 'donation',
+          relatedId: donationId,
         );
       }
     }

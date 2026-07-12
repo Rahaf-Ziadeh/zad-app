@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:zad_app/screens/restaurant/restaurant_offers_screen.dart';
 import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 
 import '../../theme/app_colors.dart';
+import '../../utils/offer_utils.dart';
 
 class RestaurantStatsScreen extends StatelessWidget {
   const RestaurantStatsScreen({super.key});
@@ -43,14 +45,32 @@ class RestaurantStatsScreen extends StatelessWidget {
               final offers = offersSnap.data!.docs;
               final reservations = resSnap.data!.docs;
 
-              // ── حسابات ──
+              // ── حسابات: تعتمد جميعها effectiveOfferStatus (الحالة الفعلية
+              // بعد اعتبار انتهاء الصلاحية) بدل حقل status الخام مباشرة، حتى
+              // لا يُحتسَب عرض منتهي الصلاحية كنشط أو كمغلق بالخطأ. المجموع
+              // (totalOffers) يبقى شاملاً للعروض المنتهية كما هي ──
               final totalOffers = offers.length;
-              final activeOffers = offers
-                  .where((d) => (d.data() as Map)['status'] == 'available')
-                  .length;
+              final activeOffers = offers.where((d) {
+                final data = d.data() as Map<String, dynamic>;
+                final remaining =
+                    (data['remainingQuantity'] as num?)?.toInt() ?? 0;
+                return effectiveOfferStatus(data) == 'available' &&
+                    remaining > 0;
+              }).length;
               final closedOffers = offers
-                  .where((d) => (d.data() as Map)['status'] == 'closed')
+                  .where((d) =>
+                      effectiveOfferStatus(d.data() as Map<String, dynamic>) ==
+                      'closed')
                   .length;
+              final expiredOffers = offers
+                  .where((d) => isOfferExpired(d.data() as Map<String, dynamic>))
+                  .length;
+              final soldOutOffers = offers.where((d) {
+                final data = d.data() as Map<String, dynamic>;
+                final remaining =
+                    (data['remainingQuantity'] as num?)?.toInt() ?? 0;
+                return !isOfferExpired(data) && remaining <= 0;
+              }).length;
 
               final totalReservations = reservations.length;
               final completedRes = reservations
@@ -156,35 +176,73 @@ class RestaurantStatsScreen extends StatelessWidget {
 
                   const SizedBox(height: 22),
 
-                  // ── إحصائيات العروض ──
+                  // ── إحصائيات العروض — كل بطاقة قابلة للنقر وتفتح "عروضي"
+                  // مفلترة بنفس المعيار المستخدم في احتسابها هنا تماماً ──
                   SectionTitle(title: 'العروض والباقات'),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: StatCard(
-                          title: 'إجمالي العروض',
-                          value: '$totalOffers',
-                          icon: Icons.fastfood_rounded,
-                          color: AppColors.primary,
+                        child: _StatCardLink(
+                          filter: null,
+                          child: StatCard(
+                            title: 'إجمالي العروض',
+                            value: '$totalOffers',
+                            icon: Icons.fastfood_rounded,
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: StatCard(
-                          title: 'نشطة',
-                          value: '$activeOffers',
-                          icon: Icons.check_circle_rounded,
-                          color: AppColors.success,
+                        child: _StatCardLink(
+                          filter: 'available',
+                          child: StatCard(
+                            title: 'نشطة',
+                            value: '$activeOffers',
+                            icon: Icons.check_circle_rounded,
+                            color: AppColors.success,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: StatCard(
-                          title: 'مغلقة',
-                          value: '$closedOffers',
-                          icon: Icons.pause_circle_rounded,
-                          color: AppColors.textLight,
+                        child: _StatCardLink(
+                          filter: 'closed',
+                          child: StatCard(
+                            title: 'مغلقة',
+                            value: '$closedOffers',
+                            icon: Icons.pause_circle_rounded,
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatCardLink(
+                          filter: 'expired',
+                          child: StatCard(
+                            title: 'منتهية',
+                            value: '$expiredOffers',
+                            icon: Icons.event_busy_rounded,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCardLink(
+                          filter: 'sold_out',
+                          child: StatCard(
+                            title: 'نفدت الكمية',
+                            value: '$soldOutOffers',
+                            icon: Icons.production_quantity_limits_rounded,
+                            color: Colors.orange,
+                          ),
                         ),
                       ),
                     ],
@@ -385,6 +443,33 @@ class RestaurantStatsScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// يلفّ بطاقة إحصائية بمعالج نقر يفتح "عروضي" مفلترة بنفس المعيار المحتسبة
+// به البطاقة؛ filter=null يفتح كل العروض دون فلترة (بطاقة "إجمالي العروض").
+// يُستخدم Navigator.push العادي فيبقى شريط تنقّل لوحة تحكم المطعم ظاهراً،
+// بما أن هذه الشاشة نفسها مفتوحة عبر Navigator المتداخل الخاص بتبويب
+// الرئيسية ──
+class _StatCardLink extends StatelessWidget {
+  final String? filter;
+  final Widget child;
+
+  const _StatCardLink({required this.filter, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RestaurantOffersScreen(initialFilter: filter),
+        ),
+      ),
+      child: child,
     );
   }
 }

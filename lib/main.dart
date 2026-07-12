@@ -116,14 +116,29 @@ class _AppEntry extends StatelessWidget {
             final status = data['status'] ?? 'active';
             final role = data['role'] ?? 'individual';
             final isApproved = data['isApproved'] ?? false;
+            final isProviderRole = role == 'restaurant' || role == 'charity';
+            final wasEverApproved = data['wasEverApproved'] == true;
+            final verificationStatus = data['verificationStatus'] as String?;
+            // ── دخول محدود: مطعم/جمعية كان معتمَداً سابقاً ثم رُفض تحديث
+            // لاحق لبياناته (كتعديل الرخصة) — يبقى بإمكانه فتح لوحة التحكم
+            // لإكمال العمليات القائمة؛ راجع نفس المنطق في AuthService.login.
+            // يُعتمَد على verificationStatus (وليس status): شاشة مراجعة
+            // التحقق الفعلية (admin_verification_panel.dart) لا تُغيّر حقل
+            // status إطلاقاً عند الرفض ──
+            final restrictedRejectedAccess = verificationStatus == 'rejected' &&
+                isProviderRole &&
+                wasEverApproved;
 
-            // ── حساب معلّق أو مرفوض → Login مع رسالة ──
-            if (status == 'suspended' || status == 'rejected') {
+            // ── حساب معلّق، أو مرفوض دون أي اعتماد سابق → Login مع رسالة ──
+            if (status == 'suspended' ||
+                (status == 'rejected' && !restrictedRejectedAccess)) {
               return const LoginScreen();
             }
 
-            // ── بانتظار موافقة الأدمن ──
-            if ((role == 'restaurant' || role == 'charity') && !isApproved) {
+            // ── بانتظار موافقة الأدمن لأول مرة (لم يُعتمَد إطلاقاً بعد) —
+            // لا تشمل حالة restrictedRejectedAccess فهي كانت معتمَدة سابقاً
+            // ويجب أن تصل للوحة التحكم لإكمال عملياتها القائمة ──
+            if (isProviderRole && !isApproved && !restrictedRejectedAccess) {
               return const _PendingApprovalScreen();
             }
 

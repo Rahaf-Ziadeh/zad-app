@@ -10,6 +10,7 @@ import 'donate_tab.dart';
 import 'national_id_step_screen.dart';
 import 'notifications_screen.dart';
 import 'provider_public_profile_screen.dart';
+import 'search_results_screen.dart';
 import 'user_extra_screens.dart';
 import 'user_publish_offer_screen.dart';
 
@@ -120,7 +121,14 @@ class UserHomeScreen extends StatelessWidget {
             const SizedBox(height: 20),
             _HeroBanner(onDonate: () => _openCharityDonation(context)),
             const SizedBox(height: 20),
-            _SearchBarCard(onTap: () => onBrowseTab(0)),
+            _SearchBarCard(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SearchResultsScreen(),
+                ),
+              ),
+            ),
             const SizedBox(height: 22),
             _CategorySection(
               onBrowseTab: onBrowseTab,

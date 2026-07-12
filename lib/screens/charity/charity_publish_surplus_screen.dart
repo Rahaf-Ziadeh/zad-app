@@ -697,6 +697,7 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
               message:
                   'قامت الجمعية بنشر "$foodName" وإتاحته للمستفيدين. جزاك الله خيراً!',
               type: 'donation',
+              relatedId: widget.prefillDonationId,
             );
           }
         }

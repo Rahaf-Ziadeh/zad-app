@@ -112,6 +112,11 @@ class AdminService {
       'updatedAt': FieldValue.serverTimestamp(),
       if (roleCollection != null) 'verificationStatus': 'approved',
       if (roleCollection != null) 'rejectionReason': null,
+      // ── علامة دائمة لا تُعاد أبداً إلى false: تُستخدم لاحقاً للتمييز بين
+      // "طلب مرفوض للمرة الأولى" (يُحظر الدخول بالكامل) و"مطعم/جمعية كان
+      // معتمَداً سابقاً ثم رُفض تحديث لاحق كتعديل الرخصة" (يُسمح بدخول محدود
+      // لإكمال الحجوزات القائمة) — راجع AuthService.login وmain.dart ──
+      if (roleCollection != null) 'wasEverApproved': true,
     });
     if (roleCollection != null) {
       batch.set(
@@ -152,6 +157,31 @@ class AdminService {
       );
     }
     await batch.commit();
+
+    // ── إخفاء/تعليق العروض العامة النشطة لهذا المزوّد فور الرفض (Part 9
+    // item 79) — نفس المنطق المستخدم في شاشتَي مراجعة التحقق، حتى يبقى
+    // السلوك متطابقاً بصرف النظر عن أي شاشة إدارية نُفِّذ الرفض منها.
+    // غير حرج: فشله لا يُبطل قرار الرفض نفسه ──
+    if (roleCollection != null) {
+      try {
+        final activeOffers = await _firestore
+            .collection('offers')
+            .where('providerUserId', isEqualTo: userId)
+            .where('status', isEqualTo: 'available')
+            .get();
+        if (activeOffers.docs.isNotEmpty) {
+          final offersBatch = _firestore.batch();
+          for (final doc in activeOffers.docs) {
+            offersBatch.update(doc.reference, {
+              'status': 'closed',
+              'closedDueToRejection': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+          await offersBatch.commit();
+        }
+      } catch (_) {}
+    }
   }
 
   Future<void> suspendUser(String userId) async {

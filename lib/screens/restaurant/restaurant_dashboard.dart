@@ -31,6 +31,28 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
   int _offersNavNonce = 0;
   int _reservationsNavNonce = 0;
 
+  // ── مفتاح Navigator مستقل ثابت لكل تبويب سفلي؛ يُستخدم لإعادة التبويب
+  // إلى شاشته الجذرية (popUntil) عند الضغط على تبويب محدد حالياً بالفعل،
+  // دون التأثير على مكدّسات بقية التبويبات — بنفس نمط user_dashboard.dart.
+  // مستقل عمداً عن عدّادات إعادة الإنشاء أعلاه: يبقى ثابتاً عبر عمليات
+  // إعادة البناء العادية حتى يستمر popUntil في استهداف الـ Navigator الحي ──
+  final GlobalKey<NavigatorState> _homeNavigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _offersNavigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _reservationsNavigatorKey =
+      GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _addOfferNavigatorKey =
+      GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _profileNavigatorKey =
+      GlobalKey<NavigatorState>();
+
+  List<GlobalKey<NavigatorState>> get _navigatorKeys => [
+        _homeNavigatorKey,
+        _offersNavigatorKey,
+        _reservationsNavigatorKey,
+        _addOfferNavigatorKey,
+        _profileNavigatorKey,
+      ];
+
   // ── تنقّل من الشاشة الرئيسية: يبدّل التبويب مع تطبيق الفلتر المطلوب فوراً ──
   void _navigateFromHome(
     int index, {
@@ -53,6 +75,12 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
   // ── تنقّل عبر شريط التنقّل السفلي مباشرة: يعرض كل العروض/الحجوزات دون فلتر،
   // مع الحفاظ على أي تنقّل داخلي سابق ضمن التبويب نفسه ──
   void _onDestinationSelected(int index) {
+    if (index == _selectedIndex) {
+      // ── التبويب المحدد بالفعل: إعادة تصفّحه إلى شاشته الجذرية فقط، دون
+      // تبديل تبويب ودون التأثير على مكدّسات بقية التبويبات ──
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+      return;
+    }
     setState(() {
       _selectedIndex = index;
       if (index == 1) _offersFilter = null;
@@ -85,6 +113,7 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
   Widget build(BuildContext context) {
     final pages = _pages;
     final keys = _tabKeys;
+    final navigatorKeys = _navigatorKeys;
     return Scaffold(
       // ── كل تبويب يحصل على Navigator مستقل خاص به: أي Navigator.push من
       // داخل محتوى التبويب (مثل UserPublicProfileScreen) يُكدَّس فوق هذا
@@ -93,7 +122,11 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
         index: _selectedIndex,
         children: List.generate(
           pages.length,
-          (i) => _RestaurantTabView(key: keys[i], child: pages[i]),
+          (i) => _RestaurantTabView(
+            key: keys[i],
+            navigatorKey: navigatorKeys[i],
+            child: pages[i],
+          ),
         ),
       ),
       bottomNavigationBar: NavigationBar(
@@ -141,11 +174,17 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
 // ─────────────────────────────────────────────
 class _RestaurantTabView extends StatelessWidget {
   final Widget child;
-  const _RestaurantTabView({super.key, required this.child});
+  final GlobalKey<NavigatorState> navigatorKey;
+  const _RestaurantTabView({
+    super.key,
+    required this.child,
+    required this.navigatorKey,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Navigator(
+      key: navigatorKey,
       onGenerateRoute: (settings) =>
           MaterialPageRoute(builder: (_) => child),
     );

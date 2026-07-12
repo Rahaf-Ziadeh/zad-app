@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../utils/offer_utils.dart';
 import '../../widgets/offer_widgets.dart';
 import 'donate_tab.dart';
 import 'national_id_step_screen.dart';
@@ -364,9 +365,12 @@ class _OffersTab extends StatelessWidget {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
+        final notExpired = snap.data!.docs
+            .where((d) => !isOfferExpired(d.data() as Map<String, dynamic>))
+            .toList();
         final docs = filter == null
-            ? snap.data!.docs
-            : snap.data!.docs
+            ? notExpired
+            : notExpired
                 .where((d) => filter!(d.data() as Map<String, dynamic>))
                 .toList();
         if (docs.isEmpty) {
@@ -485,7 +489,9 @@ class _CharityPostsTab extends StatelessWidget {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snap.data!.docs;
+        final docs = snap.data!.docs
+            .where((d) => !isOfferExpired(d.data() as Map<String, dynamic>))
+            .toList();
         if (docs.isEmpty) {
           return const Center(
             child: Text('لا توجد منشورات لهذه الجمعية حالياً',

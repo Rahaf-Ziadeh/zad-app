@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -33,59 +32,64 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   String get _title => widget.data['title'] ?? 'عرض طعام';
 
   Future<void> _confirm() async {
+    // ── حارس إضافي ضد الضغط المتكرر السريع، فوق تعطيل الزر أثناء التحميل ──
+    if (_isLoading) return;
     setState(() => _isLoading = true);
     try {
-      // حفظ طريقة الدفع مع الحجز
-      final reservationId = await ReservationService().reserveOffer(
-        offerId: widget.docId,
-        offerData: {
-          ...widget.data,
-          'paymentMethod': _selectedMethod,
-        },
-        selectedQuantity: widget.selectedQuantity,
-      );
-
-      // تحديث طريقة الدفع في الحجز
-      await FirebaseFirestore.instance
-          .collection('reservations')
-          .doc(reservationId)
-          .update({
-        'paymentMethod': _selectedMethod,
-        'paymentStatus':
-            _selectedMethod == 'cash' ? 'pending_cash' : 'pending_online',
-      });
-
-      if (!mounted) return;
-
       if (_selectedMethod == 'online') {
-        // لو دفع أونلاين — شاشة تأكيد الدفع
+        // ── لا يُنشأ أي حجز هنا إطلاقاً: يُفتح مباشرة نموذج بيانات البطاقة،
+        // ولن يُستدعى ReservationService().reserveOffer إلا بعد نجاح الدفع
+        // (داخل _OnlinePaymentScreen). إن ضغط المستخدم رجوع أو ألغى الدفع أو
+        // فشلت العملية، لن يتبقّى أي أثر في Firestore ──
+        debugPrint(
+            '[Payment] opening card-entry screen, no reservation yet offerId=${widget.docId}');
+        if (!mounted) return;
         await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => _OnlinePaymentScreen(
-              reservationId: reservationId,
+              docId: widget.docId,
+              data: widget.data,
+              selectedQuantity: widget.selectedQuantity,
               amount: _price,
               currency: _currency,
               offerTitle: _title,
-              docId: widget.docId,
             ),
           ),
         );
-      } else {
-        // كاش — روح للـ QR مباشرة
-        final userId = FirebaseAuth.instance.currentUser!.uid;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => QrCodeScreen(
-              reservationId: reservationId,
-              offerId: widget.docId,
-              userId: userId,
-            ),
-          ),
-        );
+        // ── _OnlinePaymentScreen تتولى إنشاء الحجز والانتقال لشاشة QR بنفسها
+        // بعد نجاح الدفع؛ لا شيء إضافي مطلوب هنا بعد العودة منها ──
+        return;
       }
+
+      // ── كاش: يُنشأ الحجز فوراً كما كان تماماً (لا تغيير في توقيت أو سلوك
+      // مسار الدفع النقدي) — طريقة/حالة الدفع تُكتَبان الآن مباشرة ضمن نفس
+      // معاملة الإنشاء بدل تحديث منفصل لاحق ──
+      debugPrint(
+          '[Payment] cash flow — creating reservation immediately offerId=${widget.docId}');
+      final reservationId = await ReservationService().reserveOffer(
+        offerId: widget.docId,
+        offerData: widget.data,
+        selectedQuantity: widget.selectedQuantity,
+        paymentMethod: 'cash',
+        paymentStatus: 'pending_cash',
+      );
+      debugPrint('[Payment] cash reservation created: $reservationId');
+
+      if (!mounted) return;
+      final userId = FirebaseAuth.instance.currentUser!.uid;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => QrCodeScreen(
+            reservationId: reservationId,
+            offerId: widget.docId,
+            userId: userId,
+          ),
+        ),
+      );
     } catch (e) {
+      debugPrint('[Payment] cash reservation FAILED: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
@@ -353,18 +357,20 @@ class _PaymentOption extends StatelessWidget {
 // شاشة الدفع الإلكتروني — mock
 // ─────────────────────────────────────────────
 class _OnlinePaymentScreen extends StatefulWidget {
-  final String reservationId;
+  final String docId;
+  final Map<String, dynamic> data;
+  final int selectedQuantity;
   final double amount;
   final String currency;
   final String offerTitle;
-  final String docId;
 
   const _OnlinePaymentScreen({
-    required this.reservationId,
+    required this.docId,
+    required this.data,
+    required this.selectedQuantity,
     required this.amount,
     required this.currency,
     required this.offerTitle,
-    required this.docId,
   });
 
   @override
@@ -377,8 +383,26 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
   final _cvvController = TextEditingController();
   bool _isProcessing = false;
 
+  // ── true فقط بعد إنشاء الحجز فعلياً بنجاح؛ تُستخدم في dispose() لتمييز
+  // "المستخدم غادر قبل اكتمال الدفع" (إلغاء حقيقي، يُسجَّل) عن "غادرت الشاشة
+  // كجزء طبيعي من الانتقال لشاشة QR بعد نجاح العملية" ──
+  bool _paymentCompleted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[Payment] flow started (online) offerId=${widget.docId} '
+        'amount=${widget.amount} ${widget.currency}');
+  }
+
   @override
   void dispose() {
+    // ── يغطي كل طرق مغادرة الشاشة دون إتمام الدفع: زر الرجوع، السحب للخلف،
+    // إغلاق الشاشة برمجياً... إلخ — دون حاجة لاعتراض الإغلاق نفسه ──
+    if (!_paymentCompleted) {
+      debugPrint('[Payment] cancelled — user left the payment screen before '
+          'completion offerId=${widget.docId}');
+    }
     _cardController.dispose();
     _expiryController.dispose();
     _cvvController.dispose();
@@ -386,6 +410,13 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
   }
 
   Future<void> _processPayment() async {
+    // ── حارس ضد الإرسال المتكرر: يُضبط قبل أي await، فلا يمكن أن تبدأ
+    // معالجتان متزامنتان حتى مع الضغط السريع المتكرر على نفس الزر ──
+    if (_isProcessing) {
+      debugPrint('[Payment] tap ignored — already processing');
+      return;
+    }
+
     if (_cardController.text.length < 16 ||
         _expiryController.text.isEmpty ||
         _cvvController.text.length < 3) {
@@ -397,17 +428,55 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
 
     setState(() => _isProcessing = true);
 
-    // محاكاة معالجة الدفع
+    // ── محاكاة معالجة الدفع لدى بوابة الدفع؛ لا يُنشأ أي حجز ولا يُخصم أي
+    // مبلغ حقيقي أثناء هذا الانتظار — إن غادر المستخدم الآن فلن يتبقّى أي
+    // أثر في Firestore على الإطلاق ──
     await Future.delayed(const Duration(seconds: 2));
+    debugPrint('[Payment] succeeded (simulated) offerId=${widget.docId}');
+
+    if (!mounted) return;
+
+    // ── تحقق مسبق إضافي فور نجاح الدفع مباشرة، فوق التحقق المدمج داخل
+    // reserveOffer نفسها (الذي يبقى شبكة الأمان النهائية) ──
+    final existing =
+        await ReservationService().getActiveReservation(widget.docId);
+    if (!mounted) return;
+    if (existing != null) {
+      debugPrint('[Payment] reservation creation ABORTED — active '
+          'reservation already exists offerId=${widget.docId}');
+      setState(() => _isProcessing = false);
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('لديك حجز نشط'),
+          content: const Text(
+              'لديك حجز نشط لهذا العرض بالفعل. لم يتم إنشاء حجز جديد ولم '
+              'يُخصم أي مبلغ.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('حسناً'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     try {
-      await FirebaseFirestore.instance
-          .collection('reservations')
-          .doc(widget.reservationId)
-          .update({
-        'paymentStatus': 'paid',
-        'paidAt': FieldValue.serverTimestamp(),
-      });
+      debugPrint(
+          '[Payment] creating reservation after successful payment offerId=${widget.docId}');
+      final reservationId = await ReservationService().reserveOffer(
+        offerId: widget.docId,
+        offerData: widget.data,
+        selectedQuantity: widget.selectedQuantity,
+        paymentMethod: 'online',
+        paymentStatus: 'paid',
+      );
+      debugPrint('[Payment] reservation created after payment: $reservationId');
+      _paymentCompleted = true;
 
       if (!mounted) return;
 
@@ -416,7 +485,7 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => QrCodeScreen(
-            reservationId: widget.reservationId,
+            reservationId: reservationId,
             offerId: widget.docId,
             userId: userId,
           ),
@@ -424,9 +493,45 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
         (route) => route.isFirst,
       );
     } catch (e) {
+      // ── الدفع (المحاكى) نجح لكن تعذّر إنشاء الحجز (مثلاً نفدت الكمية بين
+      // نجاح الدفع وإنشاء الحجز) — لا حجز ولا خصم كمية يبقى في Firestore،
+      // لكن بما أن الدفع (المحاكى) قد "خُصم" فعلياً من منظور المستخدم، يُسجَّل
+      // استرداد منطقي في سجل التسوية (لا توجد بوابة دفع حقيقية هنا لاسترداد
+      // فعلي منها) حتى يبقى الحساب قابلاً للمراجعة، بدل مجرد القول أنه لم
+      // يُخصم شيء ──
+      debugPrint(
+          '[Payment] reservation creation FAILED after payment: $e');
+      try {
+        await ReservationService().recordSimulatedPaymentReversal(
+          offerId: widget.docId,
+          reason: e.toString().replaceAll('Exception: ', ''),
+          amount: widget.amount * widget.selectedQuantity,
+          currency: widget.currency,
+        );
+      } catch (_) {}
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e')),
+      final reason = e.toString().replaceAll('Exception: ', '');
+      final isSoldOut =
+          reason.contains('نفدت الكمية') || reason.contains('تتجاوز المتاح');
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('تعذّر إتمام الحجز'),
+          content: Text(
+            isSoldOut
+                ? 'نفدت الكمية قبل تثبيت الحجز، وتمت إعادة المبلغ.'
+                : 'تم الدفع لكن تعذّر إتمام الحجز ($reason). تمت إعادة '
+                    'المبلغ ولن يبقى أي مبلغ مخصوماً.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('حسناً'),
+            ),
+          ],
+        ),
       );
     } finally {
       if (mounted) setState(() => _isProcessing = false);

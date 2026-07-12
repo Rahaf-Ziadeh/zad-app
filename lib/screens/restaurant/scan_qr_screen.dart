@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:zad_app/services/notification_service.dart';
 
 import '../../theme/app_colors.dart';
+import 'pickup_confirmation_sheet.dart';
 
 class ScanQrScreen extends StatefulWidget {
   const ScanQrScreen({super.key});
@@ -24,6 +25,25 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
     super.dispose();
   }
 
+  // ── يفكّ ترميز حمولة QR فقط (لا يُغيّر أي شيء في Firestore) — يحافظ على
+  // نفس صيغتَي QR الحاليتين (JSON الجديدة وpipe القديمة) دون أي تعديل، حتى
+  // تبقى رموز QR الصادرة سابقاً صالحة تماماً كما هي ──
+  ({String reservationId, String offerId, String userId})? _decodeQr(
+      String code) {
+    try {
+      final json = jsonDecode(code) as Map<String, dynamic>;
+      return (
+        reservationId: (json['reservationId'] ?? '').toString(),
+        offerId: (json['offerId'] ?? '').toString(),
+        userId: (json['userId'] ?? '').toString(),
+      );
+    } catch (_) {
+      final parts = code.split('|');
+      if (parts.length != 3) return null;
+      return (reservationId: parts[0], offerId: parts[1], userId: parts[2]);
+    }
+  }
+
   Future<void> _handleScan(String code) async {
     if (_scanned || _isLoading) return;
     setState(() {
@@ -31,136 +51,103 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       _isLoading = true;
     });
 
-    String reservationId, offerId, userId;
-
-    // ── تحليل JSON (الصيغة الجديدة) أو pipe (الصيغة القديمة) ──
-    try {
-      final json = jsonDecode(code) as Map<String, dynamic>;
-      reservationId = json['reservationId'] ?? '';
-      offerId = json['offerId'] ?? '';
-      userId = json['userId'] ?? '';
-    } catch (_) {
-      // fallback للصيغة القديمة reservationId|offerId|userId
-      final parts = code.split('|');
-      if (parts.length != 3) {
-        _showResult(
-          title: 'رمز غير صالح',
-          message: 'رمز QR غير صحيح أو لا يتبع صيغة زاد.',
-          isSuccess: false,
-        );
-        return;
-      }
-      reservationId = parts[0];
-      offerId = parts[1];
-      userId = parts[2];
+    final decoded = _decodeQr(code);
+    if (decoded == null) {
+      _showResult(
+        title: 'رمز غير صالح',
+        message: 'رمز QR غير صحيح أو لا يتبع صيغة زاد.',
+      );
+      return;
     }
+    final reservationId = decoded.reservationId;
+    final offerId = decoded.offerId;
+    final userId = decoded.userId;
 
     if (reservationId.isEmpty || offerId.isEmpty || userId.isEmpty) {
       _showResult(
         title: 'رمز غير مكتمل',
         message: 'البيانات في رمز QR غير مكتملة.',
-        isSuccess: false,
       );
       return;
     }
 
+    // ── قراءة فقط (بدون معاملة) لعرض صحيفة المعاينة؛ التحقق الملزم
+    // النهائي والكتابة الفعلية يتمّان لاحقاً داخل
+    // ReservationService.confirmPickup وليس هنا ──
+    Map<String, dynamic>? data;
     try {
-      final reservationRef = FirebaseFirestore.instance
+      final doc = await FirebaseFirestore.instance
           .collection('reservations')
-          .doc(reservationId);
-
-      String offerTitle = 'طلب طعام';
-      String userName = 'مستخدم';
-
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final reservationDoc = await transaction.get(reservationRef);
-
-        if (!reservationDoc.exists) {
-          throw Exception('RESERVATION_NOT_FOUND');
-        }
-
-        final data = reservationDoc.data() as Map<String, dynamic>;
-        final storedOfferId = data['offerId'] ?? '';
-        final storedUserId = data['userId'] ?? '';
-        final status = data['status'] ?? '';
-
-        offerTitle = data['offerTitle'] ?? 'طلب طعام';
-        userName = data['userName'] ?? 'مستخدم';
-
-        if (storedOfferId != offerId || storedUserId != userId) {
-          throw Exception('QR_MISMATCH');
-        }
-
-        if (status == 'picked_up') {
-          throw Exception('ALREADY_PICKED_UP');
-        }
-
-        if (status != 'reserved') {
-          throw Exception('INVALID_STATUS');
-        }
-
-        transaction.update(reservationRef, {
-          'status': 'picked_up',
-          'pickedAt': FieldValue.serverTimestamp(),
-          'qrValidatedAt': FieldValue.serverTimestamp(),
-          'qrValidationMethod': 'firestore_transaction',
-        });
-      });
-      // ── إشعار للمستخدم ──
-      await NotificationService().sendNotification(
-        userId: userId,
-        title: 'تم تأكيد الاستلام ✅',
-        message: 'تم استلام طلبك "$offerTitle" بنجاح. نتمنى لك وجبة شهية ❤️',
-        type: 'pickup',
-      );
-      _controller.stop();
-
-      _showResult(
-        title: 'تم تأكيد الاستلام',
-        message: 'تم استلام "$offerTitle" للمستخدم $userName بنجاح.',
-        isSuccess: true,
-      );
+          .doc(reservationId)
+          .get();
+      data = doc.exists ? doc.data() : null;
     } catch (e) {
-      final error = e.toString();
+      _showResult(
+        title: 'حدث خطأ',
+        message: 'تعذر قراءة بيانات الحجز: $e',
+      );
+      return;
+    }
 
-      if (error.contains('RESERVATION_NOT_FOUND')) {
-        _showResult(
-          title: 'الحجز غير موجود',
-          message: 'لم يتم العثور على هذا الحجز في النظام.',
-          isSuccess: false,
-        );
-      } else if (error.contains('QR_MISMATCH')) {
-        _showResult(
-          title: 'بيانات غير متطابقة',
-          message: 'بيانات رمز QR لا تتطابق مع بيانات الحجز.',
-          isSuccess: false,
-        );
-      } else if (error.contains('ALREADY_PICKED_UP')) {
-        _showResult(
-          title: 'تم الاستلام مسبقاً',
-          message: 'هذا الطلب تم تأكيد استلامه من قبل.',
-          isSuccess: false,
-        );
-      } else if (error.contains('INVALID_STATUS')) {
-        _showResult(
-          title: 'لا يمكن تأكيد الاستلام',
-          message: 'حالة الحجز الحالية لا تسمح بتأكيد الاستلام.',
-          isSuccess: false,
-        );
-      } else {
-        _showResult(
-          title: 'حدث خطأ',
-          message: 'تعذر تأكيد الاستلام: $e',
-          isSuccess: false,
-        );
-      }
+    if (data == null) {
+      _showResult(
+        title: 'رمز QR غير صالح',
+        message: 'رمز QR غير صالح أو أن الحجز غير موجود.',
+      );
+      return;
+    }
+
+    // ── تحقق إضافي: بيانات رمز QR (offerId/userId) يجب أن تطابق الحجز
+    // المخزَّن فعلياً، فوق تحقق الملكية والحالة العام ──
+    final storedOfferId = (data['offerId'] as String?) ?? '';
+    final storedUserId = (data['userId'] as String?) ?? '';
+    if (storedOfferId != offerId || storedUserId != userId) {
+      _showResult(
+        title: 'بيانات غير متطابقة',
+        message: 'بيانات رمز QR لا تتطابق مع بيانات الحجز.',
+      );
+      return;
+    }
+
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final validationError =
+        validateReservationForPickupPreview(data, currentUid);
+    if (validationError != null) {
+      _showResult(
+        title: 'لا يمكن المتابعة',
+        message: validationError,
+      );
+      return;
+    }
+
+    // ── إيقاف حالة التحميل قبل فتح الصحيفة — الصحيفة نفسها لها مؤشرات
+    // تحميل/تأكيد خاصة بها ──
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+    final confirmed = await showPickupConfirmationSheet(
+      context,
+      reservationId: reservationId,
+      data: data,
+      confirmationMethod: 'qr',
+    );
+
+    if (!mounted) return;
+    if (confirmed) {
+      _controller.stop();
+      if (Navigator.canPop(context)) Navigator.pop(context);
+    } else {
+      // ── أُغلقت الصحيفة دون تأكيد — يُسمح بمسح رمز آخر ──
+      setState(() => _scanned = false);
     }
   }
 
+  // ── تُستخدَم فقط لعرض أخطاء ما قبل فتح صحيفة المعاينة (رمز غير صالح،
+  // حجز غير موجود، لا يتبع مطعمك...)؛ نجاح تأكيد الاستلام تعرضه صحيفة
+  // المعاينة نفسها عبر SnackBar عادي بعد الإغلاق ──
   void _showResult({
     required String title,
     required String message,
-    required bool isSuccess,
   }) {
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -177,16 +164,12 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: isSuccess
-                    ? AppColors.success.withValues(alpha: 0.12)
-                    : AppColors.danger.withValues(alpha: 0.12),
+                color: AppColors.danger.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                isSuccess
-                    ? Icons.check_circle_rounded
-                    : Icons.error_outline_rounded,
-                color: isSuccess ? AppColors.success : AppColors.danger,
+              child: const Icon(
+                Icons.error_outline_rounded,
+                color: AppColors.danger,
                 size: 36,
               ),
             ),
@@ -210,17 +193,11 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                if (isSuccess) {
-                  Navigator.pop(context);
-                } else {
-                  setState(() => _scanned = false);
-                }
+                setState(() => _scanned = false);
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    isSuccess ? AppColors.primary : AppColors.danger,
-              ),
-              child: Text(isSuccess ? 'تم' : 'إعادة المحاولة'),
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+              child: const Text('إعادة المحاولة'),
             ),
           ),
         ],

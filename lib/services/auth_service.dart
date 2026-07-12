@@ -31,26 +31,55 @@ class AuthService {
       final role = data['role'] ?? 'individual';
       final status = data['status'] ?? 'active';
       final isApproved = data['isApproved'] ?? false;
+      final isProviderRole = role == 'restaurant' || role == 'charity';
+      // ── علامة دائمة تُضبَط مرة واحدة عند أول موافقة إدارية ولا تُعاد أبداً
+      // إلى false لاحقاً؛ تُميّز "مطعم/جمعية كان معتمَداً سابقاً ثم رُفض
+      // تحديث لاحق (كتعديل الرخصة)" عن "طلب مرفوض للمرة الأولى دون أي
+      // اعتماد سابق على الإطلاق" ──
+      final wasEverApproved = data['wasEverApproved'] == true;
+      final verificationStatus = data['verificationStatus'] as String?;
 
       if (status == 'suspended') {
         throw Exception('تم تعليق هذا الحساب من قبل الإدارة');
       }
-      if (status == 'rejected') {
+
+      // ── دخول محدود: مطعم/جمعية معتمَد سابقاً رُفض تحديث لاحق لبياناته —
+      // يُسمح له بالدخول لإكمال العمليات القائمة (حجوزات، QR، إلخ) بدل
+      // الحظر الكامل المطبَّق على طلب لم يُعتمد إطلاقاً من قبل. يُعتمَد هنا
+      // حصراً على verificationStatus (وليس status): مسار الرفض الفعلي
+      // المستخدم في شاشة مراجعة التحقق (admin_verification_panel.dart) لا
+      // يُغيّر حقل status إطلاقاً (يبقى 'active')، بينما AdminService.rejectUser
+      // (مسار آخر مستخدم من شاشة إدارة المستخدمين) يضبطه إلى 'rejected' —
+      // الاعتماد على verificationStatus فقط يجعل هذا المنطق صحيحاً في كلا
+      // المسارين دون افتراض أيّهما استُخدم ──
+      final restrictedRejectedAccess = verificationStatus == 'rejected' &&
+          isProviderRole &&
+          wasEverApproved;
+
+      if (status == 'rejected' && !restrictedRejectedAccess) {
         throw Exception('تم رفض هذا الحساب من قبل الإدارة');
       }
-      if (status != 'active') throw Exception('هذا الحساب غير نشط حالياً');
+      if (status != 'active' && !restrictedRejectedAccess) {
+        throw Exception('هذا الحساب غير نشط حالياً');
+      }
 
       // ── التحقق من موافقة الإدارة على المطاعم والجمعيات ──
-      if (role == 'restaurant' || role == 'charity') {
-        final vs = data['verificationStatus'] as String?;
+      if (isProviderRole) {
+        final vs = verificationStatus;
         final roleLabel = role == 'restaurant' ? 'المطعم' : 'الجمعية';
 
         // تحديد حالة القبول الفعلية
         final bool effectivelyApproved;
         if (vs == 'approved') {
           effectivelyApproved = true;
-        } else if (vs == 'rejected' || vs == 'pending') {
-          effectivelyApproved = false;
+        } else if (vs == 'pending') {
+          // ── إعادة مراجعة بعد اعتماد سابق (كتعديل بيانات الرخصة) لا تحظر
+          // الدخول: isApproved يبقى true طوال إعادة المراجعة تحديداً لهذا
+          // الغرض (لا يُعاد ضبطه إلى false عند تحديث بيانات الرخصة). طلب
+          // جديد لم يُعتمَد بعد يبقى isApproved=false فيُحظر كالسابق تماماً ──
+          effectivelyApproved = isApproved;
+        } else if (vs == 'rejected') {
+          effectivelyApproved = restrictedRejectedAccess;
         } else {
           // حساب قديم بدون verificationStatus — الرجوع إلى isApproved
           effectivelyApproved = isApproved;
@@ -255,6 +284,8 @@ class AuthService {
           title: 'حساب جديد بانتظار الموافقة',
           message: 'يوجد حساب $role جديد يحتاج مراجعة من الإدارة.',
           type: 'account',
+          relatedId: uid,
+          relatedRole: role,
         );
       }
     } on FirebaseAuthException catch (e) {

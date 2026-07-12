@@ -2,10 +2,29 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/user.dart';
 import '../../theme/app_colors.dart';
+import 'offer_details_screen.dart';
+import 'provider_public_profile_screen.dart';
+import 'qr_code_screen.dart';
+import 'support_chat_screen.dart';
+import 'user_extra_screens.dart';
+import 'user_orders_screen.dart';
+import 'user_profile_screen.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  // ── حارس معالجة لكل إشعار على حدة: يمنع الضغطات المتكررة السريعة على نفس
+  // الإشعار من تشغيل عدة معالجات غير متزامنة وفتح نفس الصفحة أكثر من مرة.
+  // يُضبط قبل أول await في _handleTap، ويُزال دائماً (نجاحاً أو فشلاً) بعد
+  // إغلاق الصفحة المفتوحة أو انتهاء المعالجة ──
+  final Set<String> _processingIds = {};
 
   Stream<QuerySnapshot> _notificationsStream() {
     final userId = FirebaseAuth.instance.currentUser!.uid;
@@ -16,11 +35,253 @@ class NotificationsScreen extends StatelessWidget {
         .snapshots();
   }
 
-  Future<void> _markAsRead(String notificationId) async {
-    await FirebaseFirestore.instance
-        .collection('notifications')
-        .doc(notificationId)
-        .update({'isRead': true});
+  // ── لا يجوز أن يوقف فشل هذا الاستدعاء عملية التنقّل؛ لذا يُستدعى دائماً
+  // من داخل try/catch في _handleTap، ويعيد true/false بدل رمي الاستثناء
+  // للأعلى دون داعٍ ──
+  Future<bool> _markAsRead(String notificationId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('notifications')
+          .doc(notificationId)
+          .update({'isRead': true});
+      debugPrint('[Notifications] markAsRead OK id=$notificationId');
+      return true;
+    } catch (e) {
+      debugPrint('[Notifications] markAsRead FAILED id=$notificationId: $e');
+      return false;
+    }
+  }
+
+  // ── يفتح الصفحة المرتبطة بالإشعار حسب نوعه. تعليم الإشعار كمقروء يتم أولاً
+  // لكن فشله لا يمنع التنقّل مطلقاً (مغلَّف بمفرده في _markAsRead). يعتمد
+  // التوجيه حصراً على الحقول البنيوية المخزَّنة (type/relatedId/relatedRole)
+  // وليس على نص العنوان/الرسالة. أي حالة لا يمكن فتحها (نوع غير معروف، أو
+  // معرّف مرتبط مفقود، أو خطأ أثناء الجلب) تُظهر SnackBar صريحاً بدل
+  // الفشل الصامت. يُستخدم Navigator.push العادي من داخل التبويب الحالي
+  // فيبقى شريط التنقّل السفلي ظاهراً، دون أي Navigator جذري.
+  //
+  // حارس المعالجة: يُضبط هنا قبل أول await (منعاً لتشغيل عدة معالجات من
+  // ضغطات سريعة متكررة)، وتُنتظَر كل عمليات Navigator.push حتى إغلاق
+  // الصفحة المفتوحة قبل تحرير الحارس في finally ──
+  Future<void> _handleTap(
+    BuildContext context,
+    String notificationId,
+    Map<String, dynamic> data,
+  ) async {
+    if (_processingIds.contains(notificationId)) {
+      debugPrint('[Notifications] id=$notificationId tap IGNORED — '
+          'already processing');
+      return;
+    }
+    _processingIds.add(notificationId);
+    debugPrint('[Notifications] id=$notificationId guard ACQUIRED');
+
+    void showCannotOpen() {
+      debugPrint('[Notifications] id=$notificationId cannot open related '
+          'content — showing SnackBar fallback');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن فتح محتوى هذا الإشعار'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    }
+
+    try {
+      final type = (data['type'] as String? ?? '').trim();
+      final relatedId = (data['relatedId'] as String? ?? '').trim();
+      final relatedRole = (data['relatedRole'] as String? ?? '').trim();
+
+      debugPrint('[Notifications] tap id=$notificationId type="$type" '
+          'relatedId="$relatedId" relatedRole="$relatedRole"');
+
+      final markedRead = await _markAsRead(notificationId);
+      debugPrint('[Notifications] id=$notificationId markedRead=$markedRead '
+          '(failure here must NOT block navigation)');
+      if (!context.mounted) return;
+
+      switch (type) {
+        case 'reservation':
+        case 'pickup':
+          debugPrint(
+              '[Notifications] id=$notificationId branch=reservation/pickup');
+          if (relatedId.isEmpty) {
+            showCannotOpen();
+            return;
+          }
+          await _openReservation(context, relatedId);
+          break;
+        case 'offer':
+          debugPrint('[Notifications] id=$notificationId branch=offer');
+          if (relatedId.isEmpty) {
+            showCannotOpen();
+            return;
+          }
+          await _openOffer(context, relatedId);
+          break;
+        case 'donation':
+          debugPrint('[Notifications] id=$notificationId branch=donation');
+          if (!context.mounted) return;
+          // ── يُنتظَر حتى إغلاق الصفحة قبل تحرير الحارس ──
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => const UserDonationsHistoryScreen()),
+          );
+          break;
+        case 'provider':
+          debugPrint('[Notifications] id=$notificationId branch=provider');
+          if (relatedId.isEmpty || relatedRole.isEmpty) {
+            showCannotOpen();
+            return;
+          }
+          if (!context.mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProviderPublicProfileScreen(
+                providerUserId: relatedId,
+                providerRole: relatedRole,
+              ),
+            ),
+          );
+          break;
+        case 'support':
+          debugPrint('[Notifications] id=$notificationId branch=support');
+          if (relatedId.isEmpty) {
+            showCannotOpen();
+            return;
+          }
+          if (!context.mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SupportChatScreen(chatId: relatedId),
+            ),
+          );
+          break;
+        case 'account':
+          // ── قرار إداري بخصوص حساب المستخدم نفسه — يفتح ملفه الشخصي ──
+          debugPrint('[Notifications] id=$notificationId branch=account');
+          final uid = FirebaseAuth.instance.currentUser?.uid;
+          if (uid == null) {
+            showCannotOpen();
+            return;
+          }
+          final userDoc =
+              await FirebaseFirestore.instance.collection('users').doc(uid).get();
+          if (!context.mounted) return;
+          if (!userDoc.exists) {
+            showCannotOpen();
+            return;
+          }
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UserProfileScreen(
+                user: AppUser.fromMap(uid, userDoc.data()!),
+              ),
+            ),
+          );
+          break;
+        default:
+          // ── أنواع أخرى (complaint/report...) لا ترتبط بصفحة محددة
+          // حالياً؛ يُعرض توضيح بدل عدم فعل أي شيء ──
+          debugPrint('[Notifications] id=$notificationId branch=unhandled '
+              'type="$type"');
+          showCannotOpen();
+          break;
+      }
+    } catch (e, stack) {
+      debugPrint(
+          '[Notifications] id=$notificationId navigation FAILED: $e\n$stack');
+      showCannotOpen();
+    } finally {
+      // ── يُحرَّر الحارس دائماً — سواء انتهت المعالجة بنجاح، بفشل، أو بعد
+      // إغلاق الصفحة المفتوحة (لأن الأفرع أعلاه تنتظر Navigator.push) ──
+      _processingIds.remove(notificationId);
+      debugPrint('[Notifications] id=$notificationId guard RELEASED');
+    }
+  }
+
+  // ── حجز نشط (reserved) يفتح شاشة QR للاستلام؛ وإلا (مستلم/ملغى) تُفتح
+  // شاشة طلباتي على تبويب حالته مباشرةً بما أن رمز QR لم يعد مفيداً ──
+  Future<void> _openReservation(
+      BuildContext context, String reservationId) async {
+    debugPrint(
+        '[Notifications] _openReservation fetching reservations/$reservationId');
+    final doc = await FirebaseFirestore.instance
+        .collection('reservations')
+        .doc(reservationId)
+        .get();
+    if (!context.mounted) return;
+
+    if (!doc.exists) {
+      debugPrint('[Notifications] reservations/$reservationId does not exist');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لم يتم العثور على الحجز')),
+      );
+      return;
+    }
+
+    final data = doc.data()!;
+    final status = (data['status'] as String? ?? '').trim();
+    debugPrint('[Notifications] reservations/$reservationId status="$status"');
+
+    if (!context.mounted) return;
+    if (status == 'reserved') {
+      debugPrint('[Notifications] pushing QrCodeScreen for $reservationId');
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => QrCodeScreen(
+            reservationId: reservationId,
+            offerId: data['offerId'] as String? ?? '',
+            userId: data['userId'] as String? ?? '',
+            providerName: data['providerName'] as String? ?? '',
+            reservationCode: data['reservationCode'] as String? ?? '',
+          ),
+        ),
+      );
+    } else {
+      debugPrint('[Notifications] pushing UserOrdersScreen(statusFilter: '
+          '$status) for $reservationId');
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UserOrdersScreen(
+              statusFilter: status.isEmpty ? null : status),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openOffer(BuildContext context, String offerId) async {
+    debugPrint('[Notifications] _openOffer fetching offers/$offerId');
+    final doc =
+        await FirebaseFirestore.instance.collection('offers').doc(offerId).get();
+    if (!context.mounted) return;
+
+    if (!doc.exists) {
+      debugPrint('[Notifications] offers/$offerId does not exist');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لم يعد هذا العرض متاحاً')),
+      );
+      return;
+    }
+
+    debugPrint('[Notifications] pushing OfferDetailsScreen for $offerId');
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OfferDetailsScreen(
+          docId: offerId,
+          data: doc.data()!,
+        ),
+      ),
+    );
   }
 
   Future<void> _markAllAsRead(List<QueryDocumentSnapshot> docs) async {
@@ -150,9 +411,7 @@ class NotificationsScreen extends StatelessWidget {
               final color = _colorByType(type);
 
               return GestureDetector(
-                onTap: () {
-                  if (!isRead) _markAsRead(doc.id);
-                },
+                onTap: () => _handleTap(context, doc.id, data),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   margin: const EdgeInsets.only(bottom: 10),

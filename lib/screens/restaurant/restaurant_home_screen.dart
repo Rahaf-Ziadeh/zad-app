@@ -2,12 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:zad_app/models/user.dart';
-import 'package:zad_app/screens/restaurant/restaurant_offers_screen.dart';
+import 'package:zad_app/screens/restaurant/restaurant_offer_details_screen.dart';
+import 'package:zad_app/screens/restaurant/restaurant_profile_screen.dart';
 import 'package:zad_app/screens/restaurant/restaurant_reservations_screen.dart';
 import 'package:zad_app/screens/restaurant/restaurant_stats_screen.dart';
 import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 import 'package:zad_app/screens/restaurant/scan_qr_screen.dart';
 import 'package:zad_app/theme/app_colors.dart';
+import 'package:zad_app/utils/offer_utils.dart';
 
 import '../common/notifications_screen.dart';
 
@@ -42,6 +44,118 @@ class RestaurantHomeScreen extends StatelessWidget {
           .where('providerUserId', isEqualTo: _uid)
           .where('status', isEqualTo: 'reserved')
           .snapshots();
+
+  void _cannotOpen(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('لا يمكن فتح محتوى هذا الإشعار'),
+        backgroundColor: AppColors.danger,
+      ),
+    );
+  }
+
+  // ── يفتح المحتوى المرتبط بإشعار مطعم حسب نوعه (Part 13) — يتحقق دائماً
+  // من وجود السجل المرتبط فعلياً قبل التنقّل، ولا يترك أي نوع بلا معالجة
+  // (أي نوع غير معروف يعرض رسالة واضحة بدل عدم فعل شيء) ──
+  Future<bool> _openRelatedNotification(
+    BuildContext context,
+    Map<String, dynamic> data,
+  ) async {
+    final type = (data['type'] as String? ?? '').trim();
+    final relatedId = (data['relatedId'] as String? ?? '').trim();
+
+    try {
+      switch (type) {
+        case 'reservation':
+        case 'pickup':
+          if (relatedId.isEmpty) {
+            _cannotOpen(context);
+            return false;
+          }
+          final doc = await FirebaseFirestore.instance
+              .collection('reservations')
+              .doc(relatedId)
+              .get();
+          if (!context.mounted) return false;
+          if (!doc.exists) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('لم يتم العثور على هذا الحجز')),
+            );
+            return false;
+          }
+          final resStatus =
+              (doc.data()?['status'] as String?) ?? 'reserved';
+          // ── تبويب "بانتظار الاستلام" للحجوزات النشطة، وإلا التبويب
+          // المطابق لحالتها الفعلية ──
+          final tabIndex = resStatus == 'reserved' || resStatus == 'confirmed'
+              ? 1
+              : resStatus == 'picked_up'
+                  ? 2
+                  : resStatus == 'cancelled'
+                      ? 3
+                      : 0;
+          if (!context.mounted) return false;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  RestaurantReservationsScreen(initialTabIndex: tabIndex),
+            ),
+          );
+          return true;
+
+        case 'offer':
+          if (relatedId.isEmpty) {
+            _cannotOpen(context);
+            return false;
+          }
+          final doc = await FirebaseFirestore.instance
+              .collection('offers')
+              .doc(relatedId)
+              .get();
+          if (!context.mounted) return false;
+          if (!doc.exists) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('هذا العرض لم يعد متوفرًا.')),
+            );
+            return false;
+          }
+          if (!context.mounted) return false;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => RestaurantOfferDetailsScreen(
+                offerId: doc.id,
+                offerData: doc.data() as Map<String, dynamic>,
+              ),
+            ),
+          );
+          return true;
+
+        case 'account':
+          // ── قرار إداري بخصوص حساب المطعم نفسه (اعتماد/رفض/إعادة مراجعة) —
+          // شاشة "حسابي" تعرض حالة التحقق الحالية وسبب الرفض إن وُجد ──
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => RestaurantProfileScreen(user: user),
+            ),
+          );
+          return true;
+
+        default:
+          _cannotOpen(context);
+          return false;
+      }
+    } catch (e) {
+      if (!context.mounted) return false;
+      _cannotOpen(context);
+      return false;
+    }
+  }
+
+  Stream<DocumentSnapshot> _userStream() =>
+      FirebaseFirestore.instance.collection('users').doc(_uid).snapshots();
 
   @override
   Widget build(BuildContext context) {
@@ -85,28 +199,8 @@ class RestaurantHomeScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => NotificationsScreen(
-                    onNotificationTap: (context, data) {
-                      final type = data['type'];
-
-                      if (type == 'reservation' || type == 'pickup') {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const RestaurantReservationsScreen(),
-                          ),
-                        );
-                      } else if (type == 'offer') {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const RestaurantOffersScreen(),
-                          ),
-                        );
-                      }
-                    },
-                  ),
+                  builder: (_) =>
+                      NotificationsScreen(onOpenRelated: _openRelatedNotification),
                 ),
               );
             },
@@ -120,6 +214,26 @@ class RestaurantHomeScreen extends StatelessWidget {
           WelcomeCard(user: user),
           const SizedBox(height: 20),
 
+          // ── شريط حالة التحقق: يظهر فقط أثناء إعادة المراجعة أو الرفض ──
+          StreamBuilder<DocumentSnapshot>(
+            stream: _userStream(),
+            builder: (context, snap) {
+              final data = snap.data?.data() as Map<String, dynamic>?;
+              final vs = data?['verificationStatus'] as String?;
+              if (vs == null || vs == 'approved') return const SizedBox.shrink();
+              final rejectionReason =
+                  (data?['rejectionReason'] as String? ?? '').trim();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: _VerificationBanner(
+                  isRejected: vs == 'rejected',
+                  rejectionReason:
+                      rejectionReason.isNotEmpty ? rejectionReason : null,
+                ),
+              );
+            },
+          ),
+
           // ── إحصائيات ──
           StreamBuilder<QuerySnapshot>(
             stream: _myOffersStream(),
@@ -129,9 +243,16 @@ class RestaurantHomeScreen extends StatelessWidget {
                 builder: (context, resSnap) {
                   final offers =
                       offersSnap.hasData ? offersSnap.data!.docs : [];
+                  // ── "نشطة" تعني: الحالة الفعلية 'available' (بعد اعتبار
+                  // انتهاء الصلاحية) مع وجود كمية متبقية فعلياً؛ عرض منتهي أو
+                  // نافد الكمية لا يُحتسَب كنشط حتى لو بقي status='available'
+                  // في المستند نفسه ──
                   final activeOffers = offers.where((doc) {
                     final d = doc.data() as Map<String, dynamic>;
-                    return d['status'] == 'available';
+                    final remaining =
+                        (d['remainingQuantity'] as num?)?.toInt() ?? 0;
+                    return effectiveOfferStatus(d) == 'available' &&
+                        remaining > 0;
                   }).length;
                   final pendingRes =
                       resSnap.hasData ? resSnap.data!.docs.length : 0;
@@ -213,6 +334,56 @@ class RestaurantHomeScreen extends StatelessWidget {
             subtitle: 'عرض جميع الطلبات والحجوزات الحالية',
             color: AppColors.secondary,
             onTap: () => onNavigate(2),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// شريط تنبيه حالة التحقق على الرئيسية — إعادة مراجعة أو رفض
+// ─────────────────────────────────────────────
+class _VerificationBanner extends StatelessWidget {
+  final bool isRejected;
+  final String? rejectionReason;
+
+  const _VerificationBanner({
+    required this.isRejected,
+    required this.rejectionReason,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isRejected ? AppColors.danger : Colors.orange;
+    final message = isRejected
+        ? 'تم رفض طلب التحقق الخاص بحسابك'
+            '${rejectionReason != null ? ' (السبب: $rejectionReason)' : ''}. '
+            'يمكنك إكمال حجوزاتك الحالية، لكن لا يمكنك نشر عروض جديدة حتى '
+            'تعدّل بيانات الرخصة وتتم الموافقة عليها من جديد.'
+        : 'تم تحديث بيانات الرخصة وحسابك قيد إعادة المراجعة. يمكنك إكمال '
+            'الحجوزات الحالية، لكن لا يمكنك نشر عروض جديدة حتى تتم الموافقة.';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isRejected ? Icons.error_outline_rounded : Icons.hourglass_top_rounded,
+            color: color,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message,
+                style: const TextStyle(
+                    color: AppColors.textDark, fontSize: 12.5, height: 1.7)),
           ),
         ],
       ),

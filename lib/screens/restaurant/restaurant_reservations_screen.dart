@@ -1,12 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:zad_app/screens/restaurant/pickup_confirmation_sheet.dart';
+import 'package:zad_app/screens/restaurant/restaurant_offer_details_screen.dart';
 import 'package:zad_app/screens/restaurant/restaurant_widgets.dart';
 import 'package:zad_app/screens/restaurant/scan_qr_screen.dart';
 import 'package:zad_app/screens/restaurant/user_public_profile_screen.dart';
 import 'package:zad_app/theme/app_colors.dart';
 import 'package:zad_app/widgets/offer_widgets.dart';
-import '../../services/notification_service.dart';
+import '../../services/reservation_service.dart';
 
 // ─────────────────────────────────────────────
 // ثوابت الألوان للحجز والدفع
@@ -105,6 +107,45 @@ String _safeStr(dynamic raw, String fallback) {
   return s.isEmpty ? fallback : s;
 }
 
+// ── يفتح تفاصيل العرض المرتبط بحجز معيّن عبر offerId الفعلي المخزَّن على
+// الحجز نفسه (وليس أي قيمة افتراضية)؛ يُستخدم Navigator.push العادي من
+// داخل التبويب الحالي فيبقى شريط التنقّل السفلي ظاهراً، بنفس أسلوب فتح
+// UserPublicProfileScreen وScanQrScreen في هذا الملف ──
+Future<void> _openOfferFromReservation(
+    BuildContext context, String offerId) async {
+  if (offerId.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('هذا العرض لم يعد متوفرًا.')),
+    );
+    return;
+  }
+  try {
+    final doc =
+        await FirebaseFirestore.instance.collection('offers').doc(offerId).get();
+    if (!context.mounted) return;
+    if (!doc.exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('هذا العرض لم يعد متوفرًا.')),
+      );
+      return;
+    }
+    final data = doc.data() as Map<String, dynamic>;
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            RestaurantOfferDetailsScreen(offerId: offerId, offerData: data),
+      ),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('هذا العرض لم يعد متوفرًا.')),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────
 // الشاشة الرئيسية
 // ─────────────────────────────────────────────
@@ -150,48 +191,66 @@ class _RestaurantReservationsScreenState
           .where('providerUserId', isEqualTo: _uid)
           .snapshots();
 
-  Future<void> _markPickedUp(
+  // ── التأكيد اليدوي (Part 7/8): يفتح نفس صحيفة المعاينة الكاملة المستخدمة
+  // في شاشة مسح QR بالضبط — نفس التحقق المسبق (الملكية/الحالة)، نفس عرض
+  // البيانات، ونفس معاملة ReservationService.confirmPickup النهائية — فلا
+  // يوجد أي فرق في الأمان أو التحقق بين نقطتَي الدخول ──
+  Future<void> _openManualConfirmation(
     BuildContext context,
-    String reservationId,
-    String userId,
-    String offerTitle,
+    QueryDocumentSnapshot doc,
   ) async {
-    // ── 1. تحديث الحالة في Firestore (الخطوة الأساسية) ──
-    try {
-      await FirebaseFirestore.instance
-          .collection('reservations')
-          .doc(reservationId)
-          .update({
-        'status': 'picked_up',
-        'pickedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('خطأ في تحديث الحالة: $e')));
+    final data = doc.data() as Map<String, dynamic>;
+    final validationError =
+        validateReservationForPickupPreview(data, _uid);
+    if (validationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(validationError)),
+      );
       return;
     }
+    await showPickupConfirmationSheet(
+      context,
+      reservationId: doc.id,
+      data: data,
+      confirmationMethod: 'manual',
+    );
+  }
 
-    // ── 2. إشعار المستخدم (غير حرج — فشله لا يُلغي التأكيد) ──
+  // ── رفض الطلب من طرف المطعم (Part 10) — لا يوجد قيد زمني هنا على عكس
+  // إلغاء المستخدم؛ الاسترداد وإرجاع الكمية والإشعار كلها تتم داخل
+  // ReservationService.rejectReservationByProvider ذرّياً ──
+  Future<void> _rejectReservation(
+    BuildContext context,
+    QueryDocumentSnapshot doc,
+  ) async {
+    final data = doc.data() as Map<String, dynamic>;
+    final offerTitle = _safeStr(data['offerTitle'], 'طلب طعام');
+
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => _RejectReasonDialog(offerTitle: offerTitle),
+    );
+    if (reason == null) return;
+    if (!context.mounted) return;
+
     try {
-      await NotificationService().sendNotification(
-        userId: userId,
-        title: 'تم تأكيد الاستلام ✅',
-        message:
-            'تم استلام طلبك "$offerTitle" بنجاح. نتمنى لك وجبة شهية ❤️',
-        type: 'pickup',
+      await ReservationService().rejectReservationByProvider(
+        reservationId: doc.id,
+        reason: reason,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم رفض الطلب'),
+          backgroundColor: AppColors.success,
+        ),
       );
     } catch (e) {
-      debugPrint('[Reservations] notification failed (non-critical): $e');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+      );
     }
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم تأكيد الاستلام ✅'),
-        backgroundColor: AppColors.success,
-      ),
-    );
   }
 
   @override
@@ -285,38 +344,26 @@ class _RestaurantReservationsScreenState
                     _ReservationList(
                       docs: all,
                       emptyMessage: 'لا توجد حجوزات حالياً على عروضك',
-                      onConfirm: (doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        _markPickedUp(
-                          context,
-                          doc.id,
-                          data['userId'] ?? '',
-                          data['offerTitle'] ?? 'طلب طعام',
-                        );
-                      },
+                      onConfirm: (doc) => _openManualConfirmation(context, doc),
+                      onReject: (doc) => _rejectReservation(context, doc),
                     ),
                     _ReservationList(
                       docs: reserved,
                       emptyMessage: 'لا توجد حجوزات بانتظار الاستلام',
-                      onConfirm: (doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        _markPickedUp(
-                          context,
-                          doc.id,
-                          data['userId'] ?? '',
-                          data['offerTitle'] ?? 'طلب طعام',
-                        );
-                      },
+                      onConfirm: (doc) => _openManualConfirmation(context, doc),
+                      onReject: (doc) => _rejectReservation(context, doc),
                     ),
                     _ReservationList(
                       docs: pickedUp,
                       emptyMessage: 'لا توجد طلبات مكتملة بعد',
                       onConfirm: null,
+                      onReject: null,
                     ),
                     _ReservationList(
                       docs: cancelled,
                       emptyMessage: 'لا توجد طلبات ملغاة',
                       onConfirm: null,
+                      onReject: null,
                     ),
                   ],
                 ),
@@ -418,11 +465,13 @@ class _ReservationList extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
   final String emptyMessage;
   final void Function(QueryDocumentSnapshot)? onConfirm;
+  final void Function(QueryDocumentSnapshot)? onReject;
 
   const _ReservationList({
     required this.docs,
     required this.emptyMessage,
     required this.onConfirm,
+    required this.onReject,
   });
 
   @override
@@ -444,13 +493,13 @@ class _ReservationList extends StatelessWidget {
 
           final status = data['status']?.toString() ?? 'reserved';
 
+          // أظهر أزرار التأكيد/الرفض للحجوزات المنتظرة والمؤكدة فقط
+          final showActions = status == 'reserved' || status == 'confirmed';
           return _ReservationCard(
             doc: doc,
             data: data,
-            // أظهر أزرار التأكيد للحجوزات المنتظرة والمؤكدة
-            onConfirm: (status == 'reserved' || status == 'confirmed')
-                ? onConfirm
-                : null,
+            onConfirm: showActions ? onConfirm : null,
+            onReject: showActions ? onReject : null,
           );
         } catch (e, stack) {
           debugPrint('[Reservations] error building card at index $index: $e\n$stack');
@@ -468,11 +517,13 @@ class _ReservationCard extends StatelessWidget {
   final QueryDocumentSnapshot doc;
   final Map<String, dynamic> data;
   final void Function(QueryDocumentSnapshot)? onConfirm;
+  final void Function(QueryDocumentSnapshot)? onReject;
 
   const _ReservationCard({
     required this.doc,
     required this.data,
     required this.onConfirm,
+    required this.onReject,
   });
 
   // استخراج Timestamp بأمان: يتجنب الأعطال عند وجود pending write
@@ -553,12 +604,30 @@ class _ReservationCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        offerTitle,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                          fontSize: 15,
+                      InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () => _openOfferFromReservation(
+                          context,
+                          _safeStr(data['offerId'], ''),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                offerTitle,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textDark,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.chevron_left_rounded,
+                                size: 14, color: AppColors.textLight),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -686,65 +755,55 @@ class _ReservationCard extends StatelessWidget {
               ),
             ],
 
-            // ── أزرار العمل (فقط للحجوزات بانتظار الاستلام) ──
+            // ── أزرار العمل (فقط للحجوزات بانتظار الاستلام) — "تأكيد يدوياً"
+            // يفتح صحيفة المعاينة الكاملة مباشرة (هي نفسها تحوي تأكيد/إلغاء
+            // نهائيَّين، فلا حاجة لنافذة تأكيد إضافية قبلها) ──
             if (onConfirm != null) ...[
-  const SizedBox(height: 10),
-  Row(
-    children: [
-      Expanded(
-        child: ElevatedButton(
-          onPressed: () async {
-            final confirm = await showDialog<bool>(
-              context: context,
-              builder: (_) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                title: const Text('تأكيد الاستلام'),
-                content: Text(
-                  'هل تأكد من استلام "$offerTitle" من قبل $userName؟',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('إلغاء'),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => onConfirm!(doc),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      child: const Text('تأكيد يدوياً'),
+                    ),
                   ),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('تأكيد'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ScanQrScreen(),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      child: const Text('مسح QR'),
+                    ),
                   ),
                 ],
               ),
-            );
-
-            if (confirm == true && onConfirm != null) {
-              onConfirm!(doc);
-            }
-          },
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-          ),
-          child: const Text('تأكيد يدوياً'),
-        ),
-      ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: OutlinedButton(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const ScanQrScreen(),
-            ),
-          ),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-          ),
-          child: const Text('مسح QR'),
-        ),
-      ),
-    ],
-  ),
-],
+              if (onReject != null) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => onReject!(doc),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                      side: const BorderSide(color: AppColors.danger),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    child: const Text('رفض الطلب'),
+                  ),
+                ),
+              ],
+            ],
 
             // ── مؤشر اكتمال الاستلام ──
             if (status == 'picked_up') ...[
@@ -905,6 +964,79 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// نافذة إدخال سبب رفض الطلب — تُعيد النص المُدخَل (بعد trim) عند الإرسال،
+// أو null إن أُلغيت. الإرسال يتطلب سبباً غير فارغ ──
+// ─────────────────────────────────────────────
+class _RejectReasonDialog extends StatefulWidget {
+  final String offerTitle;
+  const _RejectReasonDialog({required this.offerTitle});
+
+  @override
+  State<_RejectReasonDialog> createState() => _RejectReasonDialogState();
+}
+
+class _RejectReasonDialogState extends State<_RejectReasonDialog> {
+  final _reasonController = TextEditingController();
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final reason = _reasonController.text.trim();
+    if (reason.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى كتابة سبب الرفض')),
+      );
+      return;
+    }
+    Navigator.pop(context, reason);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text('رفض طلب "${widget.offerTitle}"',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'سيتم إلغاء الحجز وإرجاع الكمية، واسترداد المبلغ تلقائياً إن كان '
+            'مدفوعاً إلكترونياً. سيصل المستخدم إشعار بالرفض.',
+            style: TextStyle(color: AppColors.textLight, fontSize: 12.5, height: 1.5),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _reasonController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              hintText: 'سبب الرفض...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('تراجع'),
+        ),
+        ElevatedButton(
+          onPressed: _submit,
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+          child: const Text('رفض الطلب'),
+        ),
+      ],
     );
   }
 }

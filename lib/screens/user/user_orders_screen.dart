@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../constants/app_constants.dart';
+import '../../services/reservation_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/offer_widgets.dart';
 import 'provider_public_profile_screen.dart';
@@ -25,6 +26,11 @@ class UserOrdersScreen extends StatefulWidget {
 class _UserOrdersScreenState extends State<UserOrdersScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+
+  // ── معرّفات الحجوزات الجاري إلغاؤها حالياً: تمنع ضغطة ثانية سريعة على
+  // نفس الحجز من بدء عملية إلغاء موازية، وتُستخدم لتعطيل زر "إلغاء" الخاص
+  // بتلك البطاقة فقط أثناء المعالجة ──
+  final Set<String> _cancellingIds = {};
 
   // ── null = "الكل"، وإلا القيمة الفعلية لحقل status في مجموعة reservations ──
   static const List<String?> _statuses = [
@@ -105,82 +111,71 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
     }
   }
 
+  // ── يستدعي ReservationService().cancelReservation — مصدر واحد لمنطق
+  // الإلغاء الذرّي (كانت هذه الشاشة تكرر معاملة Firestore بنفسها سابقاً،
+  // منفصلة عن ReservationService.cancelReservation ولا تستخدمها إطلاقاً).
+  // حارس _cancellingIds يُضبط قبل أول await فيمنع أي ضغطة إلغاء ثانية
+  // سريعة على نفس الحجز من بدء عملية موازية ──
   Future<void> _cancelReservation({
     required BuildContext context,
     required String reservationId,
     required String offerId,
   }) async {
+    if (_cancellingIds.contains(reservationId)) {
+      debugPrint('[UserOrdersScreen] cancel tap IGNORED — already '
+          'processing reservationId=$reservationId');
+      return;
+    }
+    setState(() => _cancellingIds.add(reservationId));
+    debugPrint('[UserOrdersScreen] cancel requested reservationId='
+        '$reservationId offerId=$offerId');
+
     try {
-      final reservationRef = FirebaseFirestore.instance
-          .collection('reservations')
-          .doc(reservationId);
-      final offerRef =
-          FirebaseFirestore.instance.collection('offers').doc(offerId);
-
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final reservationSnap = await transaction.get(reservationRef);
-        final offerSnap = await transaction.get(offerRef);
-
-        if (!reservationSnap.exists) throw Exception('الحجز غير موجود');
-
-        final resData = reservationSnap.data() as Map<String, dynamic>;
-        if (resData['status'] != 'reserved') {
-          throw Exception('لا يمكن إلغاء هذا الطلب');
-        }
-
-        // ── قيد الإلغاء: 10 دقائق فقط من وقت الحجز ──
-        final createdAt = resData['createdAt'] as Timestamp?;
-        if (createdAt == null ||
-            DateTime.now().difference(createdAt.toDate()).inMinutes > 10) {
-          throw Exception('لا يمكن إلغاء الحجز بعد مرور 10 دقائق.');
-        }
-
-        final cancelQty = (resData['quantity'] as num?)?.toInt() ?? 1;
-
-        if (offerSnap.exists) {
-          final offerData = offerSnap.data() as Map<String, dynamic>;
-          final qty = (offerData['remainingQuantity'] as num?)?.toInt() ?? 0;
-          transaction.update(offerRef, {
-            'remainingQuantity': qty + cancelQty,
-            'status': 'available',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        transaction.update(reservationRef, {
-          'status': 'cancelled',
-          'cancelledAt': FieldValue.serverTimestamp(),
-        });
-      });
+      await ReservationService().cancelReservation(
+        reservationId: reservationId,
+        offerId: offerId,
+      );
+      debugPrint(
+          '[UserOrdersScreen] cancel SUCCESS reservationId=$reservationId');
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم إلغاء الحجز بنجاح')),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[UserOrdersScreen] cancel FAILED reservationId='
+          '$reservationId error=$e');
+      debugPrint('[UserOrdersScreen] cancel stackTrace:\n$stackTrace');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_cancelErrorMessage(e))),
       );
+    } finally {
+      if (mounted) setState(() => _cancellingIds.remove(reservationId));
     }
   }
 
-  // يستخرج رسالة الخطأ العربية المناسبة من أي استثناء
-  // (بما فيها الاستثناءات المغلّفة من Firestore transaction على Android)
+  // ── يسمح فقط بمرور رسائل الاستثناءات العربية النظيفة التي يضمنها
+  // ReservationService.cancelReservation بالفعل (فهي تلتقط أي خطأ غير
+  // متوقع بنفسها وتستبدله برسالة عربية آمنة قبل الرمي). تُطابَق ببادئة
+  // ثابتة بدل نص كامل حتى تبقى متزامنة مع cancellationWindowMinutes دون
+  // تكرار الرقم هنا. أي نص آخر غير معروف — بما فيه أخطاء JS-interop الخام
+  // على الويب مثل "Dart exception thrown from converted Future..." — لا
+  // يُعرض أبداً كما هو، بل يُستبدل بنفس الرسالة العامة الآمنة ──
   static String _cancelErrorMessage(Object e) {
-    final raw = e.toString();
-    // ابحث عن النصوص العربية المعروفة أينما كانت في الاستثناء المغلّف
-    if (raw.contains('لا يمكن إلغاء الحجز بعد مرور 10 دقائق')) {
-      return 'لا يمكن إلغاء الحجز بعد مرور 10 دقائق.';
+    final raw = e.toString().replaceAll('Exception: ', '').trim();
+    const knownPrefixes = [
+      'الحجز غير موجود',
+      'تعذّر قراءة بيانات الحجز',
+      'تم إلغاء هذا الحجز مسبقاً',
+      'لا يمكن إلغاء هذا الطلب',
+      'انتهت مهلة إلغاء الحجز',
+      'تعذّر إلغاء الحجز، يرجى المحاولة مرة أخرى.',
+    ];
+    for (final prefix in knownPrefixes) {
+      if (raw.startsWith(prefix)) return raw;
     }
-    if (raw.contains('لا يمكن إلغاء هذا الطلب')) {
-      return 'لا يمكن إلغاء هذا الطلب.';
-    }
-    if (raw.contains('الحجز غير موجود')) {
-      return 'الحجز غير موجود.';
-    }
-    // fallback: نظّف البادئة الافتراضية
-    return raw.replaceAll('Exception: ', '').trim();
+    return 'تعذّر إلغاء الحجز، يرجى المحاولة مرة أخرى.';
   }
 
   void _confirmCancel({
@@ -444,13 +439,27 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
                           const SizedBox(width: 10),
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () => _confirmCancel(
-                                context: context,
-                                reservationId: reservationId,
-                                offerId: offerId,
-                              ),
-                              icon: const Icon(Icons.cancel_outlined, size: 18),
-                              label: const Text('إلغاء'),
+                              onPressed: _cancellingIds.contains(reservationId)
+                                  ? null
+                                  : () => _confirmCancel(
+                                        context: context,
+                                        reservationId: reservationId,
+                                        offerId: offerId,
+                                      ),
+                              icon: _cancellingIds.contains(reservationId)
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.danger),
+                                    )
+                                  : const Icon(Icons.cancel_outlined,
+                                      size: 18),
+                              label: Text(
+                                  _cancellingIds.contains(reservationId)
+                                      ? 'جارٍ الإلغاء...'
+                                      : 'إلغاء'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.danger,
                                 side: const BorderSide(color: AppColors.danger),

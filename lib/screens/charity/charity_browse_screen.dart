@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../../services/location_service.dart';
 import '../../services/reservation_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/offer_utils.dart';
+import '../../widgets/active_reservation_dialog.dart';
+import '../../widgets/fullscreen_image_viewer.dart';
 import '../../widgets/offer_widgets.dart';
 
 class CharityBrowseScreen extends StatefulWidget {
@@ -537,7 +540,11 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final sorted = _filterAndSort(snap.data!.docs);
+                final visibleDocs = snap.data!.docs
+                    .where((d) =>
+                        !isOfferExpired(d.data() as Map<String, dynamic>))
+                    .toList();
+                final sorted = _filterAndSort(visibleDocs);
 
                 if (sorted.isEmpty) {
                   return Center(
@@ -642,15 +649,19 @@ class _CharityOfferCard extends StatelessWidget {
         children: [
           Stack(
             children: [
-              imageUrl.isNotEmpty
-                  ? Image.network(imageUrl,
-                      height: 160,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => buildImagePlaceholder(
-                          icon: Icons.restaurant_rounded, height: 160))
-                  : buildImagePlaceholder(
-                      icon: Icons.restaurant_rounded, height: 160),
+              TappableOfferImage(
+                imageUrl: imageUrl,
+                title: title,
+                child: imageUrl.isNotEmpty
+                    ? Image.network(imageUrl,
+                        height: 160,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => buildImagePlaceholder(
+                            icon: Icons.restaurant_rounded, height: 160))
+                    : buildImagePlaceholder(
+                        icon: Icons.restaurant_rounded, height: 160),
+              ),
               Positioned(
                 top: 10,
                 right: 10,
@@ -962,6 +973,19 @@ class _ReserveButtonState extends State<_ReserveButton> {
   }
 
   Future<void> _onTap() async {
+    if (isOfferExpired(widget.data)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('انتهت مدة هذا العرض ولم يعد متاحًا للحجز.')),
+      );
+      return;
+    }
+
+    // ── تحقق مسبق من وجود حجز نشط لهذا العرض قبل المتابعة؛ التحقق داخل
+    // ReservationService.reserveOffer يبقى كشبكة أمان احتياطية ──
+    final hasActive = await hasActiveReservationForOffer(context, widget.docId);
+    if (hasActive || !mounted) return;
+
     final (confirmed, qty) = await _showConfirmDialog();
     if (!confirmed || !mounted) return;
 
