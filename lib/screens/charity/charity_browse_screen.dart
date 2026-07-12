@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/location_service.dart';
@@ -769,12 +770,208 @@ class _ReserveButton extends StatefulWidget {
 class _ReserveButtonState extends State<_ReserveButton> {
   bool _loading = false;
 
-  Future<void> _reserve() async {
+  // Returns (confirmed, selectedQuantity)
+  Future<(bool, int)> _showConfirmDialog() async {
+    final title = (widget.data['title'] as String? ?? 'عرض طعام');
+    final currency = (widget.data['currency'] as String? ?? 'ILS');
+    final pickupLocation =
+        (widget.data['pickupLocation'] as String? ?? 'غير محدد');
+    final rawPrice =
+        widget.data['discountPrice'] ?? widget.data['price'] ?? 0;
+    final discountPrice = (rawPrice as num).toDouble();
+    final isFree = widget.data['isFree'] == true || discountPrice == 0;
+    final maxQty =
+        (widget.data['remainingQuantity'] as num?)?.toInt() ?? 1;
+
+    final qty = [1];
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDs) {
+          Widget row(IconData icon, String label, String value) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Icon(icon, size: 16, color: AppColors.textLight),
+                    const SizedBox(width: 8),
+                    Text('$label: ',
+                        style: const TextStyle(
+                            color: AppColors.textLight, fontSize: 13)),
+                    Expanded(
+                      child: Text(value,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+              );
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            backgroundColor: AppColors.card,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.bookmark_add_outlined,
+                      color: AppColors.primary, size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'تأكيد الحجز',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+                row(Icons.restaurant_menu_rounded, 'العرض', title),
+                const SizedBox(height: 10),
+                row(
+                  Icons.attach_money_rounded,
+                  'السعر',
+                  isFree
+                      ? 'مجاني'
+                      : '${discountPrice.toStringAsFixed(0)} $currency',
+                ),
+                const SizedBox(height: 10),
+                row(Icons.location_on_outlined, 'مكان الاستلام',
+                    pickupLocation),
+                // ── اختيار الكمية (يظهر فقط لو متاح أكثر من وحدة) ──
+                if (maxQty > 1) ...[
+                  const SizedBox(height: 14),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Icon(Icons.inventory_2_outlined,
+                          size: 16, color: AppColors.textLight),
+                      const SizedBox(width: 8),
+                      const Text('الكمية:',
+                          style: TextStyle(
+                              color: AppColors.textLight, fontSize: 13)),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: qty[0] > 1
+                            ? () => setDs(() => qty[0]--)
+                            : null,
+                        icon: const Icon(
+                            Icons.remove_circle_outline_rounded,
+                            size: 24),
+                        color: AppColors.primary,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 12),
+                      Text('${qty[0]}',
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textDark)),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        onPressed: qty[0] < maxQty
+                            ? () => setDs(() => qty[0]++)
+                            : null,
+                        icon: const Icon(
+                            Icons.add_circle_outline_rounded,
+                            size: 24),
+                        color: AppColors.primary,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'الحد الأقصى: $maxQty وحدة',
+                    style: const TextStyle(
+                        color: AppColors.textLight, fontSize: 11),
+                  ),
+                ],
+                if (!isFree && qty[0] > 1) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'الإجمالي: ${(discountPrice * qty[0]).toStringAsFixed(0)} $currency',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                        fontSize: 13),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: AppColors.danger.withValues(alpha: 0.2)),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.warning_amber_rounded,
+                          color: AppColors.danger, size: 16),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'لا يمكن تكرار الحجز لنفس العرض. تأكد من رغبتك قبل المتابعة.',
+                          style: TextStyle(
+                              color: AppColors.danger,
+                              fontSize: 12,
+                              height: 1.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('إلغاء',
+                    style: TextStyle(color: AppColors.textLight)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('تأكيد الحجز'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return (confirmed ?? false, qty[0]);
+  }
+
+  Future<void> _onTap() async {
+    final (confirmed, qty) = await _showConfirmDialog();
+    if (!confirmed || !mounted) return;
+
     setState(() => _loading = true);
     try {
-      final reservationId = await ReservationService().reserveOffer(
+      await ReservationService().reserveOffer(
         offerId: widget.docId,
         offerData: widget.data,
+        selectedQuantity: qty,
+        reserverRole: 'charity',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -784,7 +981,7 @@ class _ReserveButtonState extends State<_ReserveButton> {
               const Icon(Icons.check_circle_rounded,
                   color: Colors.white, size: 18),
               const SizedBox(width: 8),
-              Text('تم الحجز! رقم الحجز: $reservationId'),
+              Text(qty > 1 ? 'تم حجز $qty وحدات بنجاح! ✅' : 'تم الحجز بنجاح! ✅'),
             ],
           ),
           backgroundColor: AppColors.success,
@@ -802,10 +999,40 @@ class _ReserveButtonState extends State<_ReserveButton> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final providerUid =
+        (widget.data['providerUserId'] as String? ?? '').trim();
+    final isOwnOffer =
+        providerUid.isNotEmpty && providerUid == currentUid;
+
+    if (isOwnOffer) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: null,
+              icon: const Icon(Icons.block_rounded),
+              label: const Text('لا يمكنك حجز عرضك'),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Center(
+            child: Text(
+              'لا يمكن للجمعية حجز عرض قامت بنشره.',
+              style: TextStyle(color: AppColors.textLight, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      );
+    }
+
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: _loading ? null : _reserve,
+        onPressed: _loading ? null : _onTap,
         icon: _loading
             ? const SizedBox(
                 width: 18,

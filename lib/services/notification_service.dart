@@ -60,7 +60,7 @@ class NotificationService {
     await _firestore
         .collection('notifications')
         .doc(notificationId)
-        .update({'isRead': true});
+        .update({'isRead': true, 'readAt': FieldValue.serverTimestamp()});
   }
 
   // ── تمييز كل إشعارات مستخدم كمقروءة ──

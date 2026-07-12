@@ -72,6 +72,12 @@ class _AvailableSurplusTab extends StatelessWidget {
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) {
+          debugPrint('[Surplus][Available] ${snap.error}');
+          return const Center(
+            child: Text('تعذر تحميل التبرعات المقبولة.'),
+          );
+        }
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -149,6 +155,12 @@ class _PublishedSurplusTab extends StatelessWidget {
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) {
+          debugPrint('[Surplus][Published] ${snap.error}');
+          return const Center(
+            child: Text('تعذر تحميل العروض المنشورة.'),
+          );
+        }
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }

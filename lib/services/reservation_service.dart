@@ -22,11 +22,19 @@ class ReservationService {
     required String offerId,
     required Map<String, dynamic> offerData,
     int selectedQuantity = 1,
+    String reserverRole = 'individual',
   }) async {
     if (selectedQuantity < 1) selectedQuantity = 1;
 
     final user = _auth.currentUser;
     if (user == null) throw Exception('يجب تسجيل الدخول أولاً');
+
+    // ── منع حجز العرض الخاص بالمستخدم نفسه ──
+    final selfProviderUid =
+        (offerData['providerUserId'] as String? ?? '').trim();
+    if (selfProviderUid.isNotEmpty && selfProviderUid == user.uid) {
+      throw Exception('لا يمكن حجز عرضك الخاص.');
+    }
 
     // ── جلب اسم المستخدم ──
     final userDoc = await _firestore.collection('users').doc(user.uid).get();
@@ -149,6 +157,7 @@ class ReservationService {
         'status': 'reserved',
         'hasRated': false,
         'createdAt': FieldValue.serverTimestamp(),
+        'reserverRole': reserverRole,
       });
     });
 
@@ -172,7 +181,9 @@ class ReservationService {
         await NotificationService().sendNotification(
           userId: providerUserId,
           title: 'حجز جديد 🎉',
-          message: 'قام $userName بحجز "${offerData['title'] ?? 'عرضك'}".',
+          message: selectedQuantity > 1
+              ? 'قام $userName بحجز $selectedQuantity وحدات من "${offerData['title'] ?? 'عرضك'}".'
+              : 'قام $userName بحجز "${offerData['title'] ?? 'عرضك'}".',
           type: 'reservation',
         );
       }

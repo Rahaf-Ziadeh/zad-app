@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../../theme/app_colors.dart';
-import '../common/notifications_screen.dart';
+import 'charity_notifications_screen.dart';
+import 'charity_donations_screen.dart';
 import 'charity_publish_surplus_screen.dart';
 
 class CharityHomeScreen extends StatelessWidget {
@@ -52,14 +53,52 @@ class CharityHomeScreen extends StatelessWidget {
           ],
         ),
         actions: [
-          IconButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const NotificationsScreen(),
-              ),
-            ),
-            icon: const Icon(Icons.notifications_none_rounded),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('notifications')
+                .where('userId', isEqualTo: currentCharityId)
+                .where('isRead', isEqualTo: false)
+                .snapshots(),
+            builder: (context, snap) {
+              final count =
+                  (snap.hasData ? snap.data!.docs.length : 0);
+              return Stack(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CharityNotificationsScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.notifications_none_rounded),
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                            minWidth: 16, minHeight: 16),
+                        child: Text(
+                          count > 9 ? '9+' : '$count',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -138,7 +177,13 @@ class CharityHomeScreen extends StatelessWidget {
                       value: '$pending',
                       icon: Icons.pending_actions_rounded,
                       color: Colors.orange,
-                      onTap: () => onNavigate(1),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const CharityDonationsScreen(initialTab: 0),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -148,7 +193,13 @@ class CharityHomeScreen extends StatelessWidget {
                       value: '$approved',
                       icon: Icons.check_circle_rounded,
                       color: AppColors.success,
-                      onTap: () => onNavigate(1),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const CharityDonationsScreen(initialTab: 1),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -158,7 +209,7 @@ class CharityHomeScreen extends StatelessWidget {
                       value: '$redistributed',
                       icon: Icons.share_rounded,
                       color: AppColors.primary,
-                      onTap: () => onNavigate(2),
+                      onTap: () => onNavigate(4),
                     ),
                   ),
                 ],

@@ -11,8 +11,34 @@ import 'charity_publish_surplus_screen.dart';
 // ─────────────────────────────────────────────
 // شاشة التبرعات — بانتظار المراجعة
 // ─────────────────────────────────────────────
-class CharityDonationsScreen extends StatelessWidget {
-  const CharityDonationsScreen({super.key});
+class CharityDonationsScreen extends StatefulWidget {
+  final int initialTab;
+
+  const CharityDonationsScreen({super.key, this.initialTab = 0});
+
+  @override
+  State<CharityDonationsScreen> createState() => _CharityDonationsScreenState();
+}
+
+class _CharityDonationsScreenState extends State<CharityDonationsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 2),
+    );
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   Future<void> _updateStatus(
     BuildContext context,
@@ -69,113 +95,112 @@ class CharityDonationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          title: const Text('التبرعات الواردة'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          bottom: const TabBar(
-            labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.textLight,
-            indicatorColor: AppColors.primary,
-            tabs: [
-              Tab(text: 'بانتظار المراجعة'),
-              Tab(text: 'مقبولة'),
-              Tab(text: 'مرفوضة'),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            // ── بانتظار المراجعة ──
-            _DonationList(
-              stream: FirebaseFirestore.instance
-                  .collection('donations')
-                  .where('status', isEqualTo: 'pending')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
-              filterByCharity: true,
-              buildActions: (context, doc, data) => Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _updateStatus(
-                          context,
-                          doc.id,
-                          'approved',
-                          data['userId'] ?? data['donorUserId'] ?? '',
-                          data['foodName'] ?? data['title'] ?? ''),
-                      icon: const Icon(Icons.check_rounded, size: 16),
-                      label: const Text('قبول'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _updateStatus(
-                          context,
-                          doc.id,
-                          'rejected',
-                          data['userId'] ?? data['donorUserId'] ?? '',
-                          data['foodName'] ?? data['title'] ?? ''),
-                      icon: const Icon(Icons.close_rounded, size: 16),
-                      label: const Text('رفض'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.danger,
-                        side: const BorderSide(color: AppColors.danger),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              emptyMessage: 'لا توجد تبرعات بانتظار المراجعة 🎉',
-            ),
-
-            // ── مقبولة — بانتظار التوزيع ──
-            _DonationList(
-              stream: FirebaseFirestore.instance
-                  .collection('donations')
-                  .where('status', isEqualTo: 'approved')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
-              filterByCharity: false,
-              buildActions: (context, doc, data) => SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PublishNewSurplusScreen(
-                          prefillDonationId: doc.id,
-                          prefillData: data,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.publish_rounded, size: 16),
-                  label: const Text('نشر التبرع للمستفيدين'),
-                ),
-              ),
-              emptyMessage: 'لا توجد تبرعات مقبولة حالياً',
-            ),
-
-            // ── مرفوضة ──
-            _DonationList(
-              stream: FirebaseFirestore.instance
-                  .collection('donations')
-                  .where('status', isEqualTo: 'rejected')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
-              filterByCharity: false,
-              buildActions: (context, doc, data) => const SizedBox.shrink(),
-              emptyMessage: 'لا توجد تبرعات مرفوضة',
-            ),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('التبرعات الواردة'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textLight,
+          indicatorColor: AppColors.primary,
+          tabs: const [
+            Tab(text: 'بانتظار المراجعة'),
+            Tab(text: 'مقبولة'),
+            Tab(text: 'مرفوضة'),
           ],
         ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // ── بانتظار المراجعة ──
+          _DonationList(
+            stream: FirebaseFirestore.instance
+                .collection('donations')
+                .where('status', isEqualTo: 'pending')
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
+            filterByCharity: true,
+            buildActions: (context, doc, data) => Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _updateStatus(
+                        context,
+                        doc.id,
+                        'approved',
+                        data['userId'] ?? data['donorUserId'] ?? '',
+                        data['foodName'] ?? data['title'] ?? ''),
+                    icon: const Icon(Icons.check_rounded, size: 16),
+                    label: const Text('قبول'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _updateStatus(
+                        context,
+                        doc.id,
+                        'rejected',
+                        data['userId'] ?? data['donorUserId'] ?? '',
+                        data['foodName'] ?? data['title'] ?? ''),
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                    label: const Text('رفض'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                      side: const BorderSide(color: AppColors.danger),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            emptyMessage: 'لا توجد تبرعات بانتظار المراجعة 🎉',
+          ),
+
+          // ── مقبولة — بانتظار التوزيع ──
+          _DonationList(
+            stream: FirebaseFirestore.instance
+                .collection('donations')
+                .where('status', isEqualTo: 'approved')
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
+            filterByCharity: false,
+            buildActions: (context, doc, data) => SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PublishNewSurplusScreen(
+                        prefillDonationId: doc.id,
+                        prefillData: data,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.publish_rounded, size: 16),
+                label: const Text('نشر التبرع للمستفيدين'),
+              ),
+            ),
+            emptyMessage: 'لا توجد تبرعات مقبولة حالياً',
+          ),
+
+          // ── مرفوضة ──
+          _DonationList(
+            stream: FirebaseFirestore.instance
+                .collection('donations')
+                .where('status', isEqualTo: 'rejected')
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
+            filterByCharity: false,
+            buildActions: (context, doc, data) => const SizedBox.shrink(),
+            emptyMessage: 'لا توجد تبرعات مرفوضة',
+          ),
+        ],
       ),
     );
   }
