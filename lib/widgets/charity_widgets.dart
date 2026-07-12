@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:zad_app/constants/app_constants.dart';
 import 'package:zad_app/models/user.dart';
+import 'package:zad_app/screens/user/provider_public_profile_screen.dart';
+import 'package:zad_app/screens/user/qr_code_screen.dart';
 import 'package:zad_app/utils/phone_formatter.dart';
 
 import '../../services/charity_browse_service.dart';
@@ -1869,4 +1871,454 @@ class PublishedOfferCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────
+// بطاقة حجز الجمعية
+// ─────────────────────────────────────────────
+class CharityReservationCard extends StatelessWidget {
+  final String reservationId;
+  final Map<String, dynamic> data;
+  final String currentUserId;
+  final VoidCallback onCancel;
+
+  const CharityReservationCard({
+    super.key,
+    required this.reservationId,
+    required this.data,
+    required this.currentUserId,
+    required this.onCancel,
+  });
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'reserved':
+        return 'محجوز';
+      case 'picked_up':
+        return 'تم الاستلام';
+      case 'cancelled':
+        return 'ملغي';
+      default:
+        return 'غير معروف';
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'reserved':
+        return Colors.orange;
+      case 'picked_up':
+        return AppColors.primary;
+      case 'cancelled':
+        return AppColors.danger;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = data['offerTitle'] ?? 'طلب طعام';
+    final status = data['status'] ?? 'reserved';
+    final offerId = data['offerId'] ?? '';
+
+    final rawReservationCode = data['reservationCode'] as String? ?? '';
+
+    final reservationCode = rawReservationCode.trim().isNotEmpty
+        ? rawReservationCode
+        : reservationId;
+
+    final providerRole = data['providerRole'] as String? ?? '';
+
+    final providerUserId = (data['providerUserId'] as String? ?? '').trim();
+
+    final providerName = (data['providerName'] as String? ?? '').trim();
+
+    final displayProvider =
+        providerName.isNotEmpty ? providerName : providerRole;
+
+    final isClickableProvider =
+        (providerRole == 'restaurant' || providerRole == 'charity') &&
+            providerUserId.isNotEmpty;
+
+    final pickupLocation = data['pickupLocation'] ?? 'غير محدد';
+
+    final reservedQuantity = (data['quantity'] as num?)?.toInt() ?? 1;
+
+    final allergens = AppConstants.parseAllergyInfo(
+      data['allergyInfo'],
+    );
+
+    final hasKnownAllergens = allergens.isNotEmpty &&
+        !(allergens.length == 1 &&
+            allergens.first == AppConstants.noKnownAllergens);
+
+    final statusColor = _statusColor(status);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: status == 'reserved'
+              ? Colors.orange.withValues(alpha: 0.4)
+              : AppColors.border,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.fastfood_rounded,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(
+                      alpha: 0.12,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _statusLabel(status),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            OfferInfoRow(
+              icon: Icons.confirmation_number_outlined,
+              label: 'رقم الحجز',
+              value: reservationCode,
+            ),
+            if (displayProvider.isNotEmpty)
+              OfferInfoRow(
+                icon: Icons.storefront_outlined,
+                label: 'المزوّد',
+                value: displayProvider,
+                onTap: isClickableProvider
+                    ? () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProviderPublicProfileScreen(
+                              providerUserId: providerUserId,
+                              providerRole: providerRole,
+                            ),
+                          ),
+                        );
+                      }
+                    : null,
+              ),
+            OfferInfoRow(
+              icon: Icons.location_on_outlined,
+              label: 'مكان الاستلام',
+              value: pickupLocation,
+            ),
+            if (reservedQuantity > 1)
+              OfferInfoRow(
+                icon: Icons.inventory_2_outlined,
+                label: 'الكمية المحجوزة',
+                value: '$reservedQuantity وحدات',
+              ),
+            if (hasKnownAllergens)
+              OfferInfoRow(
+                icon: Icons.warning_amber_rounded,
+                label: 'مسببات الحساسية',
+                value: allergens.join('، '),
+              ),
+            const SizedBox(height: 12),
+            if (status == 'reserved')
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => QrCodeScreen(
+                              reservationId: reservationId,
+                              offerId: offerId,
+                              userId: currentUserId,
+                              providerName: displayProvider,
+                              reservationCode: reservationCode,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.qr_code_rounded,
+                        size: 18,
+                      ),
+                      label: const Text('رمز QR'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onCancel,
+                      icon: const Icon(
+                        Icons.cancel_outlined,
+                        size: 18,
+                      ),
+                      label: const Text('إلغاء'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.danger,
+                        side: const BorderSide(
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else if (status == 'picked_up')
+              const PickedUpReservationBanner()
+            else if (status == 'cancelled')
+              const CancelledReservationBanner(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// بانر تم الاستلام
+// ─────────────────────────────────────────────
+class PickedUpReservationBanner extends StatelessWidget {
+  const PickedUpReservationBanner({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(
+          alpha: 0.08,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.check_circle_rounded,
+            color: AppColors.primary,
+            size: 18,
+          ),
+          SizedBox(width: 6),
+          Text(
+            'تم تأكيد الاستلام بنجاح',
+            style: TextStyle(
+              color: AppColors.primaryDark,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// بانر الحجز الملغي
+// ─────────────────────────────────────────────
+class CancelledReservationBanner extends StatelessWidget {
+  const CancelledReservationBanner({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(
+          alpha: 0.07,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.cancel_rounded,
+            color: AppColors.danger,
+            size: 18,
+          ),
+          SizedBox(width: 6),
+          Text(
+            'تم إلغاء هذا الحجز',
+            style: TextStyle(
+              color: AppColors.danger,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// حالة عدم وجود حجوزات
+// ─────────────────────────────────────────────
+class EmptyCharityReservations extends StatelessWidget {
+  final String? statusFilter;
+
+  const EmptyCharityReservations({
+    super.key,
+    this.statusFilter,
+  });
+
+  String get _message {
+    switch (statusFilter) {
+      case 'reserved':
+        return 'لا توجد حجوزات نشطة حالياً';
+      case 'picked_up':
+        return 'لا توجد حجوزات مستلمة بعد';
+      case 'cancelled':
+        return 'لا توجد حجوزات ملغية';
+      default:
+        return 'لا توجد حجوزات بعد';
+    }
+  }
+
+  String get _subtitle {
+    switch (statusFilter) {
+      case 'reserved':
+        return 'عند حجز عرض أو باقة، ستظهر الحجوزات النشطة هنا.';
+      case 'picked_up':
+        return 'بعد تأكيد الاستلام، ستظهر الحجوزات المستلمة هنا.';
+      case 'cancelled':
+        return 'أي حجز يتم إلغاؤه سيظهر هنا.';
+      default:
+        return 'عند حجز عرض أو باقة، ستظهر تفاصيل الحجز ورمز الاستلام هنا.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 72,
+              color: AppColors.primary.withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _message,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textLight,
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// نافذة تأكيد إلغاء الحجز
+// ─────────────────────────────────────────────
+Future<bool> showCancelReservationDialog({
+  required BuildContext context,
+}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('إلغاء الحجز'),
+        content: const Text(
+          'هل أنت متأكد من إلغاء هذا الحجز؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(
+                dialogContext,
+                false,
+              );
+            },
+            child: const Text('تراجع'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+            ),
+            onPressed: () {
+              Navigator.pop(
+                dialogContext,
+                true,
+              );
+            },
+            child: const Text('إلغاء الحجز'),
+          ),
+        ],
+      );
+    },
+  );
+
+  return result == true;
 }
