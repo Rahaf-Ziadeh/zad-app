@@ -155,8 +155,10 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
           complainantEmail: userEmail,
           complaintType:    _selectedType ?? 'مشكلة أخرى',
         );
-      } catch (e) {
+      } catch (e, st) {
         debugPrint('[ComplaintNotification] error=$e');
+        debugPrint('[ComplaintNotification] writeSuccess=false');
+        debugPrintStack(stackTrace: st);
       }
 
       setState(() => _submitted = true);

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 
 // ─────────────────────────────────────────────
@@ -269,17 +270,60 @@ class _ReportUserDialogState extends State<_ReportUserDialog> {
     setState(() => _loading = true);
     try {
       final reporterId = FirebaseAuth.instance.currentUser?.uid ?? '';
-      await FirebaseFirestore.instance.collection('complaints').add({
+      final complaintType = _selectedType ?? 'مشكلة أخرى';
+      debugPrint('[ProviderReport] complainantUid=$reporterId');
+      debugPrint('[ProviderReport] reportedUserId=${widget.reportedUserId}');
+
+      final docRef =
+          await FirebaseFirestore.instance.collection('complaints').add({
         'userId': reporterId,
+        'complainantId': reporterId,
         'reporterRole': 'restaurant',
         'reportedUserId': widget.reportedUserId,
         'reportedUserName': widget.reportedUserName,
-        'type': _selectedType ?? 'مشكلة أخرى',
+        'type': complaintType,
         'description': _descController.text.trim(),
         'relatedOfferId': widget.relatedOfferId,
         'status': 'open',
         'createdAt': FieldValue.serverTimestamp(),
       });
+      debugPrint('[ProviderReport] complaintId=${docRef.id}');
+
+      // Resolve reporter name for the notification (non-critical)
+      String reporterName = 'مزوّد';
+      String reporterEmail = '';
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(reporterId)
+            .get();
+        if (snap.exists) {
+          final ud = snap.data()!;
+          final n = ((ud['fullName'] as String? ?? '').trim().isNotEmpty
+              ? ud['fullName'] as String
+              : (ud['name'] as String? ?? '')).trim();
+          if (n.isNotEmpty) reporterName = n;
+          reporterEmail = (ud['email'] as String? ?? '').trim();
+        }
+      } catch (e) {
+        debugPrint('[ProviderReport] nameResolution error=$e');
+      }
+
+      try {
+        await NotificationService().notifyAdminsAboutComplaint(
+          complaintId: docRef.id,
+          complainantId: reporterId,
+          complainantName: reporterName,
+          complainantEmail: reporterEmail,
+          complaintType: complaintType,
+          reportedUserId: widget.reportedUserId,
+          reportedUserName: widget.reportedUserName,
+        );
+      } catch (e, st) {
+        debugPrint('[ProviderReport] notificationError=$e');
+        debugPrintStack(stackTrace: st);
+      }
+
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(

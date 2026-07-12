@@ -156,13 +156,17 @@ class NotificationService {
     await batch.commit();
   }
 
-  // ── إشعار أدمن بشكوى جديدة — batch بمعرّف حتمي لمنع التكرار ──
+  // ── إشعار أدمن بشكوى أو بلاغ جديد — batch بمعرّف حتمي لمنع التكرار.
+  // reportedUserId/reportedUserName: يُمرَّران فقط في حالة البلاغ عن مزوّد؛
+  // غيابهما يُفعِّل صياغة الشكوى العادية.
   Future<void> notifyAdminsAboutComplaint({
     required String complaintId,
     required String complainantId,
     required String complainantName,
     required String complainantEmail,
     required String complaintType,
+    String? reportedUserId,
+    String? reportedUserName,
   }) async {
     debugPrint('[ComplaintNotification] complaintId=$complaintId');
     debugPrint('[ComplaintNotification] complainantId=$complainantId');
@@ -173,35 +177,45 @@ class NotificationService {
         .get();
 
     debugPrint('[ComplaintNotification] adminsFound=${admins.docs.length}');
-    debugPrint(
-        '[ComplaintNotification] adminIds=${admins.docs.map((d) => d.id).toList()}');
 
     if (admins.docs.isEmpty) return;
+
+    final hasReportedTarget =
+        reportedUserName != null && reportedUserName.isNotEmpty;
 
     final batch = _firestore.batch();
     for (final admin in admins.docs) {
       final adminUid = admin.id;
       // Deterministic doc ID prevents duplicate on retry
-      final ref = _firestore
-          .collection('notifications')
-          .doc('complaint_${complaintId}_$adminUid');
+      final notificationId = 'complaint_${complaintId}_$adminUid';
+      final ref = _firestore.collection('notifications').doc(notificationId);
       batch.set(ref, {
         'userId': adminUid,
         'targetUserId': adminUid,
         'targetRole': 'admin',
-        'title': 'شكوى جديدة',
-        'message': 'تم تقديم شكوى جديدة من $complainantName',
+        'title': hasReportedTarget ? 'بلاغ جديد عن مزوّد' : 'شكوى جديدة',
+        'message': hasReportedTarget
+            ? 'قام $complainantName بالإبلاغ عن $reportedUserName.'
+            : 'قام $complainantName بتقديم شكوى جديدة.',
         'type': 'new_complaint',
         'relatedId': complaintId,
+        'complaintId': complaintId,
         'complainantId': complainantId,
         'complainantName': complainantName,
+        'complaintType': complaintType,
         if (complainantEmail.isNotEmpty) 'complainantEmail': complainantEmail,
+        if (reportedUserId != null && reportedUserId.isNotEmpty)
+          'reportedUserId': reportedUserId,
+        if (reportedUserName != null && reportedUserName.isNotEmpty)
+          'reportedUserName': reportedUserName,
         'isRead': false,
         'readAt': null,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      debugPrint('[ComplaintNotification] notificationWrittenFor=$adminUid');
+      debugPrint('[ComplaintNotification] adminUid=$adminUid');
+      debugPrint('[ComplaintNotification] notificationId=$notificationId');
     }
     await batch.commit();
+    debugPrint('[ComplaintNotification] writeSuccess=true');
   }
 }
