@@ -42,7 +42,7 @@ class _CharityDashboardState extends State<CharityDashboard> {
           const CharityDonationsScreen(),
           const CharityBrowseScreen(),
           const CharityReservationsScreen(),
-          const CharityHistoryScreen(),
+          CharityHistoryScreen(),
           CharityProfileScreen(
             user: _currentUser,
             onUserUpdated: (updatedUser) {

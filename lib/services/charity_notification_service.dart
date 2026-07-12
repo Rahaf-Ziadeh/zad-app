@@ -1,4 +1,5 @@
-import '../../services/notification_service.dart';
+import 'notification_service.dart';
+
 class CharityNotificationService {
   final NotificationService _notificationService = NotificationService();
 
@@ -36,7 +37,8 @@ class CharityNotificationService {
       case 'redistributed':
         return _DonationNotification(
           title: 'تم توزيع تبرعك ❤️',
-          message: 'تم توزيع تبرعك "$foodName" على المستفيدين. جزاك الله خيراً!',
+          message:
+              'تم توزيع تبرعك "$foodName" على المستفيدين. جزاك الله خيراً!',
         );
 
       default:

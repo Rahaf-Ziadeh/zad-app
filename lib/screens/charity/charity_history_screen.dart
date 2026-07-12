@@ -1,45 +1,38 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/charity_data_service.dart';
+import '../../services/charity_helper_service.dart';
 import '../../theme/app_colors.dart';
 
 // ─────────────────────────────────────────────
 // سجل التبرعات
 // ─────────────────────────────────────────────
 class CharityHistoryScreen extends StatelessWidget {
-  const CharityHistoryScreen({super.key});
+  CharityHistoryScreen({super.key});
+
+  final CharityDataService _dataService = CharityDataService();
+
+  final CharityHelperService _helperService = const CharityHelperService();
 
   Color _statusColor(String status) {
     switch (status) {
       case 'approved':
         return AppColors.success;
+
       case 'rejected':
         return AppColors.danger;
+
       case 'redistributed':
         return AppColors.primary;
+
       default:
         return AppColors.textLight;
     }
   }
 
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'approved':
-        return 'مقبول';
-      case 'rejected':
-        return 'مرفوض';
-      case 'redistributed':
-        return 'تم توزيعه';
-      default:
-        return status;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final currentCharityId = FirebaseAuth.instance.currentUser?.uid ?? '';
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -48,10 +41,7 @@ class CharityHistoryScreen extends StatelessWidget {
         elevation: 0,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('donations').where(
-          'status',
-          whereIn: ['approved', 'rejected', 'redistributed'],
-        ).snapshots(),
+        stream: _dataService.watchDonationHistory(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
@@ -65,35 +55,9 @@ class CharityHistoryScreen extends StatelessWidget {
             );
           }
 
-          final history = snapshot.data!.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-
-            final charityUserId = data['charityUserId']?.toString() ?? '';
-
-            final reviewedBy = data['reviewedBy']?.toString() ?? '';
-
-            final charityId = data['charityId']?.toString() ?? '';
-
-            final targetCharityId = data['targetCharityId']?.toString() ?? '';
-
-            return charityUserId == currentCharityId ||
-                reviewedBy == currentCharityId ||
-                charityId == currentCharityId ||
-                targetCharityId == currentCharityId;
-          }).toList()
-            ..sort((a, b) {
-              final aData = a.data() as Map<String, dynamic>;
-              final bData = b.data() as Map<String, dynamic>;
-
-              final aTime = aData['createdAt'];
-              final bTime = bData['createdAt'];
-
-              final aMs = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
-
-              final bMs = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
-
-              return bMs.compareTo(aMs);
-            });
+          final history = _dataService.filterDonationHistoryForCurrentCharity(
+            snapshot.data!.docs,
+          );
 
           if (history.isEmpty) {
             return Center(
@@ -103,7 +67,9 @@ class CharityHistoryScreen extends StatelessWidget {
                   Icon(
                     Icons.history_rounded,
                     size: 56,
-                    color: AppColors.primary.withValues(alpha: 0.3),
+                    color: AppColors.primary.withValues(
+                      alpha: 0.3,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   const Text(
@@ -132,12 +98,16 @@ class CharityHistoryScreen extends StatelessWidget {
               final color = _statusColor(status);
 
               return Card(
-                margin: const EdgeInsets.only(bottom: 10),
+                margin: const EdgeInsets.only(
+                  bottom: 10,
+                ),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                   side: BorderSide(
-                    color: color.withValues(alpha: 0.25),
+                    color: color.withValues(
+                      alpha: 0.25,
+                    ),
                   ),
                 ),
                 child: ListTile(
@@ -145,7 +115,9 @@ class CharityHistoryScreen extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
+                      color: color.withValues(
+                        alpha: 0.12,
+                      ),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -163,7 +135,9 @@ class CharityHistoryScreen extends StatelessWidget {
                   ),
                   subtitle: Text(
                     'الكمية: $quantity',
-                    style: const TextStyle(fontSize: 12),
+                    style: const TextStyle(
+                      fontSize: 12,
+                    ),
                   ),
                   trailing: Container(
                     padding: const EdgeInsets.symmetric(
@@ -171,11 +145,13 @@ class CharityHistoryScreen extends StatelessWidget {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
+                      color: color.withValues(
+                        alpha: 0.12,
+                      ),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      _statusLabel(status),
+                      _helperService.donationStatusLabel(status),
                       style: TextStyle(
                         color: color,
                         fontSize: 11,
