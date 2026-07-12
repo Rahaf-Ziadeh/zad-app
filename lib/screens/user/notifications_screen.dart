@@ -8,6 +8,7 @@ import 'offer_details_screen.dart';
 import 'provider_public_profile_screen.dart';
 import 'qr_code_screen.dart';
 import 'support_chat_screen.dart';
+import 'national_id_step_screen.dart';
 import 'user_extra_screens.dart';
 import 'user_orders_screen.dart';
 import 'user_profile_screen.dart';
@@ -161,6 +162,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
           );
           break;
+        case 'identity_additional_info_required':
+          debugPrint('[Notifications] id=$notificationId branch=identity_additional_info');
+          if (!context.mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const NationalIdStepScreen()),
+          );
+          break;
         case 'account':
           // ── قرار إداري بخصوص حساب المستخدم نفسه — يفتح ملفه الشخصي ──
           debugPrint('[Notifications] id=$notificationId branch=account');
@@ -305,6 +314,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.volunteer_activism_rounded;
       case 'account':
         return Icons.verified_user_rounded;
+      case 'identity_additional_info_required':
+        return Icons.info_outline_rounded;
       case 'complaint':
         return Icons.report_problem_rounded;
       default:
@@ -322,6 +333,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return const Color(0xFFE11D48);
       case 'account':
         return AppColors.secondary;
+      case 'identity_additional_info_required':
+        return Colors.amber;
       case 'complaint':
         return AppColors.danger;
       default:

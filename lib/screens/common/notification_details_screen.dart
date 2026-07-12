@@ -22,7 +22,10 @@ IconData _iconByType(String type) {
       return Icons.volunteer_activism_rounded;
     case 'account':
     case 'identity_verification_request':
+    case 'identity_verification_resubmitted':
       return Icons.verified_user_rounded;
+    case 'identity_additional_info_required':
+      return Icons.info_outline_rounded;
     case 'complaint':
     case 'new_complaint':
     case 'report':
@@ -48,7 +51,10 @@ Color _colorByType(String type) {
       return const Color(0xFFE11D48);
     case 'account':
     case 'identity_verification_request':
+    case 'identity_verification_resubmitted':
       return AppColors.secondary;
+    case 'identity_additional_info_required':
+      return Colors.amber;
     case 'complaint':
     case 'new_complaint':
     case 'report':
@@ -74,6 +80,10 @@ String _typeLabel(String type) {
       return 'الحساب';
     case 'identity_verification_request':
       return 'توثيق هوية';
+    case 'identity_additional_info_required':
+      return 'معلومات إضافية';
+    case 'identity_verification_resubmitted':
+      return 'إعادة توثيق';
     case 'complaint':
     case 'new_complaint':
       return 'شكوى';

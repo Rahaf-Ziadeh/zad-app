@@ -78,7 +78,9 @@ class AvailableSurplusTab extends StatelessWidget {
     final dataService = CharityDataService();
 
     return StreamBuilder<QuerySnapshot>(
-      stream: dataService.watchApprovedDonations(),
+      // تعرض فقط التبرعات التي أكدت الجمعية استلامها (received)
+      // وجاهزة للنشر كعروض للمستفيدين
+      stream: dataService.watchReceivedDonations(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           debugPrint(
@@ -87,7 +89,7 @@ class AvailableSurplusTab extends StatelessWidget {
 
           return const Center(
             child: Text(
-              'تعذر تحميل التبرعات المقبولة.',
+              'تعذر تحميل التبرعات.',
             ),
           );
         }
@@ -124,7 +126,7 @@ class AvailableSurplusTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'اقبلي التبرعات أولاً لتظهر هنا',
+                  'اقبلي التبرعات وأكدي استلامها أولاً لتظهر هنا',
                   style: TextStyle(
                     color: AppColors.textLight,
                     fontSize: 12,

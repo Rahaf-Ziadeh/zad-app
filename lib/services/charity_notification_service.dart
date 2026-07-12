@@ -28,6 +28,12 @@ class CharityNotificationService {
           message: 'وافقت الجمعية على تبرعك "$foodName". شكراً لك!',
         );
 
+      case 'received':
+        return _DonationNotification(
+          title: 'تم استلام التبرع',
+          message: 'أكدت الجمعية استلام تبرعك "$foodName".',
+        );
+
       case 'rejected':
         return _DonationNotification(
           title: 'تم رفض التبرع',

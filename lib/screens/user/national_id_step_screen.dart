@@ -140,6 +140,45 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
   bool _isPicking = false;
   bool _isSaving = false;
 
+  String? _existingStatus;
+  String? _additionalInfoMessage;
+  bool _loadingStatus = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingData();
+  }
+
+  Future<void> _loadExistingData() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      if (!mounted) return;
+      if (doc.exists) {
+        final data = doc.data()!;
+        final status = data['identityVerificationStatus'] as String?;
+        final message = data['additionalInfoRequestMessage'] as String?;
+        final existingId = (data['nationalId'] as String? ?? '').trim();
+        setState(() {
+          _existingStatus = status;
+          _additionalInfoMessage = message;
+          if (existingId.isNotEmpty && _idController.text.isEmpty) {
+            _idController.text = existingId;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('[NationalIdStep] loadExistingData error: $e');
+    } finally {
+      if (mounted) setState(() => _loadingStatus = false);
+    }
+  }
+
   @override
   void dispose() {
     _idController.dispose();
@@ -219,12 +258,12 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
       }
 
       final nationalId = _idController.text.trim();
+      final isResubmission = _existingStatus == 'pending_additional_info';
 
       debugPrint('[Identity] authUid=$uid');
       debugPrint('[Identity] uploadUrl=$imageUrl');
       debugPrint('[Identity] writeDocId=$uid');
-      debugPrint('[Identity] writeCollection=users + individuals');
-      debugPrint('[Identity] writeField=identityDocumentUrl,nationalIdImageUrl');
+      debugPrint('[Identity] isResubmission=$isResubmission');
 
       final batch = FirebaseFirestore.instance.batch();
       batch.update(
@@ -232,12 +271,12 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
         {
           'nationalId': nationalId,
           'nationalIdImageUrl': imageUrl,
-          // Canonical fields the admin query and read side rely on:
-          // identityVerificationStatus drives the admin pending list query;
-          // identityDocumentUrl is the field the admin card reads for the image.
           'identityDocumentUrl': imageUrl,
           'identityVerificationStatus': 'pending',
           'updatedAt': FieldValue.serverTimestamp(),
+          if (isResubmission) 'additionalInfoRequested': false,
+          if (isResubmission)
+            'additionalInfoResponseSubmittedAt': FieldValue.serverTimestamp(),
         },
       );
       batch.set(
@@ -265,10 +304,17 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
         if (n.isNotEmpty) notifName = n;
       } catch (_) {}
       try {
-        await NotificationService().notifyAdminsAboutIdentityVerification(
-          userUid: uid,
-          userName: notifName,
-        );
+        if (isResubmission) {
+          await NotificationService().notifyAdminsAboutIdentityResubmission(
+            userUid: uid,
+            userName: notifName,
+          );
+        } else {
+          await NotificationService().notifyAdminsAboutIdentityVerification(
+            userUid: uid,
+            userName: notifName,
+          );
+        }
       } catch (e) {
         debugPrint('[Identity] admin notification error: $e');
       }
@@ -305,6 +351,51 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
+            // ── بانر المعلومات الإضافية — يظهر عند طلب الأدمن مزيداً من المعلومات ──
+            if (!_loadingStatus &&
+                _existingStatus == 'pending_additional_info' &&
+                (_additionalInfoMessage ?? '').isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.amber.shade400),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        color: Colors.amber.shade700, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'يطلب المسؤول معلومات إضافية',
+                            style: TextStyle(
+                              color: Colors.amber.shade800,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _additionalInfoMessage!,
+                            style: TextStyle(
+                                color: Colors.amber.shade900,
+                                fontSize: 13,
+                                height: 1.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             // ── تعليمات ──
             Container(
               padding: const EdgeInsets.all(16),

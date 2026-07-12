@@ -33,12 +33,40 @@ class CharityDataService {
   }
 
   // ─────────────────────────────────────────────
-  // التبرعات المقبولة
+  // التبرعات المقبولة (الحالة القديمة: approved فقط)
   // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchApprovedDonations() {
     return _firestore
         .collection('donations')
         .where('status', isEqualTo: 'approved')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  // ─────────────────────────────────────────────
+  // التبرعات المقبولة — جميع مراحل دورة الحياة بعد pending/rejected
+  // (approved → received → redistributed/published)
+  // بدون orderBy لتجنّب فهرس مركّب — الترتيب يتم client-side
+  // ─────────────────────────────────────────────
+  Stream<QuerySnapshot> watchAcceptedDonations() {
+    return _firestore
+        .collection('donations')
+        .where('status', whereIn: [
+          'approved',
+          'received',
+          'redistributed',
+          'published',
+        ])
+        .snapshots();
+  }
+
+  // ─────────────────────────────────────────────
+  // التبرعات التي تم استلامها وجاهزة للنشر
+  // ─────────────────────────────────────────────
+  Stream<QuerySnapshot> watchReceivedDonations() {
+    return _firestore
+        .collection('donations')
+        .where('status', isEqualTo: 'received')
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
@@ -55,7 +83,7 @@ class CharityDataService {
   }
 
   // ─────────────────────────────────────────────
-  // تحديث حالة التبرع
+  // تحديث حالة التبرع (قبول / رفض)
   // ─────────────────────────────────────────────
   Future<void> updateDonationStatus({
     required String donationId,
@@ -86,15 +114,52 @@ class CharityDataService {
   }
 
   // ─────────────────────────────────────────────
-  // سجل التبرعات
+  // تأكيد استلام التبرع — يغيّر الحالة إلى received
+  // وينبّه المتبرع أن الجمعية استلمت التبرع
+  // ─────────────────────────────────────────────
+  Future<void> confirmDonationReceipt({
+    required String donationId,
+    required String donorUserId,
+    required String foodName,
+  }) async {
+    final uid = _auth.currentUser!.uid;
+
+    // جلب اسم الجمعية من مستند المستخدم لإدراجه في الإشعار
+    final userDoc = await _firestore.collection('users').doc(uid).get();
+    final charityName =
+        userDoc.data()?['name'] as String? ?? 'الجمعية الخيرية';
+
+    await _firestore.collection('donations').doc(donationId).update({
+      'status': 'received',
+      'donationStatus': 'received',
+      'receivedAt': FieldValue.serverTimestamp(),
+      'receivedBy': uid,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    if (donorUserId.isNotEmpty) {
+      await NotificationService().sendNotification(
+        userId: donorUserId,
+        title: 'تم استلام التبرع',
+        message: '$charityName أكدت استلام تبرعك "$foodName".',
+        type: 'donation_received',
+        relatedId: donationId,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // سجل التبرعات — يشمل جميع حالات ما بعد pending
   // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchDonationHistory() {
     return _firestore.collection('donations').where(
       'status',
       whereIn: [
         'approved',
+        'received',
         'rejected',
         'redistributed',
+        'published',
       ],
     ).snapshots();
   }
@@ -374,6 +439,7 @@ class CharityDataService {
     required DateTime expiryDate,
     required String? prefillDonationId,
     required Map<String, dynamic>? prefillData,
+    String imageUrl = '',
   }) async {
     final uid = _auth.currentUser!.uid;
 
@@ -384,6 +450,14 @@ class CharityDataService {
     // ── 1. إنشاء العرض ──
     final offerReference = _firestore.collection('offers').doc();
 
+    // صورة التبرع الأصلية — تُحفظ للمراجعة حتى لو استُبدلت
+    final originalDonationImageUrl = prefillData != null
+        ? (prefillData['imageUrl'] as String? ??
+            prefillData['donationImageUrl'] as String? ??
+            prefillData['foodImageUrl'] as String? ??
+            '')
+        : '';
+
     await offerReference.set({
       'offerId': offerReference.id,
       'providerUserId': uid,
@@ -392,7 +466,7 @@ class CharityDataService {
       'offerType': 'charity_surplus',
       'title': title,
       'description': description,
-      'imageUrl': '',
+      'imageUrl': imageUrl,
       'quantity': quantity,
       'remainingQuantity': quantity,
       'originalPrice': 0,
@@ -408,6 +482,8 @@ class CharityDataService {
       'locationSource': latitude != null ? locationSource : 'manual',
       'expiryDate': expiryDate,
       'sourceDonationId': prefillDonationId ?? '',
+      if (originalDonationImageUrl.isNotEmpty)
+        'originalDonationImageUrl': originalDonationImageUrl,
       'isCash': false,
       'isOnline': false,
       'createdAt': FieldValue.serverTimestamp(),
@@ -418,24 +494,31 @@ class CharityDataService {
     if (prefillDonationId != null) {
       await _firestore.collection('donations').doc(prefillDonationId).update({
         'status': 'redistributed',
+        'donationStatus': 'redistributed',
+        'isPublished': true,
         'publishedOfferId': offerReference.id,
+        'publishedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // ── 3. إرسال نفس إشعار الكلاس الأصلي للمتبرع ──
+      // ── 3. إشعار المتبرع بأن تبرعه أُعيد توزيعه ──
       final donationData = prefillData;
 
       if (donationData != null) {
-        final donorId = donationData['userId'] ?? '';
-        final foodName = donationData['foodName'] ?? 'تبرعك';
+        final donorId = (donationData['userId'] as String? ??
+                donationData['donorUserId'] as String? ??
+                '')
+            .trim();
+        final foodName =
+            donationData['foodName'] as String? ?? donationData['title'] as String? ?? 'تبرعك';
 
-        if (donorId.toString().isNotEmpty) {
+        if (donorId.isNotEmpty) {
           await NotificationService().sendNotification(
-            userId: donorId.toString(),
+            userId: donorId,
             title: 'تم نشر تبرعك للمستفيدين ❤️',
             message:
-                'قامت الجمعية بنشر "$foodName" وإتاحته للمستفيدين. جزاك الله خيراً!',
-            type: 'donation',
+                'قامت $charityName بنشر "$foodName" وإتاحته للمستفيدين. جزاك الله خيراً!',
+            type: 'donation_redistributed',
             relatedId: prefillDonationId,
           );
         }

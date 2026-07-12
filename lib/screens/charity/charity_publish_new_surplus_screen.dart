@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../services/charity_data_service.dart';
 import '../../services/charity_location_service.dart';
+import '../../services/cloudinary_service.dart';
 import '../../theme/app_colors.dart';
 import '../common/location_picker_screen.dart';
 
@@ -38,6 +42,12 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
   double? _longitude;
   String _locationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
 
+  // ── صورة التبرع ──
+  // صورة التبرع الأصلية (من Firestore) — تُستخدم ما لم تختر الجمعية بديلاً
+  String _existingImageUrl = '';
+  XFile? _newImageFile;
+  Uint8List? _newImageBytes;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +63,176 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
         TextEditingController(text: d != null ? '${d['quantity'] ?? ''}' : '');
     _locationController =
         TextEditingController(text: d != null ? '${d['location'] ?? ''}' : '');
+
+    // تحميل صورة التبرع الأصلية بأولوية الحقول المتاحة
+    if (d != null) {
+      _existingImageUrl = (d['imageUrl'] as String? ??
+              d['donationImageUrl'] as String? ??
+              d['foodImageUrl'] as String? ??
+              '')
+          .trim();
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    setState(() {
+      _newImageFile = picked;
+      _newImageBytes = bytes;
+    });
+  }
+
+  void _removeNewImage() => setState(() {
+        _newImageFile = null;
+        _newImageBytes = null;
+      });
+
+  Widget _buildImageSection() {
+    // إذا اختارت الجمعية صورة جديدة → عرضها مع زر إزالة
+    if (_newImageBytes != null) {
+      return Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.memory(
+              _newImageBytes!,
+              height: 160,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: GestureDetector(
+              onTap: _removeNewImage,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close_rounded,
+                    color: Colors.white, size: 18),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 8,
+            right: 8,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text('صورة جديدة',
+                  style: TextStyle(color: Colors.white, fontSize: 11)),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // إذا كان التبرع الأصلي يحتوي على صورة → عرضها مع زر الاستبدال
+    if (_existingImageUrl.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  _existingImageUrl,
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text('صورة التبرع الأصلية',
+                      style:
+                          TextStyle(color: Colors.white, fontSize: 11)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: _pickImage,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.25)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.swap_horiz_rounded,
+                      size: 18, color: AppColors.primary),
+                  SizedBox(width: 8),
+                  Text('استبدال الصورة (اختياري)',
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // لا توجد صورة أصلية → زر رفع صورة جديدة
+    return GestureDetector(
+      onTap: _pickImage,
+      child: Container(
+        height: 100,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.2),
+            width: 1.5,
+          ),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_photo_alternate_outlined,
+                size: 32, color: AppColors.primary),
+            SizedBox(height: 6),
+            Text('إضافة صورة (اختياري)',
+                style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -141,6 +321,18 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
         setState(() => _locationController.text = address);
       }
 
+      // ── حل URL الصورة النهائي ──
+      // إذا اختارت الجمعية صورة جديدة → رفعها إلى Cloudinary
+      // وإلا → إعادة استخدام الصورة الأصلية من التبرع
+      String finalImageUrl = _existingImageUrl;
+      if (_newImageBytes != null && _newImageFile != null) {
+        final uploaded = await CloudinaryService().uploadBytes(
+          bytes: _newImageBytes!,
+          filename: _newImageFile!.name,
+        );
+        if (uploaded != null) finalImageUrl = uploaded;
+      }
+
       final qty = int.tryParse(_quantityController.text.trim()) ?? 1;
 
       await _dataService.publishSurplusOffer(
@@ -154,6 +346,7 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
         expiryDate: _expiryDate!,
         prefillDonationId: widget.prefillDonationId,
         prefillData: widget.prefillData,
+        imageUrl: finalImageUrl,
       );
 
       if (!mounted) return;
@@ -263,6 +456,10 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
               ),
               const SizedBox(height: 14),
             ],
+
+            // ── قسم الصورة ──
+            _buildImageSection(),
+            const SizedBox(height: 16),
 
             // ── نوع التوزيع (ثابت للجمعيات) ──
             Container(

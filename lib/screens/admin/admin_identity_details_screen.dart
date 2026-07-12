@@ -251,6 +251,104 @@ class _AdminIdentityDetailsScreenState
     }
   }
 
+  Future<void> _requestAdditionalInfo() async {
+    final ctrl = TextEditingController();
+    final message = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('طلب معلومات إضافية'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'سيصل هذا الطلب للمستخدم مع توضيح المعلومات المطلوبة.',
+              style: TextStyle(color: AppColors.textLight, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: 'اكتب توضيحاً للمستخدم...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+            onPressed: () {
+              final r = ctrl.text.trim();
+              if (r.isEmpty) return;
+              Navigator.pop(ctx, r);
+            },
+            child: const Text('إرسال', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (message == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final adminId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(widget.docId),
+        {
+          'identityVerificationStatus': 'pending_additional_info',
+          'additionalInfoRequestMessage': message,
+          'additionalInfoRequestedAt': FieldValue.serverTimestamp(),
+          'additionalInfoRequestedBy': adminId,
+          'additionalInfoRequested': true,
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('individuals').doc(widget.docId),
+        {
+          'additionalInfoRequested': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
+      await NotificationService().sendNotification(
+        userId: widget.docId,
+        title: 'مطلوب معلومات إضافية لتوثيق هويتك',
+        message: message,
+        type: 'identity_additional_info_required',
+        relatedId: widget.docId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _usersData = {
+          ..._usersData,
+          'identityVerificationStatus': 'pending_additional_info',
+          'additionalInfoRequestMessage': message,
+          'additionalInfoRequestedBy': adminId,
+          'additionalInfoRequested': true,
+        };
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم إرسال طلب المعلومات للمستخدم'),
+          backgroundColor: Colors.amber,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('خطأ: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _reject() async {
     final ctrl = TextEditingController();
     final reason = await showDialog<String>(
@@ -409,6 +507,18 @@ class _AdminIdentityDetailsScreenState
                     value: rejectionReason,
                     valueColor: AppColors.danger,
                   ),
+                if ((_usersData['additionalInfoRequestMessage'] as String? ?? '').isNotEmpty) ...[
+                  _InfoRow(
+                    label: 'المعلومات المطلوبة',
+                    value: _usersData['additionalInfoRequestMessage'] as String,
+                    valueColor: Colors.amber.shade700,
+                  ),
+                  if (_usersData['additionalInfoRequestedAt'] != null)
+                    _InfoRow(
+                      label: 'تاريخ الطلب',
+                      value: _formatTs(_usersData['additionalInfoRequestedAt']),
+                    ),
+                ],
               ],
             ),
 
@@ -435,40 +545,57 @@ class _AdminIdentityDetailsScreenState
 
             const SizedBox(height: 24),
 
-            // ── إجراءات المراجعة — only shown while still pending ──
-            if (_status == 'pending')
-              Row(
+            // ── إجراءات المراجعة — shown while pending or awaiting additional info ──
+            if (_status == 'pending' || _status == 'pending_additional_info')
+              Column(
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _busy ? null : _reject,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.danger,
-                        side: const BorderSide(color: AppColors.danger),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _busy ? null : _reject,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            side: const BorderSide(color: AppColors.danger),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          label: const Text('رفض', style: TextStyle(fontSize: 15)),
+                        ),
                       ),
-                      icon: const Icon(Icons.close_rounded, size: 18),
-                      label:
-                          const Text('رفض', style: TextStyle(fontSize: 15)),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _busy ? null : _approve,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.success,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          icon: _busy
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : const Icon(Icons.check_rounded, size: 18),
+                          label: const Text('قبول', style: TextStyle(fontSize: 15)),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _busy ? null : _approve,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.success,
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _requestAdditionalInfo,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.amber.shade700,
+                        side: BorderSide(color: Colors.amber.shade600),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      icon: _busy
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
-                          : const Icon(Icons.check_rounded, size: 18),
-                      label:
-                          const Text('قبول', style: TextStyle(fontSize: 15)),
+                      icon: const Icon(Icons.info_outline_rounded, size: 18),
+                      label: const Text('طلب معلومات إضافية',
+                          style: TextStyle(fontSize: 15)),
                     ),
                   ),
                 ],
@@ -747,6 +874,7 @@ class _StatusBadge extends StatelessWidget {
     final (label, color, icon) = switch (status) {
       'approved' => ('تمت الموافقة', AppColors.success, Icons.check_circle_rounded),
       'rejected' => ('مرفوض', AppColors.danger, Icons.cancel_rounded),
+      'pending_additional_info' => ('بانتظار معلومات إضافية', Colors.amber.shade700, Icons.info_outline_rounded),
       _ => ('قيد المراجعة', AppColors.secondary, Icons.hourglass_top_rounded),
     };
     return Row(

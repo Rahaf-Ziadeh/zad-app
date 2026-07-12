@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:zad_app/screens/admin/admin_create_admin_screen.dart';
 import 'package:zad_app/screens/admin/admin_identity_details_screen.dart';
 import 'package:zad_app/screens/admin/admin_verification_details_screen.dart';
 import 'package:zad_app/screens/admin/admin_widgets.dart';
@@ -371,6 +372,18 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
         title: const Text('إدارة المستخدمين'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.admin_panel_settings_rounded),
+            tooltip: 'إضافة مسؤول جديد',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AdminCreateAdminScreen(),
+              ),
+            ),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,

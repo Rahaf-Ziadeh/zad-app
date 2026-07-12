@@ -156,6 +156,45 @@ class NotificationService {
     await batch.commit();
   }
 
+  // ── إشعار أدمن بإعادة إرسال وثائق التحقق بعد طلب معلومات إضافية ──
+  Future<void> notifyAdminsAboutIdentityResubmission({
+    required String userUid,
+    required String userName,
+  }) async {
+    debugPrint('[IdentityResubmit] userUid=$userUid, userName=$userName');
+
+    final admins = await _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'admin')
+        .get();
+
+    debugPrint('[IdentityResubmit] adminsFound=${admins.docs.length}');
+    if (admins.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final admin in admins.docs) {
+      final adminUid = admin.id;
+      final ref = _firestore
+          .collection('notifications')
+          .doc('identity_resubmit_${userUid}_$adminUid');
+      batch.set(ref, {
+        'userId': adminUid,
+        'targetUserId': adminUid,
+        'targetRole': 'admin',
+        'title': 'تم تحديث معلومات التحقق',
+        'message': '$userName أرسل المعلومات الإضافية المطلوبة.',
+        'type': 'identity_verification_resubmitted',
+        'relatedId': userUid,
+        'submittedUserId': userUid,
+        'isRead': false,
+        'readAt': null,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint('[IdentityResubmit] notificationWrittenFor=$adminUid');
+    }
+    await batch.commit();
+  }
+
   // ── إشعار أدمن بشكوى أو بلاغ جديد — batch بمعرّف حتمي لمنع التكرار.
   // reportedUserId/reportedUserName: يُمرَّران فقط في حالة البلاغ عن مزوّد؛
   // غيابهما يُفعِّل صياغة الشكوى العادية.

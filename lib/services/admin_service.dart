@@ -38,6 +38,7 @@ AdminAccountState resolveAdminAccountState(Map<String, dynamic> data) {
     if (vs == 'rejected') return AdminAccountState.rejected;
   } else {
     final ivs = data['identityVerificationStatus'] as String?;
+    if (ivs == 'pending_additional_info') return AdminAccountState.pending;
     if (ivs == 'pending') return AdminAccountState.pending;
     if (ivs == 'rejected') return AdminAccountState.rejected;
   }
@@ -410,6 +411,14 @@ class AdminService {
         .collection('admins')
         .orderBy('createdAt', descending: true)
         .limit(20)
+        .snapshots();
+  }
+
+  Stream<QuerySnapshot> getLoginLogs() {
+    return _firestore
+        .collection('login_logs')
+        .orderBy('timestamp', descending: true)
+        .limit(50)
         .snapshots();
   }
 

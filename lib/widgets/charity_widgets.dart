@@ -922,6 +922,399 @@ class SheetChip extends StatelessWidget {
   }
 }
 
+// ── شارة حالة فرعية لدورة حياة التبرع ──────────────────────────────────────
+Widget _donationSubStatusBadge(String status) {
+  late final String label;
+  late final Color color;
+  switch (status) {
+    case 'approved':
+      label = 'مقبولة';
+      color = AppColors.success;
+    case 'received':
+      label = 'تم الاستلام';
+      color = AppColors.primary;
+    case 'redistributed':
+      label = 'تمت إعادة التوزيع';
+      color = Colors.orange;
+    case 'published':
+      label = 'تم النشر';
+      color = Colors.teal;
+    default:
+      return const SizedBox.shrink();
+  }
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withValues(alpha: 0.35)),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+          color: color, fontSize: 11, fontWeight: FontWeight.bold),
+    ),
+  );
+}
+
+// ── بيانات التبرع الكاملة — BottomSheet ─────────────────────────────────────
+void _showDonationDetailsSheet(
+  BuildContext context,
+  String docId,
+  Map<String, dynamic> data,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      maxChildSize: 0.95,
+      minChildSize: 0.4,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // handle
+            Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                children: [
+                  // ── صورة ──
+                  _DonationDetailImage(data: data),
+                  const SizedBox(height: 16),
+
+                  // ── العنوان + الحالة ──
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          data['foodName'] as String? ??
+                              data['title'] as String? ??
+                              'تبرع طعام',
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textDark),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _donationSubStatusBadge(
+                          data['status'] as String? ?? ''),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'رقم التبرع: $docId',
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.textLight),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
+
+                  // ── تفاصيل المنتج ──
+                  _DetailRow(
+                      icon: Icons.category_outlined,
+                      label: 'الفئة',
+                      value: data['category'] as String? ?? '—'),
+                  _DetailRow(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'الكمية',
+                      value: '${data['quantity'] ?? '—'}'),
+                  if ((data['description'] as String? ?? '').isNotEmpty)
+                    _DetailRow(
+                        icon: Icons.description_outlined,
+                        label: 'الوصف',
+                        value: data['description'] as String),
+                  _DetailRow(
+                      icon: Icons.location_on_outlined,
+                      label: 'موقع الاستلام',
+                      value: data['pickupLocation'] as String? ??
+                          data['location'] as String? ??
+                          '—'),
+                  if ((data['latitude'] as num?) != null)
+                    _DetailRow(
+                        icon: Icons.gps_fixed_rounded,
+                        label: 'الإحداثيات',
+                        value:
+                            '${(data['latitude'] as num).toStringAsFixed(5)}, ${(data['longitude'] as num?)?.toStringAsFixed(5) ?? '—'}'),
+
+                  // ── أوقات الاستلام ──
+                  _PickupTimeRow(data: data),
+
+                  // ── تاريخ الانتهاء ──
+                  _ExpiryRow(data: data),
+
+                  // ── تاريخ الإنشاء ──
+                  _CreatedAtRow(data: data),
+
+                  const SizedBox(height: 14),
+                  const Divider(height: 1),
+                  const SizedBox(height: 14),
+
+                  // ── المتبرع ──
+                  _DonorRow(ctx: context, data: data),
+
+                  // ── الجمعية المرتبطة ──
+                  _CharityRow(data: data),
+
+                  // ── عرض مرتبط ──
+                  if ((data['publishedOfferId'] as String? ?? '').isNotEmpty)
+                    _DetailRow(
+                        icon: Icons.share_rounded,
+                        label: 'معرّف العرض المنشور',
+                        value: data['publishedOfferId'] as String),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+// ── صورة التبرع في الـ Sheet ─────────────────────────────────────────────────
+class _DonationDetailImage extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _DonationDetailImage({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = data['imageUrl'] as String? ??
+        data['donationImageUrl'] as String? ??
+        data['foodImageUrl'] as String? ??
+        '';
+    if (url.isEmpty) return const SizedBox.shrink();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Image.network(
+        url,
+        height: 180,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+// ── صف تفصيل عام ─────────────────────────────────────────────────────────────
+class _DetailRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _DetailRow(
+      {required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 17, color: AppColors.textLight),
+          const SizedBox(width: 10),
+          Text('$label: ',
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.textLight)),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textDark,
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── وقت الاستلام ─────────────────────────────────────────────────────────────
+class _PickupTimeRow extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _PickupTimeRow({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final pickupTime = data['pickupTime'] as String? ?? '';
+    final start = data['pickupStartTime'] as String? ?? '';
+    final end = data['pickupEndTime'] as String? ?? '';
+    final display = pickupTime.isNotEmpty
+        ? pickupTime
+        : (start.isNotEmpty && end.isNotEmpty ? '$start - $end' : '');
+    if (display.isEmpty) return const SizedBox.shrink();
+    return _DetailRow(
+        icon: Icons.access_time_rounded, label: 'وقت الاستلام', value: display);
+  }
+}
+
+// ── تاريخ الانتهاء ────────────────────────────────────────────────────────────
+class _ExpiryRow extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _ExpiryRow({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = data['expiryDate'];
+    if (raw == null) return const SizedBox.shrink();
+    String display;
+    if (raw is Timestamp) {
+      final dt = raw.toDate().toLocal();
+      display = '${dt.day}/${dt.month}/${dt.year}';
+    } else {
+      display = raw.toString();
+    }
+    return _DetailRow(
+        icon: Icons.event_outlined, label: 'تاريخ الانتهاء', value: display);
+  }
+}
+
+// ── تاريخ الإنشاء ─────────────────────────────────────────────────────────────
+class _CreatedAtRow extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _CreatedAtRow({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = data['createdAt'];
+    if (raw == null) return const SizedBox.shrink();
+    String display;
+    if (raw is Timestamp) {
+      final dt = raw.toDate().toLocal();
+      display =
+          '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } else {
+      display = raw.toString();
+    }
+    return _DetailRow(
+        icon: Icons.calendar_today_rounded,
+        label: 'تاريخ التقديم',
+        value: display);
+  }
+}
+
+// ── بيانات المتبرع مع إمكانية التنقل ─────────────────────────────────────────
+class _DonorRow extends StatelessWidget {
+  final BuildContext ctx;
+  final Map<String, dynamic> data;
+  const _DonorRow({required this.ctx, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (data['donorName'] as String? ??
+            data['userName'] as String? ??
+            data['fullName'] as String? ??
+            '')
+        .trim();
+    if (name.isEmpty) return const SizedBox.shrink();
+
+    final donorRole = (data['donorRole'] as String? ??
+            data['role'] as String? ??
+            '')
+        .trim();
+    final donorId = (data['donorUserId'] as String? ??
+            data['userId'] as String? ??
+            '')
+        .trim();
+    final canNavigate =
+        (donorRole == 'restaurant' || donorRole == 'charity') &&
+            donorId.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.person_outline_rounded,
+              size: 17, color: AppColors.textLight),
+          const SizedBox(width: 10),
+          const Text('المتبرع: ',
+              style: TextStyle(fontSize: 13, color: AppColors.textLight)),
+          Expanded(
+            child: canNavigate
+                ? GestureDetector(
+                    onTap: () => Navigator.push(
+                      ctx,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderPublicProfileScreen(
+                          providerUserId: donorId,
+                          providerRole: donorRole,
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      name,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline),
+                    ),
+                  )
+                : Text(
+                    name,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textDark,
+                        fontWeight: FontWeight.w600),
+                  ),
+          ),
+          if (donorRole.isNotEmpty)
+            Text(
+              ' ($donorRole)',
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.textLight),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── الجمعية المرتبطة ─────────────────────────────────────────────────────────
+class _CharityRow extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _CharityRow({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final charityId = (data['charityUserId'] as String? ??
+            data['charityId'] as String? ??
+            data['targetCharityId'] as String? ??
+            '')
+        .trim();
+    if (charityId.isEmpty) return const SizedBox.shrink();
+    return _DetailRow(
+        icon: Icons.volunteer_activism_rounded,
+        label: 'معرّف الجمعية',
+        value: charityId);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 class DonationList extends StatelessWidget {
   final Stream<QuerySnapshot> stream;
   final Widget Function(
@@ -953,24 +1346,27 @@ class DonationList extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final allDocs = snapshot.data!.docs;
-
-        final docs = allDocs.where((doc) {
+        // ── فلتر الجمعية + ترتيب client-side بالأحدث ──
+        var docs = snapshot.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-
           final targetCharityId = data['targetCharityId']?.toString() ?? '';
-
           final charityId = data['charityId']?.toString() ?? '';
-
           final charityUserId = data['charityUserId']?.toString() ?? '';
-
           final reviewedBy = data['reviewedBy']?.toString() ?? '';
-
           return targetCharityId == currentCharityId ||
               charityId == currentCharityId ||
               charityUserId == currentCharityId ||
               reviewedBy == currentCharityId;
         }).toList();
+
+        // ترتيب client-side (يعوّض غياب orderBy في whereIn streams)
+        docs.sort((a, b) {
+          final aTime = (a.data() as Map)['createdAt'];
+          final bTime = (b.data() as Map)['createdAt'];
+          final aMs = aTime is Timestamp ? aTime.millisecondsSinceEpoch : 0;
+          final bMs = bTime is Timestamp ? bTime.millisecondsSinceEpoch : 0;
+          return bMs.compareTo(aMs);
+        });
 
         if (docs.isEmpty) {
           return Center(
@@ -1000,7 +1396,10 @@ class DonationList extends StatelessWidget {
                 data['pickupLocation'] ?? data['location'] ?? 'غير محدد';
             final notes = data['notes'] ?? '';
             final donorName = data['donorName'] ?? data['userName'] ?? '';
-            final imageUrl = data['imageUrl'] as String? ?? '';
+            final imageUrl = data['imageUrl'] as String? ??
+                data['donationImageUrl'] as String? ??
+                data['foodImageUrl'] as String? ??
+                '';
             final pickupTime = data['pickupTime'] as String? ?? '';
             final startTime = data['pickupStartTime'] as String? ?? '';
             final endTime = data['pickupEndTime'] as String? ?? '';
@@ -1014,6 +1413,19 @@ class DonationList extends StatelessWidget {
             final hasKnownAllergens = allergens.isNotEmpty &&
                 !(allergens.length == 1 &&
                     allergens.first == AppConstants.noKnownAllergens);
+            final status = data['status'] as String? ?? '';
+
+            // donor navigation (restaurant / charity roles only)
+            final donorRole =
+                (data['donorRole'] as String? ?? data['role'] as String? ?? '')
+                    .trim();
+            final donorId = (data['donorUserId'] as String? ??
+                    data['userId'] as String? ??
+                    '')
+                .trim();
+            final canNavigateDonor =
+                (donorRole == 'restaurant' || donorRole == 'charity') &&
+                    donorId.isNotEmpty;
 
             return Card(
               margin: const EdgeInsets.only(bottom: 14),
@@ -1023,102 +1435,137 @@ class DonationList extends StatelessWidget {
                 side: const BorderSide(color: AppColors.border),
               ),
               clipBehavior: Clip.hardEdge,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── صورة التبرع ──
-                  if (imageUrl.isNotEmpty)
-                    Image.network(
-                      imageUrl,
-                      width: double.infinity,
-                      height: 160,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                    ),
+              child: InkWell(
+                onTap: () =>
+                    _showDonationDetailsSheet(context, doc.id, data),
+                borderRadius: BorderRadius.circular(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── صورة التبرع ──
+                    if (imageUrl.isNotEmpty)
+                      Image.network(
+                        imageUrl,
+                        width: double.infinity,
+                        height: 160,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
 
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── رأس البطاقة ──
-                        Row(
-                          children: [
-                            Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE11D48)
-                                    .withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(12),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── رأس البطاقة ──
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE11D48)
+                                      .withValues(alpha: 0.10),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                    Icons.volunteer_activism_rounded,
+                                    color: Color(0xFFE11D48),
+                                    size: 22),
                               ),
-                              child: const Icon(
-                                  Icons.volunteer_activism_rounded,
-                                  color: Color(0xFFE11D48),
-                                  size: 22),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    foodName,
-                                    style: const TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textDark,
-                                    ),
-                                  ),
-                                  if (donorName.isNotEmpty)
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                                     Text(
-                                      'المتبرع: $donorName',
+                                      foodName,
                                       style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textLight),
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textDark,
+                                      ),
                                     ),
-                                ],
+                                    if (donorName.toString().isNotEmpty)
+                                      GestureDetector(
+                                        onTap: canNavigateDonor
+                                            ? () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        ProviderPublicProfileScreen(
+                                                      providerUserId: donorId,
+                                                      providerRole: donorRole,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            : null,
+                                        child: Text(
+                                          'المتبرع: $donorName',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: canNavigateDonor
+                                                ? AppColors.primary
+                                                : AppColors.textLight,
+                                            decoration: canNavigateDonor
+                                                ? TextDecoration.underline
+                                                : null,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                              // شارة الحالة الفرعية (للـ accepted tab)
+                              if (status == 'approved' ||
+                                  status == 'received' ||
+                                  status == 'redistributed' ||
+                                  status == 'published')
+                                _donationSubStatusBadge(status),
+                            ],
+                          ),
 
-                        const SizedBox(height: 12),
+                          const SizedBox(height: 12),
 
-                        OfferInfoRow(
-                            icon: Icons.category_outlined,
-                            label: 'الفئة',
-                            value: category),
-                        OfferInfoRow(
-                            icon: Icons.inventory_2_outlined,
-                            label: 'الكمية',
-                            value: quantity.toString()),
-                        OfferInfoRow(
-                            icon: Icons.location_on_outlined,
-                            label: 'الموقع',
-                            value: location),
-                        if (displayPickup.isNotEmpty)
                           OfferInfoRow(
-                              icon: Icons.access_time_rounded,
-                              label: 'وقت الاستلام',
-                              value: displayPickup),
-                        if (notes.toString().isNotEmpty)
+                              icon: Icons.category_outlined,
+                              label: 'الفئة',
+                              value: category),
                           OfferInfoRow(
-                              icon: Icons.notes_outlined,
-                              label: 'ملاحظات',
-                              value: notes.toString()),
-                        if (hasKnownAllergens)
+                              icon: Icons.inventory_2_outlined,
+                              label: 'الكمية',
+                              value: quantity.toString()),
                           OfferInfoRow(
-                              icon: Icons.warning_amber_rounded,
-                              label: 'مسببات الحساسية',
-                              value: allergens.join('، ')),
+                              icon: Icons.location_on_outlined,
+                              label: 'الموقع',
+                              value: location),
+                          if (displayPickup.isNotEmpty)
+                            OfferInfoRow(
+                                icon: Icons.access_time_rounded,
+                                label: 'وقت الاستلام',
+                                value: displayPickup),
+                          if (notes.toString().isNotEmpty)
+                            OfferInfoRow(
+                                icon: Icons.notes_outlined,
+                                label: 'ملاحظات',
+                                value: notes.toString()),
+                          if (hasKnownAllergens)
+                            OfferInfoRow(
+                                icon: Icons.warning_amber_rounded,
+                                label: 'مسببات الحساسية',
+                                value: allergens.join('، ')),
 
-                        const SizedBox(height: 14),
-                        buildActions(context, doc, data),
-                      ],
+                          const SizedBox(height: 14),
+                          // تمنع الـ InkWell الخارجي من التقاط نقرات الأزرار
+                          buildActions(context, doc, data),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },

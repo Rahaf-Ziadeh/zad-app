@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/cloudinary_service.dart';
+import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 
 class IdentityVerificationScreen extends StatefulWidget {
@@ -21,6 +22,48 @@ class _IdentityVerificationScreenState
 
   PlatformFile? _pickedFile;
   bool _loading = false;
+
+  String? _existingStatus;
+  String? _additionalInfoMessage;
+  bool _loadingStatus = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingData();
+  }
+
+  Future<void> _loadExistingData() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      if (!mounted) return;
+      if (doc.exists) {
+        final data = doc.data()!;
+        final status = data['identityVerificationStatus'] as String?;
+        final message = data['additionalInfoRequestMessage'] as String?;
+        final existingId = (data['identityNumber'] as String? ??
+                data['nationalId'] as String? ??
+                '')
+            .trim();
+        setState(() {
+          _existingStatus = status;
+          _additionalInfoMessage = message;
+          if (existingId.isNotEmpty && _identityController.text.isEmpty) {
+            _identityController.text = existingId;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('[IdentityVerification] loadExistingData error: $e');
+    } finally {
+      if (mounted) setState(() => _loadingStatus = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -74,27 +117,65 @@ class _IdentityVerificationScreenState
       }
 
       final idNumber = _identityController.text.trim();
+      final isResubmission = _existingStatus == 'pending_additional_info';
 
-      // ── حقول spec في مجموعة users ──
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'identityNumber': idNumber,
-        'identityDocumentUrl': docUrl,
-        'identityVerificationStatus': 'pending',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      debugPrint('[IdentityVerification] uid=$uid');
+      debugPrint('[IdentityVerification] isResubmission=$isResubmission');
 
-      // ── توافق مع الشاشات القديمة التي تقرأ من individuals ──
-      await FirebaseFirestore.instance
-          .collection('individuals')
-          .doc(uid)
-          .set({
-        'userId': uid,
-        'identityCard': idNumber,
-        'identityImageUrl': docUrl,
-        'identityDocumentUrl': docUrl,
-        'verificationStatus': 'pending',
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {
+          'identityNumber': idNumber,
+          'identityDocumentUrl': docUrl,
+          'identityVerificationStatus': 'pending',
+          'updatedAt': FieldValue.serverTimestamp(),
+          if (isResubmission) 'additionalInfoRequested': false,
+          if (isResubmission)
+            'additionalInfoResponseSubmittedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.set(
+        FirebaseFirestore.instance.collection('individuals').doc(uid),
+        {
+          'userId': uid,
+          'identityCard': idNumber,
+          'identityImageUrl': docUrl,
+          'identityDocumentUrl': docUrl,
+          'verificationStatus': 'pending',
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
+
+      // Notify admins — non-critical; failure must not block the user
+      String notifName = 'مستخدم';
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        final ud = snap.data() ?? {};
+        final n =
+            (ud['fullName'] as String? ?? ud['name'] as String? ?? '').trim();
+        if (n.isNotEmpty) notifName = n;
+      } catch (_) {}
+      try {
+        if (isResubmission) {
+          await NotificationService().notifyAdminsAboutIdentityResubmission(
+            userUid: uid,
+            userName: notifName,
+          );
+        } else {
+          await NotificationService().notifyAdminsAboutIdentityVerification(
+            userUid: uid,
+            userName: notifName,
+          );
+        }
+      } catch (e) {
+        debugPrint('[IdentityVerification] admin notification error: $e');
+      }
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -127,6 +208,51 @@ class _IdentityVerificationScreenState
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
+            // ── بانر المعلومات الإضافية ──
+            if (!_loadingStatus &&
+                _existingStatus == 'pending_additional_info' &&
+                (_additionalInfoMessage ?? '').isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.amber.shade400),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        color: Colors.amber.shade700, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'يطلب المسؤول معلومات إضافية',
+                            style: TextStyle(
+                              color: Colors.amber.shade800,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _additionalInfoMessage!,
+                            style: TextStyle(
+                                color: Colors.amber.shade900,
+                                fontSize: 13,
+                                height: 1.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             // ── تعليمات ──
             Container(
               padding: const EdgeInsets.all(16),

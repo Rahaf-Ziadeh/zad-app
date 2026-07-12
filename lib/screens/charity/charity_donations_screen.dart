@@ -67,7 +67,7 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
                 ? 'تم قبول التبرع ✅'
                 : newStatus == 'rejected'
                     ? 'تم رفض التبرع'
-                    : 'تم تأكيد التوزيع ❤️',
+                    : 'تم تحديث حالة التبرع',
           ),
           backgroundColor:
               newStatus == 'rejected' ? AppColors.danger : AppColors.success,
@@ -75,12 +75,34 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
       );
     } catch (e) {
       if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('خطأ: $e')));
+    }
+  }
 
+  Future<void> _confirmReceipt(
+    BuildContext context,
+    String donationId,
+    String donorUserId,
+    String foodName,
+  ) async {
+    try {
+      await _dataService.confirmDonationReceipt(
+        donationId: donationId,
+        donorUserId: donorUserId,
+        foodName: foodName,
+      );
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('خطأ: $e'),
+        const SnackBar(
+          content: Text('تم تأكيد استلام التبرع ✅'),
+          backgroundColor: AppColors.success,
         ),
       );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
   }
 
@@ -157,33 +179,86 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
             emptyMessage: 'لا توجد تبرعات بانتظار المراجعة 🎉',
           ),
 
-          // ── مقبولة — بانتظار التوزيع ──
+          // ── مقبولة — جميع مراحل دورة الحياة بعد القبول ──
           DonationList(
-            stream: _dataService.watchApprovedDonations(),
+            stream: _dataService.watchAcceptedDonations(),
             filterByCharity: false,
-            buildActions: (context, doc, data) => SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PublishNewSurplusScreen(
-                        prefillDonationId: doc.id,
-                        prefillData: data,
+            buildActions: (context, doc, data) {
+              final status = data['status'] as String? ?? 'approved';
+              final donorUserId = (data['userId'] as String? ??
+                      data['donorUserId'] as String? ??
+                      '')
+                  .trim();
+              final foodName = data['foodName'] as String? ??
+                  data['title'] as String? ??
+                  'التبرع';
+
+              // approved → تأكيد الاستلام
+              if (status == 'approved') {
+                return SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _confirmReceipt(
+                      context,
+                      doc.id,
+                      donorUserId,
+                      foodName,
+                    ),
+                    icon: const Icon(Icons.check_circle_outline_rounded,
+                        size: 16),
+                    label: const Text('تأكيد استلام التبرع'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                    ),
+                  ),
+                );
+              }
+
+              // received → نشر كعرض للمستفيدين
+              if (status == 'received') {
+                return SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PublishNewSurplusScreen(
+                          prefillDonationId: doc.id,
+                          prefillData: data,
+                        ),
                       ),
                     ),
-                  );
-                },
-                icon: const Icon(
-                  Icons.publish_rounded,
-                  size: 16,
+                    icon: const Icon(Icons.publish_rounded, size: 16),
+                    label: const Text('نشر التبرع للمستفيدين'),
+                  ),
+                );
+              }
+
+              // redistributed / published → حالة قراءة فقط
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                label: const Text(
-                  'نشر التبرع للمستفيدين',
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle_rounded,
+                        color: AppColors.primary, size: 16),
+                    SizedBox(width: 6),
+                    Text(
+                      'تمت إعادة التوزيع ✅',
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13),
+                    ),
+                  ],
                 ),
-              ),
-            ),
+              );
+            },
             emptyMessage: 'لا توجد تبرعات مقبولة حالياً',
           ),
 

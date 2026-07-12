@@ -11,13 +11,14 @@ class CharityHelperService {
     switch (status) {
       case 'approved':
         return 'مقبول';
-
+      case 'received':
+        return 'تم الاستلام';
       case 'rejected':
         return 'مرفوض';
-
       case 'redistributed':
         return 'تم توزيعه';
-
+      case 'published':
+        return 'تم النشر';
       default:
         return status;
     }

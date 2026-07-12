@@ -9,6 +9,7 @@ import 'complaint_screen.dart';
 import 'donate_tab.dart';
 import 'national_id_step_screen.dart';
 import 'notifications_screen.dart';
+import 'user_orders_screen.dart';
 import 'provider_public_profile_screen.dart';
 import 'search_results_screen.dart';
 import 'user_extra_screens.dart';
@@ -142,7 +143,7 @@ class UserHomeScreen extends StatelessWidget {
               onDonateToCharity: () => _openCharityDonation(context),
             ),
             const SizedBox(height: 22),
-            const _ImpactTracker(),
+            _ImpactTracker(uid: user.uid),
             const SizedBox(height: 22),
             const _UrgentCharitiesSection(),
             const SizedBox(height: 24),
@@ -161,7 +162,13 @@ class UserHomeScreen extends StatelessWidget {
                     value: snap.hasData ? '${snap.data}' : '...',
                     icon: Icons.shopping_bag_outlined,
                     color: AppColors.primary,
-                    onTap: () {},
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const UserOrdersScreen(statusFilter: 'reserved'),
+                      ),
+                    ),
                   ),
                 ),
                 StreamBuilder<int>(
@@ -171,7 +178,13 @@ class UserHomeScreen extends StatelessWidget {
                     value: snap.hasData ? '${snap.data}' : '...',
                     icon: Icons.check_circle_outline_rounded,
                     color: AppColors.success,
-                    onTap: () {},
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const UserOrdersScreen(statusFilter: 'picked_up'),
+                      ),
+                    ),
                   ),
                 ),
                 StreamBuilder<int>(
@@ -181,7 +194,13 @@ class UserHomeScreen extends StatelessWidget {
                     value: snap.hasData ? '${snap.data}' : '...',
                     icon: Icons.eco_rounded,
                     color: Colors.green,
-                    onTap: () {},
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const UserOrdersScreen(statusFilter: 'picked_up'),
+                      ),
+                    ),
                   ),
                 ),
                 StreamBuilder<int>(
@@ -191,7 +210,12 @@ class UserHomeScreen extends StatelessWidget {
                     value: snap.hasData ? '${snap.data}' : '...',
                     icon: Icons.star_rounded,
                     color: Colors.amber,
-                    onTap: () {},
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const UserOrdersScreen(),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -526,69 +550,95 @@ class _CategorySection extends StatelessWidget {
 }
 
 class _ImpactTracker extends StatelessWidget {
-  const _ImpactTracker();
+  final String uid;
+  const _ImpactTracker({required this.uid});
+
+  static const int _goal = 20;
+
+  String _message(int count) {
+    if (count == 0) return 'احجز وجبتك الأولى وابدأ رحلة الإنقاذ!';
+    if (count < 5) return 'رائع! استمر في إنقاذ الوجبات.';
+    if (count < _goal) return 'أداء ممتاز! أنت قريب من الهدف.';
+    return 'مذهل! لقد حققت هدف الشهر 🎉';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha:0.08),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.primary.withValues(alpha:0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
+    return StreamBuilder<int>(
+      stream: FirebaseFirestore.instance
+          .collection('reservations')
+          .where('userId', isEqualTo: uid)
+          .where('status', isEqualTo: 'picked_up')
+          .snapshots()
+          .map((s) => s.docs.length),
+      builder: (context, snap) {
+        final count = snap.data ?? 0;
+        final progress = (count / _goal).clamp(0.0, 1.0);
+        final pct = (progress * 100).round();
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(22),
+            border:
+                Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.favorite_rounded, color: AppColors.primary),
-              SizedBox(width: 8),
+              const Row(
+                children: [
+                  Icon(Icons.favorite_rounded, color: AppColors.primary),
+                  SizedBox(width: 8),
+                  Text(
+                    'أثرك المجتمعي',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               Text(
-                'أثرك المجتمعي',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
+                _message(count),
+                style:
+                    const TextStyle(color: AppColors.textLight, height: 1.5),
+              ),
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 9,
+                  backgroundColor: Colors.white,
                   color: AppColors.primary,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'ساهمت في تقليل هدر الطعام ودعم المجتمع من خلال استخدامك لزاد.',
-            style: TextStyle(color: AppColors.textLight, height: 1.5),
-          ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: LinearProgressIndicator(
-              value: 0.6,
-              minHeight: 9,
-              backgroundColor: Colors.white,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'هدف الشهر: 20 وجبة',
-                style: TextStyle(fontSize: 11, color: AppColors.textLight),
-              ),
-              Text(
-                '60%',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'هدف الشهر: 20 وجبة',
+                    style:
+                        TextStyle(fontSize: 11, color: AppColors.textLight),
+                  ),
+                  Text(
+                    '$pct%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -1,5 +1,9 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:io' show Platform;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:zad_app/services/notification_service.dart';
 
 import '../models/user.dart';
@@ -8,98 +12,171 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // ── تسجيل محاولة الدخول — fire-and-forget: لا يوقف تدفق الدخول أبداً ──
+  void _writeLoginLog({
+    required String email,
+    required String? userId,
+    required String? role,
+    required bool success,
+    required String? reason,
+  }) {
+    final platform = _getPlatform();
+    _firestore.collection('login_logs').add({
+      'userId': userId,
+      'email': email,
+      'role': role,
+      'success': success,
+      'failureReason': success ? null : reason,
+      'timestamp': FieldValue.serverTimestamp(),
+      'platform': platform,
+      'deviceType': _getDeviceType(platform),
+    }).then<void>((_) {}, onError: (_) {});
+  }
+
+  String _getPlatform() {
+    if (kIsWeb) return 'web';
+    try {
+      if (Platform.isAndroid) return 'android';
+      if (Platform.isIOS) return 'ios';
+      if (Platform.isWindows) return 'windows';
+      if (Platform.isMacOS) return 'macos';
+      if (Platform.isLinux) return 'linux';
+    } catch (_) {}
+    return 'unknown';
+  }
+
+  String _getDeviceType(String platform) {
+    switch (platform) {
+      case 'android':
+      case 'ios':
+        return 'mobile';
+      case 'windows':
+      case 'macos':
+      case 'linux':
+        return 'desktop';
+      case 'web':
+        return 'web';
+      default:
+        return 'unknown';
+    }
+  }
+
   Future<AppUser> login(String email, String password) async {
+    // Tracks whether we already logged this attempt inside the try block,
+    // so the FirebaseAuthException handler does not double-log.
+    String? capturedUid;
+    String? capturedRole;
+
     try {
       final credential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // ── التحقق من تأكيد البريد الإلكتروني ──
-      await credential.user!.reload();
-      if (!(credential.user!.emailVerified)) {
-        await _auth.signOut();
-        throw Exception('يرجى التحقق من بريدك الإلكتروني أولاً.');
-      }
-
       final uid = credential.user!.uid;
-      final userDoc = await _firestore.collection('users').doc(uid).get();
+      capturedUid = uid;
 
-      if (!userDoc.exists) throw Exception('بيانات المستخدم غير موجودة');
+      // ── جلب مستند المستخدم أولاً حتى نعرف الدور قبل فحص التحقق ──
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      if (!userDoc.exists) {
+        _writeLoginLog(
+            email: email, userId: uid, role: null,
+            success: false, reason: 'user_not_found');
+        throw Exception('بيانات المستخدم غير موجودة');
+      }
 
       final data = userDoc.data()!;
       final role = data['role'] ?? 'individual';
+      capturedRole = role;
+
+      // ── التحقق من تأكيد البريد الإلكتروني — يُتجاوَز لحسابات المسؤولين ──
+      if (role != 'admin') {
+        await credential.user!.reload();
+        if (!(credential.user!.emailVerified)) {
+          await _auth.signOut();
+          _writeLoginLog(
+              email: email, userId: uid, role: role,
+              success: false, reason: 'email_not_verified');
+          throw Exception('يرجى التحقق من بريدك الإلكتروني أولاً.');
+        }
+      }
+
       final status = data['status'] ?? 'active';
       final isApproved = data['isApproved'] ?? false;
       final isProviderRole = role == 'restaurant' || role == 'charity';
-      // ── علامة دائمة تُضبَط مرة واحدة عند أول موافقة إدارية ولا تُعاد أبداً
-      // إلى false لاحقاً؛ تُميّز "مطعم/جمعية كان معتمَداً سابقاً ثم رُفض
-      // تحديث لاحق (كتعديل الرخصة)" عن "طلب مرفوض للمرة الأولى دون أي
-      // اعتماد سابق على الإطلاق" ──
       final wasEverApproved = data['wasEverApproved'] == true;
       final verificationStatus = data['verificationStatus'] as String?;
 
       if (status == 'suspended') {
+        _writeLoginLog(
+            email: email, userId: uid, role: role,
+            success: false, reason: 'suspended');
         throw Exception('تم تعليق هذا الحساب من قبل الإدارة');
       }
 
-      // ── دخول محدود: مطعم/جمعية معتمَد سابقاً رُفض تحديث لاحق لبياناته —
-      // يُسمح له بالدخول لإكمال العمليات القائمة (حجوزات، QR، إلخ) بدل
-      // الحظر الكامل المطبَّق على طلب لم يُعتمد إطلاقاً من قبل. يُعتمَد هنا
-      // حصراً على verificationStatus (وليس status): مسار الرفض الفعلي
-      // المستخدم في شاشة مراجعة التحقق (admin_verification_panel.dart) لا
-      // يُغيّر حقل status إطلاقاً (يبقى 'active')، بينما AdminService.rejectUser
-      // (مسار آخر مستخدم من شاشة إدارة المستخدمين) يضبطه إلى 'rejected' —
-      // الاعتماد على verificationStatus فقط يجعل هذا المنطق صحيحاً في كلا
-      // المسارين دون افتراض أيّهما استُخدم ──
       final restrictedRejectedAccess = verificationStatus == 'rejected' &&
           isProviderRole &&
           wasEverApproved;
 
       if (status == 'rejected' && !restrictedRejectedAccess) {
+        _writeLoginLog(
+            email: email, userId: uid, role: role,
+            success: false, reason: 'rejected');
         throw Exception('تم رفض هذا الحساب من قبل الإدارة');
       }
       if (status != 'active' && !restrictedRejectedAccess) {
+        _writeLoginLog(
+            email: email, userId: uid, role: role,
+            success: false, reason: 'inactive');
         throw Exception('هذا الحساب غير نشط حالياً');
       }
 
-      // ── التحقق من موافقة الإدارة على المطاعم والجمعيات ──
       if (isProviderRole) {
         final vs = verificationStatus;
         final roleLabel = role == 'restaurant' ? 'المطعم' : 'الجمعية';
 
-        // تحديد حالة القبول الفعلية
         final bool effectivelyApproved;
         if (vs == 'approved') {
           effectivelyApproved = true;
         } else if (vs == 'pending') {
-          // ── إعادة مراجعة بعد اعتماد سابق (كتعديل بيانات الرخصة) لا تحظر
-          // الدخول: isApproved يبقى true طوال إعادة المراجعة تحديداً لهذا
-          // الغرض (لا يُعاد ضبطه إلى false عند تحديث بيانات الرخصة). طلب
-          // جديد لم يُعتمَد بعد يبقى isApproved=false فيُحظر كالسابق تماماً ──
           effectivelyApproved = isApproved;
         } else if (vs == 'rejected') {
           effectivelyApproved = restrictedRejectedAccess;
         } else {
-          // حساب قديم بدون verificationStatus — الرجوع إلى isApproved
           effectivelyApproved = isApproved;
         }
 
         if (!effectivelyApproved) {
           if (vs == 'rejected') {
-            final reason = (data['rejectionReason'] as String? ?? '').trim();
-            final display = reason.isNotEmpty ? reason : 'لا يوجد سبب محدد';
+            final reason =
+                (data['rejectionReason'] as String? ?? '').trim();
+            final display =
+                reason.isNotEmpty ? reason : 'لا يوجد سبب محدد';
+            _writeLoginLog(
+                email: email, userId: uid, role: role,
+                success: false, reason: 'rejected_provider');
             throw Exception(
                 'REJECTED:تم رفض طلب تسجيل حساب $roleLabel. السبب: $display');
           }
-          throw Exception('PENDING:حساب $roleLabel بانتظار موافقة الإدارة.');
+          _writeLoginLog(
+              email: email, userId: uid, role: role,
+              success: false, reason: 'pending_approval');
+          throw Exception(
+              'PENDING:حساب $roleLabel بانتظار موافقة الإدارة.');
         }
       }
 
+      _writeLoginLog(
+          email: email, userId: uid, role: role,
+          success: true, reason: null);
       return AppUser.fromMap(uid, data);
     } on FirebaseAuthException catch (e) {
+      _writeLoginLog(
+          email: email, userId: capturedUid, role: capturedRole,
+          success: false, reason: e.code);
       throw Exception(_authErrorMessage(e.code));
     } catch (e) {
+      // Specific failure cases above already logged — just rethrow.
       throw Exception(e.toString().replaceAll('Exception: ', ''));
     }
   }
@@ -128,12 +205,10 @@ class AuthService {
     String? charityDocumentUrl,
   }) async {
     try {
-      // ── تقليم الحقول التعريفية قبل التحقق من التفرّد وقبل الحفظ ──
       licenseNumber = licenseNumber?.trim();
       registrationNumber = registrationNumber?.trim();
       nationalId = nationalId?.trim();
 
-      // ── التحقق من تفرّد الحقل التعريفي الخاص بالدور قبل إنشاء حساب Firebase Auth ──
       if (role == 'restaurant') {
         final existing = await _firestore
             .collection('restaurants')
@@ -172,16 +247,15 @@ class AuthService {
 
       final uid = credential.user!.uid;
 
-      final bool needsVerification = role == 'restaurant' || role == 'charity';
+      final bool needsVerification =
+          role == 'restaurant' || role == 'charity';
       final bool hasLocation = latitude != null && longitude != null;
 
       final batch = _firestore.batch();
 
-      // ── الصورة الشخصية: تُستخدم شعار المطعم/الجمعية كصورة الحساب في users ──
       final String? photoUrl =
           (logoUrl != null && logoUrl.isNotEmpty) ? logoUrl : null;
 
-      // ── المستند العام في users: يُستخدم لتسجيل الدخول والتحقق من القبول ──
       final userRef = _firestore.collection('users').doc(uid);
       batch.set(userRef, {
         'uid': uid,
@@ -195,7 +269,6 @@ class AuthService {
         'photoUrl': photoUrl,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        // ── حقول التحقق للمطاعم والجمعيات ──
         if (needsVerification) ...{
           'verificationStatus': 'pending',
           'verificationReviewedBy': null,
@@ -204,14 +277,12 @@ class AuthService {
         },
       });
 
-      // ── المستند التفصيلي الخاص بالدور ──
       final String roleCollection = role == 'restaurant'
           ? 'restaurants'
           : role == 'charity'
               ? 'charities'
               : 'individuals';
 
-      // ── ساعات العمل: { start: "08:00", end: "17:00" } للمطعم والجمعية ──
       final Map<String, String> resolvedWorkingHours =
           workingHours ?? {'start': '', 'end': ''};
 
@@ -274,9 +345,7 @@ class AuthService {
       }
 
       batch.set(_firestore.collection(roleCollection).doc(uid), roleData);
-
       await batch.commit();
-      // ── إرسال بريد التحقق بعد إنشاء الحساب ──
       await credential.user?.sendEmailVerification();
 
       if (role == 'restaurant' || role == 'charity') {
@@ -292,6 +361,53 @@ class AuthService {
       throw Exception(_authErrorMessage(e.code));
     } catch (e) {
       throw Exception(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  // ── إنشاء حساب مسؤول جديد دون إنهاء جلسة المسؤول الحالي.
+  // يستخدم تطبيق Firebase ثانوياً مؤقتاً معزولاً عن الجلسة الرئيسية، ويُحذف
+  // فور الانتهاء. لا يُرسل بريد تحقق لأن المسؤولين يُنشَؤون بواسطة مسؤولين
+  // موثوقين آخرين ولا يحتاجون التحقق من البريد ──
+  Future<void> createAdmin({
+    required String fullName,
+    required String email,
+    required String password,
+    required String createdByUid,
+  }) async {
+    // Unique name prevents conflicts if called concurrently
+    final appName = 'adminCreation_${DateTime.now().millisecondsSinceEpoch}';
+    final secondaryApp = await Firebase.initializeApp(
+      name: appName,
+      options: Firebase.app().options,
+    );
+    try {
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      final credential =
+          await secondaryAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final uid = credential.user!.uid;
+
+      await _firestore.collection('users').doc(uid).set({
+        'uid': uid,
+        'fullName': fullName,
+        'name': fullName,
+        'email': email,
+        'role': 'admin',
+        'status': 'active',
+        'isApproved': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdBy': createdByUid,
+      });
+
+      await secondaryAuth.signOut();
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_authErrorMessage(e.code));
+    } finally {
+      // Always delete secondary app to free resources
+      await secondaryApp.delete();
     }
   }
 

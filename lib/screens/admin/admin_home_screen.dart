@@ -68,6 +68,7 @@ Future<bool> _openAdminNotification(
       goToTab(1);
       return true;
     case 'identity_verification_request':
+    case 'identity_verification_resubmitted':
       final userId = (data['relatedId'] as String? ?? '').trim();
       if (userId.isNotEmpty) {
         final doc = await FirebaseFirestore.instance

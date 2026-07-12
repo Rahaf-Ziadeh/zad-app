@@ -19,13 +19,14 @@ class CharityHistoryScreen extends StatelessWidget {
     switch (status) {
       case 'approved':
         return AppColors.success;
-
+      case 'received':
+        return AppColors.primary;
       case 'rejected':
         return AppColors.danger;
-
       case 'redistributed':
-        return AppColors.primary;
-
+        return Colors.orange;
+      case 'published':
+        return Colors.teal;
       default:
         return AppColors.textLight;
     }
