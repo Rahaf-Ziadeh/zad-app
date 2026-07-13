@@ -56,6 +56,16 @@ class RestaurantHomeScreen extends StatelessWidget {
   Stream<DocumentSnapshot> _userStream() =>
       FirebaseFirestore.instance.collection('users').doc(_uid).snapshots();
 
+  // Unread notification count for the current restaurant — same collection,
+  // recipient field ('userId'), and 'isRead' condition already used by the
+  // individual user's bell badge (see _TopHeader in user_home_screen.dart).
+  Stream<int> _unreadNotificationsStream() => FirebaseFirestore.instance
+      .collection('notifications')
+      .where('userId', isEqualTo: _uid)
+      .where('isRead', isEqualTo: false)
+      .snapshots()
+      .map((s) => s.docs.length);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,15 +102,50 @@ class RestaurantHomeScreen extends StatelessWidget {
             icon: const Icon(Icons.bar_chart_rounded),
             tooltip: 'الإحصائيات',
           ),
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      NotificationsScreen(onOpenRelated: _openRelatedNotification),
-                ),
+          StreamBuilder<int>(
+            stream: _unreadNotificationsStream(),
+            builder: (context, snap) {
+              final count = snap.data ?? 0;
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none_rounded),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => NotificationsScreen(
+                              onOpenRelated: _openRelatedNotification),
+                        ),
+                      );
+                    },
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        constraints:
+                            const BoxConstraints(minWidth: 16, minHeight: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Center(
+                          child: Text(
+                            count > 99 ? '99+' : '$count',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           ),
