@@ -433,7 +433,7 @@ class _AdminOffersScreenState extends State<AdminOffersScreen> {
       ),
       body: Column(
         children: [
-          // ── شريط الفلترة + active chips ──
+          // filter bar + active chips
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -521,7 +521,6 @@ class _AdminOffersScreenState extends State<AdminOffersScreen> {
           ),
           const Divider(height: 1),
 
-          // ── القائمة ──
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _svc.getAllOffersStream(),
@@ -758,7 +757,7 @@ class _OfferCardState extends State<_OfferCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── عنوان + شارة الحالة ──
+              // title + status badge
               Row(
                 children: [
                   Expanded(
@@ -793,7 +792,7 @@ class _OfferCardState extends State<_OfferCard> {
                 ],
               ),
               const SizedBox(height: 6),
-              // ── مزوّد + نوع ──
+              // provider + type
               Row(
                 children: [
                   const Icon(Icons.storefront_outlined,
@@ -820,7 +819,7 @@ class _OfferCardState extends State<_OfferCard> {
                 ],
               ),
               const SizedBox(height: 4),
-              // ── كمية + سعر ──
+              // quantity + price
               Row(
                 children: [
                   const Icon(Icons.inventory_2_outlined,

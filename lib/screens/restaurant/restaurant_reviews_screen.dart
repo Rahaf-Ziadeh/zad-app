@@ -5,12 +5,9 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import 'restaurant_offer_details_screen.dart';
 
-// ─────────────────────────────────────────────
-// سجلّ التقييمات التي حصل عليها هذا المطعم من المستخدمين بعد الاستلام —
-// نفس مصدر البيانات المعروض في provider_public_profile_screen.dart (مجموعة
-// reviews حيث providerUserId == uid)، بواجهة مخصصة للمطعم نفسه: عرض فقط،
-// بلا أي تعديل أو حذف ──
-// ─────────────────────────────────────────────
+// Reviews the restaurant received from users after pickup. Same data source as
+// provider_public_profile_screen.dart (reviews where providerUserId == uid),
+// but in a restaurant-owner view: read-only, no edit or delete.
 class RestaurantReviewsScreen extends StatelessWidget {
   const RestaurantReviewsScreen({super.key});
 
@@ -25,10 +22,10 @@ class RestaurantReviewsScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      // ── فلتر مساواة وحيد (بلا orderBy) — بنفس نمط الاستعلام المستخدم
-      // فعلياً في provider_public_profile_screen.dart؛ إضافة orderBy على حقل
-      // مختلف تتطلب فهرساً مركّباً غير موجود، وتستبعد أي مستند قديم بلا
-      // createdAt كلياً من النتائج. الترتيب الأحدث أولاً يتم على العميل ──
+      // Single equality filter (no orderBy) — same query pattern as
+      // provider_public_profile_screen.dart. Adding orderBy on a different field
+      // requires a composite index we don't have, and drops old docs without createdAt.
+      // Newest-first sorting is done client-side.
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('reviews')
@@ -154,8 +151,8 @@ class _ReviewTile extends StatelessWidget {
   final Map<String, dynamic> data;
   const _ReviewTile({required this.data});
 
-  // ── فتح العرض المرتبط بالتقييم إن وُجد ولا يزال موجوداً؛ يعتمد على نفس
-  // نمط التحقق المستخدم في restaurant_home_screen.dart._openRelatedNotification ──
+  // Opens the offer linked to this review if it still exists. Same existence-check
+  // pattern as restaurant_home_screen.dart._openRelatedNotification.
   Future<void> _openRelatedOffer(BuildContext context) async {
     final offerId = (data['offerId'] as String? ?? '').trim();
     if (offerId.isEmpty) {

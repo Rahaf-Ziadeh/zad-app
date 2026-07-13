@@ -2,14 +2,13 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// مساعد مركزي لرفع الملفات إلى Cloudinary.
-/// يُستخدم في جميع شاشات التطبيق بدلاً من تكرار منطق الرفع.
+/// Central helper for uploading files to Cloudinary. Used across all screens instead of
+/// duplicating upload logic.
 class CloudinaryService {
   static const String _cloudName = 'dsu1bewrx';
   static const String _uploadPreset = 'zad_upload';
 
-  /// يرفع بيانات الملف ([bytes]) ويُعيد secure_url من Cloudinary،
-  /// أو null إذا فشل الرفع.
+  /// Uploads [bytes] and returns the Cloudinary secure_url, or null on failure.
   Future<String?> uploadBytes({
     required List<int> bytes,
     required String filename,

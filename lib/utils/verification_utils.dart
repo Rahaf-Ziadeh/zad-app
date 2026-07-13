@@ -1,19 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// يتحقق مما إذا كانت الحالة الفعلية تسمح بنشر عروض/باقات جديدة أو إعادة
-/// تفعيل عرض مغلق أو منتهي. 'approved' فقط مسموحة؛ 'pending' (بما فيها
-/// إعادة المراجعة بعد تعديل بيانات الرخصة) و'rejected' ممنوعتان. القيمة
-/// null تُعامَل كحساب قديم (سابق لإضافة هذا الحقل) وتُعتبر مسموحة، بنفس
-/// منطق fallback المستخدم في AuthService.login عند غياب الحقل.
+/// Returns true if the current verification status allows publishing new offers or
+/// reactivating closed/expired ones. Only 'approved' is permitted; 'pending' (including
+/// re-review after a license update) and 'rejected' are blocked. null is treated as a
+/// legacy account (pre-field) and is allowed — same fallback as AuthService.login.
 bool isVerificationApprovedForPublishing(String? verificationStatus) =>
     verificationStatus == 'approved' || verificationStatus == null;
 
-/// يجلب حالة التحقق الحالية مباشرة من Firestore (وليس من بيانات مخزَّنة
-/// محلياً في الواجهة) قبل أي كتابة تُنشئ عرضاً جديداً أو تُعيد تفعيل عرض.
-/// هذا هو خط الدفاع الفعلي المتاح على مستوى "طبقة الخدمة/الكتابة" بما أن
-/// هذا المستودع لا يتضمن ملف قواعد أمان Firestore (firestore.rules) يمكن
-/// تعديله هنا؛ التحقق قبل كل كتابة حسّاسة يمنع تجاوز القيد عبر استدعاء
-/// دالة الحفظ مباشرة من أي مكان آخر في الكود، حتى لو كان زر الواجهة معطّلاً.
+/// Fetches the current verification status directly from Firestore (not from cached UI state)
+/// before any write that creates or reactivates an offer. This is the actual enforcement layer
+/// since the repo has no firestore.rules file; checking before every sensitive write prevents
+/// bypassing the restriction by calling the save function directly, even when the UI button is disabled.
 Future<bool> canPublishOrReactivateOffers(String uid) async {
   final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
   if (!doc.exists) return false;
@@ -29,7 +26,7 @@ const String rejectedBlockedMessage =
     'تم رفض طلب التحقق الخاص بحسابك، ولا يمكن نشر عروض جديدة أو إعادة '
     'تفعيل عروض مغلقة/منتهية حتى تتم الموافقة على بيانات محدَّثة.';
 
-/// رسالة الحظر المناسبة حسب الحالة، لعرضها للمستخدم عند منع النشر/التفعيل.
+/// Returns the appropriate blocked-publish message for the given verification status.
 String publishBlockedMessage(String? verificationStatus) =>
     verificationStatus == 'rejected'
         ? rejectedBlockedMessage

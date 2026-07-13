@@ -13,11 +13,10 @@ import 'admin_support_panel.dart';
 import 'admin_verification_details_screen.dart';
 import 'admin_widgets.dart';
 
-// ── يفتح المحتوى المرتبط بإشعار أدمن حسب نوعه (Part 13). أنواع 'account'
-// و'complaint' و'report' تُبدّل تبويب اللوحة نفسها (لا تملك شاشة تفاصيل
-// مستقلة لكل عنصر بعد)، لذا تُغلَق شاشتا الإشعارات/التفاصيل المفتوحتان أولاً
-// حتى يظهر التبويب الجديد فوراً بدل البقاء خلفهما. لا يُترَك أي نوع بلا
-// معالجة — أي نوع غير معروف يعرض رسالة واضحة ──
+// Opens the content linked to an admin notification by type.
+// 'account', 'complaint', and 'report' switch the dashboard tab (no standalone detail screen yet),
+// so both open notification screens are popped first so the new tab is immediately visible.
+// Unknown types always show a message — nothing is left unhandled.
 Future<bool> _openAdminNotification(
   BuildContext context,
   Map<String, dynamic> data,
@@ -35,9 +34,7 @@ Future<bool> _openAdminNotification(
     case 'account':
       final relatedId = (data['relatedId'] as String? ?? '').trim();
       final relatedRole = (data['relatedRole'] as String? ?? '').trim();
-      // ── إشعار عن حساب مطعم/جمعية جديد بانتظار المراجعة: يفتح شاشة
-      // تفاصيله مباشرة إن توفّر المعرّف والدور؛ وإلا (كقرار عن حساب الأدمن
-      // نفسه) يُكتفى بتبويب "المستخدمون" ──
+      // Navigate directly to the verification detail if ID and role are available; otherwise switch to the Users tab.
       if (relatedId.isNotEmpty &&
           (relatedRole == 'restaurant' || relatedRole == 'charity')) {
         final roleCollection =
@@ -168,17 +165,16 @@ class AdminHomeScreen extends StatelessWidget {
     required this.onNavigate,
   });
 
-  // ── ثوابت اللون لكل بطاقة ──
   static const _colorUsers = AppColors.primary;
-  static const _colorRestaurant = Color(0xFF0EA5E9); // أزرق فاتح
-  static const _colorCharity = Color(0xFF7C3AED); // بنفسجي
+  static const _colorRestaurant = Color(0xFF0EA5E9); // light blue
+  static const _colorCharity = Color(0xFF7C3AED); // purple
   static const _colorComplaint = AppColors.danger;
-  static const _colorOffer = Color(0xFFF59E0B); // أصفر / ذهبي
+  static const _colorOffer = Color(0xFFF59E0B); // amber
   static const _colorReservation = AppColors.success;
-  static const _colorSupport = Color(0xFFEC4899); // وردي
-  static const _colorReview = Color(0xFFEA580C); // برتقالي
+  static const _colorSupport = Color(0xFFEC4899); // pink
+  static const _colorReview = Color(0xFFEA580C); // orange
 
-  // ── بانيو لشاشة التفاصيل: المستخدمون ──
+  // Builder for the Users detail screen.
   AdminStatsDetailScreen _usersDetail(
     Stream<QuerySnapshot> stream,
     String title,
@@ -205,7 +201,7 @@ class AdminHomeScreen extends StatelessWidget {
     );
   }
 
-  // ── بانيو لشاشة التفاصيل: الحجوزات ──
+  // Builder for the Reservations detail screen.
   AdminStatsDetailScreen _reservationsDetail(
       AdminService svc, String title, Color color) {
     return AdminStatsDetailScreen(
@@ -234,7 +230,7 @@ class AdminHomeScreen extends StatelessWidget {
     );
   }
 
-  // ── بانيو لشاشة التفاصيل: التقييمات ──
+  // Builder for the Reviews detail screen.
   AdminStatsDetailScreen _reviewsDetail(AdminService svc) {
     return AdminStatsDetailScreen(
       title: 'التقييمات',
@@ -337,11 +333,9 @@ class AdminHomeScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
         children: [
-          // ── بطاقة الترحيب ──
           WelcomeCard(user: user),
           const SizedBox(height: 20),
 
-          // ── صف 1: المستخدمون / مطاعم / جمعيات ──
           Row(
             children: [
               Expanded(
@@ -411,7 +405,6 @@ class AdminHomeScreen extends StatelessWidget {
 
           const SizedBox(height: 10),
 
-          // ── صف 2: الشكاوى / العروض / الحجوزات ──
           Row(
             children: [
               Expanded(
@@ -464,7 +457,6 @@ class AdminHomeScreen extends StatelessWidget {
 
           const SizedBox(height: 10),
 
-          // ── صف 3: محادثات الدعم / التقييمات ──
           Row(
             children: [
               Expanded(
@@ -503,7 +495,6 @@ class AdminHomeScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // ── إدارة سريعة ──
           const Text('إدارة سريعة',
               style: TextStyle(
                   fontSize: 18,

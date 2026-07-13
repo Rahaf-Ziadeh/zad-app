@@ -4,8 +4,6 @@ import 'package:zad_app/screens/admin/admin_widgets.dart';
 import 'package:zad_app/services/admin_service.dart';
 import 'package:zad_app/theme/app_colors.dart';
 
-// ── مساعدات قسم سجل محاولات الدخول ──
-
 String _loginStatusLabel(bool success) => success ? 'نجح' : 'فشل';
 Color _loginStatusColor(bool success) =>
     success ? AppColors.success : AppColors.danger;
@@ -108,7 +106,6 @@ class AdminReportsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          // ── إحصائيات سريعة ──
           Row(
             children: [
               Expanded(
@@ -203,7 +200,6 @@ class AdminReportsScreen extends StatelessWidget {
 
           const SizedBox(height: 28),
 
-          // ── سجل محاولات تسجيل الدخول ──────────────────────────────────────
           const Text(
             'سجل محاولات تسجيل الدخول',
             style: TextStyle(
@@ -248,7 +244,6 @@ class AdminReportsScreen extends StatelessWidget {
                           horizontal: 14, vertical: 10),
                       child: Row(
                         children: [
-                          // حالة الدخول
                           Container(
                             width: 36,
                             height: 36,
@@ -261,7 +256,6 @@ class AdminReportsScreen extends StatelessWidget {
                                 color: statusColor, size: 18),
                           ),
                           const SizedBox(width: 12),
-                          // البريد والسبب
                           Expanded(
                             child: Column(
                               crossAxisAlignment:
@@ -290,7 +284,6 @@ class AdminReportsScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // الوسم + الوقت
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [

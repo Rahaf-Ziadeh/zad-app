@@ -9,19 +9,16 @@ class ReservationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // ── الحد الأقصى (بالدقائق) المسموح به لإلغاء الحجز بعد إنشائه — المصدر
-  // الوحيد لهذا الرقم في المشروع بأكمله (تم التحقق عبر بحث شامل) ──
+  // Maximum minutes a user has to cancel after booking — single source of truth across the entire project.
   static const int cancellationWindowMinutes = 10;
 
-  // ── القيمة القانونية الوحيدة لحالة "تم استرداد المبلغ" في كل المشروع ──
+  // Single source of truth for the "refunded" payment status — keeps all comparisons in sync.
   static const String paymentStatusRefunded = 'refunded';
 
-  // ── حارس بسيط على مستوى الخدمة (ذاكرة العملية الحالية فقط) ضد إرسال
-  // طلبَي حجز متزامنَين لنفس العرض من نفس المستخدم عبر ضغطتين سريعتين على
-  // نفس الزر؛ يكمّل تعطيل الزر في الواجهة (UI-level) دون الحاجة لمستند قفل
-  // إضافي في Firestore قد يُترَك عالقاً لو فشل حذفه لاحقاً. الحارس الفعلي
-  // ضد بيع نفس الوحدة أكثر من مرة (overselling) هو معاملة Firestore أدناه
-  // التي تعيد قراءة remainingQuantity دائماً من المصدر، وليس هذا الحارس ──
+  // In-memory guard against double-tap: rejects a second reserveOffer call for the same
+  // user+offer while the first is still in flight. Complements the UI button disable
+  // without needing a Firestore lock doc that could get stuck on failure.
+  // Actual overselling protection is the transaction below — it always re-reads remainingQuantity.
   static final Set<String> _inFlightReservationKeys = {};
 
   // ── ZAD-YYYYMMDD-XXXXXX from the first 6 chars of the Firestore doc ID ──
@@ -34,11 +31,8 @@ class ReservationService {
     return 'ZAD-$date-$suffix';
   }
 
-  // ── يتحقق مسبقاً (قبل فتح صحيفة اختيار الكمية/الدفع) من وجود حجز نشط
-  // للمستخدم الحالي على هذا العرض تحديداً. "نشط" يعني الحالة 'reserved' —
-  // وهي نفسها حالة "بانتظار الاستلام" في هذا التطبيق؛ لا توجد حالة منفصلة
-  // لذلك. تُستخدم في نقاط الدخول للحجز (OfferDetailsScreen وغيرها) لعرض
-  // رسالة واضحة بدل ترك المستخدم يكتشف الحجز المسبق بعد فتح نافذة الدفع ──
+  // Pre-checks for an active ('reserved') reservation before the quantity/payment sheet opens,
+  // so the user sees a clear message instead of discovering the conflict inside the payment flow.
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?> getActiveReservation(
     String offerId,
   ) async {
@@ -61,10 +55,9 @@ class ReservationService {
     required Map<String, dynamic> offerData,
     int selectedQuantity = 1,
     String reserverRole = 'individual',
-    // ── اختياريان: يُكتَبان ذرّياً ضمن نفس معاملة إنشاء الحجز (بدل تحديث
-    // منفصل لاحق) حتى لا توجد لحظة يكون فيها الحجز موجوداً بحالة دفع غير
-    // معروفة. المسار النقدي يمرّرهما فوراً كما كان؛ مسار الدفع الإلكتروني
-    // لا يستدعي reserveOffer إلا بعد نجاح الدفع (راجع payment_method_screen) ──
+    // Both optional; written atomically in the same transaction so there's never a
+    // reservation with an unknown payment state. Cash passes them immediately;
+    // online only calls reserveOffer after payment succeeds — see payment_method_screen.
     String? paymentMethod,
     String? paymentStatus,
   }) async {
@@ -73,16 +66,14 @@ class ReservationService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('يجب تسجيل الدخول أولاً');
 
-    // ── منع حجز العرض الخاص بالمستخدم نفسه ──
+    // Prevent users from reserving their own offer.
     final selfProviderUid =
         (offerData['providerUserId'] as String? ?? '').trim();
     if (selfProviderUid.isNotEmpty && selfProviderUid == user.uid) {
       throw Exception('لا يمكن حجز عرضك الخاص.');
     }
 
-    // ── حارس ضد الإرسال المتكرر (نفس المستخدم + نفس العرض) على مستوى
-    // الخدمة، فوق تعطيل الزر في الواجهة؛ يُضبط قبل أي await ويُزال دائماً
-    // في finally مهما كانت نتيجة العملية ──
+    // Service-level in-flight guard — set before any await, always removed in finally.
     final inFlightKey = '${offerId}_${user.uid}';
     if (_inFlightReservationKeys.contains(inFlightKey)) {
       debugPrint('[ReservationService] reserveOffer REJECTED — duplicate '
@@ -115,13 +106,12 @@ class ReservationService {
     String? paymentMethod,
     String? paymentStatus,
   }) async {
-    // ── جلب اسم المستخدم ──
     final userDoc = await _firestore.collection('users').doc(user.uid).get();
     final userName = userDoc.exists
         ? (userDoc.data()?['name'] ?? userDoc.data()?['fullName'] ?? 'مستخدم')
         : 'مستخدم';
 
-    // ── جلب الاسم الحقيقي للمزوّد ──
+    // Fetch the provider's display name from their role-specific collection.
     String providerName = '';
     final providerUid = (offerData['providerUserId'] as String? ?? '').trim();
     if (providerUid.isNotEmpty) {
@@ -170,7 +160,7 @@ class ReservationService {
       }
     }
 
-    // ── التحقق من عدم وجود حجز مسبق لنفس العرض ──
+    // Guard against double-booking the same offer.
     final existing = await _firestore
         .collection('reservations')
         .where('userId', isEqualTo: user.uid)
@@ -190,8 +180,7 @@ class ReservationService {
         'offerId=$offerId requestedQuantity=$selectedQuantity userId=${user.uid}');
 
     await _firestore.runTransaction((transaction) async {
-      // ── القراءة داخل المعاملة هي مصدر الحقيقة الوحيد؛ لا تُستخدَم أي قيمة
-      // كمية حُمِّلت سابقاً في الواجهة (offerData) للتحقق أو للخصم ──
+      // Transaction read is the only source of truth — never use offerData from the UI for quantity checks.
       final offerSnapshot = await transaction.get(offerRef);
 
       if (!offerSnapshot.exists) throw Exception('العرض غير موجود');
@@ -221,7 +210,7 @@ class ReservationService {
         throw Exception('انتهت مدة هذا العرض ولم يعد متاحًا للحجز.');
       }
 
-      // التحقق من أن الكمية المطلوبة لا تتجاوز المتاح (race-condition guard)
+      // Requested quantity exceeds what's currently available — race-condition guard.
       if (selectedQuantity > remaining) {
         debugPrint('[ReservationService] reserveOffer REJECTED — '
             'insufficient quantity (offerId=$offerId requested=$selectedQuantity '
@@ -229,7 +218,7 @@ class ReservationService {
         throw Exception('عذرًا، نفدت الكمية قبل إتمام الحجز.');
       }
 
-      // ── حد أقصى للكمية لكل مستخدم، إن وُجد هذا الحقل على العرض ──
+      // Per-user quantity cap — only enforced if the offer defines this field.
       final rawMaxPerUser = data['maxQuantityPerUser'];
       final maxPerUser = rawMaxPerUser is num ? rawMaxPerUser.toInt() : null;
       if (maxPerUser != null && maxPerUser > 0 && selectedQuantity > maxPerUser) {
@@ -242,16 +231,13 @@ class ReservationService {
           'offerId=$offerId remainingQuantity(after)=$afterQty '
           'requestedQuantity=$selectedQuantity');
 
-      // تحديث الكمية وحالة العرض
       transaction.update(offerRef, {
         'remainingQuantity': afterQty,
         'status': afterQty == 0 ? 'reserved' : 'available',
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // ── لقطة ثابتة (immutable snapshot) من بيانات العرض وقت الحجز؛ تبقى
-      // القراءة/التأكيد لاحقاً (شاشة تأكيد QR) تعمل حتى لو تم حذف العرض أو
-      // انتهت صلاحيته بعد إنشاء هذا الحجز — الحجز لا يعتمد على وجود العرض ──
+      // Immutable offer snapshot at reservation time — QR confirmation still works even if the offer is later deleted or expired.
       final unitPrice = (data['discountPrice'] ?? data['price'] ?? 0) as num;
       transaction.set(reservationRef, {
         'reservationId': reservationRef.id,
@@ -285,7 +271,7 @@ class ReservationService {
       });
     });
 
-    // إشعار للمستخدم — غير حرج: لا يوقف الحجز عند الفشل
+    // User notification — non-critical, failure doesn't abort the reservation.
     try {
       await NotificationService().sendNotification(
         userId: user.uid,
@@ -299,7 +285,7 @@ class ReservationService {
       debugPrint('[ReservationService] user notification failed (non-critical): $e');
     }
 
-    // إشعار لمزوّد الطعام — غير حرج: لا يوقف الحجز عند الفشل
+    // Provider notification — non-critical, failure doesn't abort the reservation.
     try {
       final providerUserId = (offerData['providerUserId'] as String?) ?? '';
       if (providerUserId.isNotEmpty) {
@@ -320,15 +306,9 @@ class ReservationService {
     return reservationRef.id;
   }
 
-  // ── إلغاء الحجز وإرجاع الكمية — عملية ذرّية بالكامل ضمن معاملة واحدة:
-  // قراءة الحجز، التحقق من حالته، قراءة العرض المرتبط، تحديث حالة الحجز
-  // وإرجاع الكمية، أو لا شيء منها إطلاقاً عند أي خطأ. متكرِّرة الاستدعاء
-  // بأمان (idempotent): إن كان الحجز ملغى مسبقاً فلن تُعاد الكمية مرة
-  // أخرى — تكفي معاملة Firestore وحدها لضمان ذلك (retry تلقائي يعيد قراءة
-  // الحالة الفعلية عند أي تعارض كتابة متزامن). أي خطأ غير معروف (بما في
-  // ذلك أخطاء JS-interop الخاصة بويب فلاتر التي تظهر كنص "Dart exception
-  // thrown from converted Future...") يُستبدَل هنا برسالة عربية واضحة قبل
-  // أن تصل لأي واجهة مستخدم ──
+  // Cancels a reservation and restores its quantity in a single atomic transaction.
+  // Idempotent: already-cancelled reservations are rejected without restoring quantity again.
+  // Unknown errors (including web JS-interop) are replaced with a safe user-facing message.
   Future<void> cancelReservation({
     required String reservationId,
     required String offerId,
@@ -338,8 +318,7 @@ class ReservationService {
 
     final reservationRef =
         _firestore.collection('reservations').doc(reservationId);
-    // ── حجوزات قديمة قد لا تحمل offerId صالحاً؛ في هذه الحالة يُلغى الحجز
-    // فقط دون محاولة إرجاع كمية على عرض غير معروف (تجنّباً لخطأ .doc('')) ──
+    // Legacy reservations may lack a valid offerId — cancel without restoring quantity in that case.
     final offerRef =
         offerId.isEmpty ? null : _firestore.collection('offers').doc(offerId);
 
@@ -364,7 +343,7 @@ class ReservationService {
         debugPrint('[ReservationService] cancelReservation: current '
             'status="$currentStatus" for $reservationId');
 
-        // ── لا تُعاد الكمية مرة أخرى إن كان الحجز ملغى مسبقاً بالفعل ──
+        // Already cancelled — don't restore quantity again.
         if (currentStatus == 'cancelled') {
           debugPrint('[ReservationService] cancelReservation: already '
               'cancelled — skipping, quantity NOT restored again');
@@ -376,9 +355,7 @@ class ReservationService {
           throw Exception('لا يمكن إلغاء هذا الطلب');
         }
 
-        // ── قيد الإلغاء: مسموح فقط خلال cancellationWindowMinutes دقيقة من
-        // وقت الحجز — تُطبع كل القيم المستخدمة في هذا القرار صراحة، سواء
-        // نجح التحقق أو فشل، لتأكيد (أو نفي) أن هذا هو سبب الرفض الفعلي ──
+        // Cancellation window check — all timing values are logged to confirm the actual rejection cause.
         final createdAt = resData['createdAt'] as Timestamp?;
         final now = DateTime.now();
         final elapsedMinutes =
@@ -404,8 +381,7 @@ class ReservationService {
             '(elapsedMinutes=$elapsedMinutes <= limit='
             '$cancellationWindowMinutes) — NOT the rejection cause');
 
-        // ── quantity هو الحقل الفعلي المكتوب عبر reserveOffer، مع دعم
-        // selectedQuantity كاسم بديل محتمل لسجلات قديمة ──
+        // 'quantity' is the canonical field; 'selectedQuantity' is a fallback for legacy records.
         final rawQty = resData['quantity'] ?? resData['selectedQuantity'];
         final reservedQty = rawQty is num ? rawQty.toInt() : 1;
         debugPrint('[ReservationService] cancelReservation: '
@@ -450,8 +426,7 @@ class ReservationService {
       debugPrint('[ReservationService] cancelReservation SUCCESS '
           'reservationId=$reservationId');
     } catch (e, stackTrace) {
-      // ── لا يُبتلع أي استثناء بصمت: يُطبع كاملاً مع نوعه الحقيقي وتتبّع
-      // المكدّس الكامل قبل أي تحويل لرسالة صديقة للمستخدم ──
+      // Log the full exception type and stack before converting to a user-friendly message.
       debugPrint('[ReservationService] cancelReservation FAILED '
           'reservationId=$reservationId offerId=$offerId '
           'errorType=${e.runtimeType} error=$e');
@@ -460,21 +435,16 @@ class ReservationService {
       debugPrint('[ReservationService] cancelReservation DIAGNOSIS: '
           '${_diagnoseCancelFailure(e)}');
 
-      // ── لا يُسمح أبداً بتسريب نص خطأ خام (كأخطاء JS-interop على الويب) —
-      // فقط رسائلنا العربية المعروفة تُمرَّر كما هي؛ أي شيء آخر يُستبدل
-      // برسالة عامة واحدة آمنة. التشخيص الدقيق أعلاه هو ما يُستخدم لمعرفة
-      // السبب الحقيقي، وليس النص المعروض للمستخدم ──
+      // Only our own known messages pass through; raw platform/JS-interop errors get a safe generic message.
       throw Exception(_safeCancelErrorMessage(e));
     }
   }
 
-  // ── يحدد بالضبط أي عملية فشلت، اعتماداً على نوع الاستثناء وخصائصه —
-  // يُستخدَم فقط في سجلّات التصحيح (لا يُعرض للمستخدم) ──
+  // Maps the exception to the exact failure mode — used only in debug logs, never shown to the user.
   static String _diagnoseCancelFailure(Object e) {
     final raw = e.toString();
 
-    // ── رسائلنا العربية المعروفة: السبب معروف فعلياً، وليس استثناءً غير
-    // متوقع (حد الإلغاء الزمني، الحجز غير موجود، محاولة إلغاء مزدوجة...) ──
+    // Our own messages mean the cause is known — not an unexpected exception.
     if (raw.contains('انتهت مهلة إلغاء الحجز')) {
       return 'CANCELLATION TIME LIMIT EXCEEDED (confirmed cause — see '
           'TIME-LIMIT CHECK log line above)';
@@ -516,10 +486,9 @@ class ReservationService {
         'message and stack trace above for details: "$raw"';
   }
 
-  // ── يعيد النص العربي كما هو فقط إن كان أحد الرسائل التي نرميها نحن
-  // بأنفسنا (يُطابَق ببادئة ثابتة بدل نص كامل، حتى تبقى رسالة حد الإلغاء
-  // الزمني متزامنة مع cancellationWindowMinutes دون تكرار الرقم هنا) —
-  // أي شيء آخر (أخطاء منصّة/JS-interop خام) يُستبدل برسالة عامة آمنة ──
+  // Passes through only our own known error messages (matched by prefix so the
+  // time-limit message stays in sync with cancellationWindowMinutes).
+  // Anything else — raw platform/JS-interop errors — gets a safe generic fallback.
   static String _safeCancelErrorMessage(Object e) {
     final raw = e.toString().replaceAll('Exception: ', '').trim();
     const knownPrefixes = [
@@ -535,8 +504,7 @@ class ReservationService {
     return 'تعذّر إلغاء الحجز، يرجى المحاولة مرة أخرى.';
   }
 
-  // ── تسمية عربية واضحة لأي حالة حجز غير متوقعة، تُستخدم في رسالة الحظر
-  // العامة عند محاولة تأكيد استلام حجز ليس بحالة 'reserved' ──
+  // Human-readable label for unexpected reservation statuses — used in the pickup block message.
   static String _reservationStatusLabel(String status) {
     switch (status) {
       case 'reserved':
@@ -550,8 +518,7 @@ class ReservationService {
     }
   }
 
-  // ── رسالة عربية واضحة حسب حالة الدفع الإلكتروني الحالية — تُستخدم لمنع
-  // تأكيد الاستلام قبل اكتمال الدفع فعلياً ──
+  // Block message for pickup confirmation when online payment hasn't completed.
   static String _electronicPaymentBlockMessage(String? paymentStatus) {
     switch (paymentStatus) {
       case 'pending_online':
@@ -568,23 +535,14 @@ class ReservationService {
     }
   }
 
-  // ═════════════════════════════════════════════════════════════════════
-  // تأكيد الاستلام — نقطة الدخول الوحيدة المستخدمة من كل من شاشة مسح QR
-  // وشاشة التأكيد اليدوي (Part 7/8). كل التحقق النهائي والملزم يتم هنا
-  // داخل معاملة Firestore واحدة؛ أي فحص مسبق في الواجهة (لعرض نافذة
-  // المعاينة) هو تحسين لتجربة المستخدم فقط وليس مصدر الحقيقة.
-  //
-  // idempotent بالكامل: إن كانت الحالة الحالية ليست 'reserved' وقت تنفيذ
-  // المعاملة (سواء بسبب ضغطة مزدوجة سريعة أو مسح متكرر لنفس رمز QR بعد
-  // تأكيد ناجح من محاولة سابقة) تُرمى رسالة واضحة ولا يُكتَب أو يُرسَل أي
-  // شيء آخر — فلا يمكن تكرار التأكيد أو إرسال إشعار مكرر أبداً ──
-  // ═════════════════════════════════════════════════════════════════════
+  // Single pickup confirmation entry point — used by both QR scan and manual confirmation.
+  // All binding validation runs inside the transaction; UI pre-checks are UX only, not authoritative.
+  // Idempotent: if status isn't 'reserved' when the transaction runs (double-tap or repeated QR
+  // scan) nothing is written and no notification is sent.
   Future<void> confirmPickup({
     required String reservationId,
     required String confirmationMethod, // 'qr' | 'manual'
-    // ── مطلوب صراحةً من واجهة المستخدم قبل استدعاء هذه الدالة لأي حجز
-    // دفعه نقدي: تأكيد أن المطعم استلم المبلغ فعلياً. يُتجاهَل لأي طريقة
-    // دفع أخرى (مجاني/إلكتروني) ──
+    // Must be true for cash reservations — confirms the restaurant physically collected the amount.
     bool paymentCollectedConfirmed = false,
   }) async {
     final uid = _auth.currentUser?.uid ?? '';
@@ -608,7 +566,7 @@ class ReservationService {
           throw Exception('رمز QR غير صالح أو أن الحجز غير موجود.');
         }
 
-        // ── ملكية الحجز: يجب أن يتبع الحجز هذا المطعم بالتحديد ──
+        // Reservation ownership check — must belong to the calling provider.
         final providerUserId = (data['providerUserId'] as String?) ?? '';
         if (providerUserId != uid) {
           debugPrint('[ReservationService] confirmPickup REJECTED — '
@@ -633,8 +591,7 @@ class ReservationService {
               '${_reservationStatusLabel(status)}.');
         }
 
-        // ── أمان الدفع: إلكتروني يجب أن يكون paid فعلاً؛ نقدي يتطلب تأكيداً
-        // صريحاً من المطعم بأنه استلم المبلغ؛ المجاني لا يحتاج أي تحقق ──
+        // Payment guard: online must be paid; cash requires explicit collection confirmation; free skips both.
         final paymentMethod = (data['paymentMethod'] as String?) ?? '';
         final paymentStatus = data['paymentStatus'] as String?;
         if (paymentMethod == 'online' && paymentStatus != 'paid') {
@@ -644,9 +601,6 @@ class ReservationService {
           throw Exception('يرجى تأكيد استلام المبلغ نقداً قبل تأكيد الاستلام.');
         }
 
-        // ── لا داعي لحماية إضافية ضد الكتابة فوق pickedUpAt سابق: التحقق
-        // أعلاه من status == 'reserved' يضمن عدم الوصول لهذه النقطة إطلاقاً
-        // إن كان الحجز مؤكَّداً من قبل ──
         transaction.update(reservationRef, {
           'status': 'picked_up',
           'pickedAt': FieldValue.serverTimestamp(),
@@ -673,8 +627,7 @@ class ReservationService {
       throw Exception(raw);
     }
 
-    // ── الإشعار يُرسَل فقط بعد نجاح المعاملة، أي مرة واحدة بالضبط لكل حجز؛
-    // فشله غير حرج ولا يُبطل تأكيد الاستلام الذي تم بالفعل ──
+    // Notification sent only after the transaction succeeds — exactly once per reservation; failure is non-critical.
     try {
       final freshSnap = await reservationRef.get();
       final data = freshSnap.data();
@@ -695,14 +648,9 @@ class ReservationService {
     }
   }
 
-  // ═════════════════════════════════════════════════════════════════════
-  // رفض/إلغاء الحجز من طرف المزوّد (Part 10) — على عكس cancelReservation
-  // (التي يستخدمها المستخدم ولها قيد زمني cancellationWindowMinutes)، لا
-  // يوجد أي قيد زمني هنا: يحق للمطعم رفض الطلب في أي وقت قبل الاستلام.
-  // العملية بالكامل ذرّية: تحديث حالة الحجز + استرداد المبلغ منطقياً (لا
-  // توجد بوابة دفع حقيقية في هذا المشروع) + إرجاع الكمية، كلها ضمن نفس
-  // المعاملة أو لا شيء منها إطلاقاً ──
-  // ═════════════════════════════════════════════════════════════════════
+  // Provider-side rejection — no time limit (unlike user cancellation which has
+  // cancellationWindowMinutes). Atomic: status update + logical refund + quantity
+  // restore all in one transaction.
   Future<void> rejectReservationByProvider({
     required String reservationId,
     required String reason,
@@ -716,8 +664,7 @@ class ReservationService {
     final reservationRef =
         _firestore.collection('reservations').doc(reservationId);
 
-    // ── نتائج تُحدَّد داخل المعاملة وتُستخدَم بعدها لبناء رسالة الإشعار
-    // الصحيحة (نجاح الاسترداد/قيد المعالجة/دفع نقدي) ──
+    // Extracted inside the transaction; used after it completes to build the correct notification.
     bool refundApplied = false;
     num refundAmount = 0;
     String currency = 'ILS';
@@ -739,7 +686,7 @@ class ReservationService {
         }
 
         final currentStatus = (resData['status'] as String?) ?? '';
-        // ── idempotent: رفض مزدوج سريع لا يُعيد الكمية أو الاسترداد مرتين ──
+        // Idempotent: fast double-reject doesn't restore quantity or issue a refund twice.
         if (currentStatus == 'cancelled') {
           throw Exception('تم إلغاء هذا الحجز مسبقاً');
         }
@@ -762,11 +709,10 @@ class ReservationService {
             ? rawTotal
             : (rawUnitPrice is num ? rawUnitPrice * qty : 0);
 
-        // ── استرداد منطقي فقط للحجوزات المدفوعة إلكترونياً وبحالة paid
-        // فعلاً؛ لا شيء آخر (نقدي/مجاني/غير مدفوع بعد) يحتاج استرداداً ──
+        // Logical refund only for online reservations that are actually paid; cash/free/pending are skipped.
         refundApplied = paymentMethod == 'online' && paymentStatus == 'paid';
 
-        // ── إرجاع الكمية للعرض المرتبط، إن وُجد ──
+        // Restore quantity on the linked offer, if it still exists.
         if (offerIdOnReservation.isNotEmpty) {
           final offerRef =
               _firestore.collection('offers').doc(offerIdOnReservation);
@@ -795,7 +741,7 @@ class ReservationService {
             'refundAmount': refundAmount,
             'refundReason': reason,
             'refundedBy': uid,
-            // ── سجلّ تدقيق كامل: حالة الدفع الأصلية والنهائية معاً ──
+            // Full audit trail: both pre- and post-refund payment status.
             'paymentStatusBeforeRefund': paymentStatus,
           },
         });
@@ -820,7 +766,7 @@ class ReservationService {
       throw Exception('تعذّر رفض الطلب، يرجى المحاولة مرة أخرى.');
     }
 
-    // ── إشعار المستخدم — غير حرج، بعد نجاح المعاملة فقط (مرة واحدة بالضبط) ──
+    // User notification — non-critical; sent only after the transaction succeeds.
     if (userId.isEmpty) return;
     final message = paymentMethod == 'online'
         ? (refundApplied
@@ -841,12 +787,9 @@ class ReservationService {
     }
   }
 
-  // ── يسجّل استرداداً منطقياً لدفعة إلكترونية محاكاة نجحت (لا يوجد بوابة
-  // دفع حقيقية في هذا المشروع) لكن الحجز نفسه تعذّر إنشاؤه بعدها مباشرة
-  // (مثلاً نفدت الكمية بين نجاح الدفع وبدء معاملة الحجز). لا يوجد مستند
-  // حجز بعد في هذه الحالة (المعاملة رمت استثناءً قبل إنشائه)، لذا يُسجَّل
-  // الاسترداد في مجموعة مستقلة بدل تحديث حجز غير موجود، فتبقى قابلة
-  // للمراجعة والتسوية الإدارية لاحقاً (Part 10/11 — سجل تسوية قابل للاسترجاع) ──
+  // Records a logical refund when payment succeeded but the subsequent reservation
+  // transaction failed (e.g. quantity ran out between payment and reservation start).
+  // No reservation doc exists yet, so the record goes to a separate collection for later admin reconciliation.
   Future<void> recordSimulatedPaymentReversal({
     required String offerId,
     required String reason,
@@ -867,8 +810,7 @@ class ReservationService {
       debugPrint('[ReservationService] recordSimulatedPaymentReversal OK '
           'offerId=$offerId amount=$amount $currency reason=$reason');
     } catch (e) {
-      // ── لا يُسمح بالفشل الصامت: يُطبع بوضوح لبقاء الأثر قابلاً للتشخيص
-      // حتى لو تعذّرت الكتابة نفسها (مثلاً بسبب صلاحيات) ──
+      // Log the failure explicitly so the reconciliation gap stays visible even if the write was denied.
       debugPrint('[ReservationService] recordSimulatedPaymentReversal '
           'FAILED to persist reconciliation record — offerId=$offerId '
           'amount=$amount $currency reason=$reason error=$e');

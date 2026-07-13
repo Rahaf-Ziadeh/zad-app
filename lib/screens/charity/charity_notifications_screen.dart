@@ -8,9 +8,6 @@ import 'charity_donations_screen.dart';
 import 'charity_publish_surplus_screen.dart';
 import 'charity_reservations_screen.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// شاشة إشعارات الجمعية — قراءة/غير مقروء، تصفح حسب النوع
-// ─────────────────────────────────────────────────────────────────────────────
 class CharityNotificationsScreen extends StatelessWidget {
   CharityNotificationsScreen({super.key});
 

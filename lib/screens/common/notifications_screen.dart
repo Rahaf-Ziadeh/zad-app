@@ -6,12 +6,11 @@ import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 import 'notification_details_screen.dart';
 
-/// شاشة إشعارات مشتركة (مطعم/جمعية/أدمن). الضغط على أي إشعار يفتح
-/// [NotificationDetailsScreen] أولاً (العنوان الكامل، النص، التاريخ، حالة
-/// القراءة)، وزر داخلها يفتح المحتوى المرتبط عبر [onOpenRelated] — الذي
-/// يجب أن يتولى بنفسه حالة "المحتوى لم يعد موجوداً" برسالة ودّية بدل ترك
-/// الإشعار بلا وجهة (لا يوجد أبداً إشعار بلا معالجة: أي نوع غير معروف يجب
-/// أن يعرض onOpenRelated رسالة واضحة بدلاً من فعل لا شيء).
+/// Shared notifications screen (restaurant/charity/admin). Tapping any notification
+/// opens [NotificationDetailsScreen] first (full title, body, date, read state);
+/// its button opens the linked content via [onOpenRelated], which must handle
+/// "content no longer exists" gracefully — every notification type must produce
+/// a clear response, never silently do nothing.
 class NotificationsScreen extends StatelessWidget {
   final NotificationOpenHandler onOpenRelated;
 

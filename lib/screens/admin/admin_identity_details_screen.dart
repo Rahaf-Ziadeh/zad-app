@@ -5,10 +5,9 @@ import 'package:flutter/material.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// شاشة تفاصيل طلب توثيق هوية فرد — تعرض الصورة وتتيح القبول/الرفض.
-// تُفتح من: بطاقة الهوية في AdminVerificationPanel أو إشعار 'identity_verification_request'.
-// ─────────────────────────────────────────────────────────────────────────────
+// Identity verification detail screen — shows the submitted ID photo and allows approve/reject/
+// request-more-info. Opened from: AdminVerificationPanel's identity card or an
+// 'identity_verification_request' notification.
 class AdminIdentityDetailsScreen extends StatefulWidget {
   final String docId; // = Firebase Auth UID
   final Map<String, dynamic> data; // users/{uid} doc data
@@ -460,7 +459,6 @@ class _AdminIdentityDetailsScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── المعلومات الشخصية ──
             _SectionCard(
               title: 'المعلومات الشخصية',
               icon: Icons.person_outline_rounded,
@@ -484,7 +482,6 @@ class _AdminIdentityDetailsScreenState
 
             const SizedBox(height: 12),
 
-            // ── حالة التحقق ──
             _SectionCard(
               title: 'حالة التحقق',
               icon: Icons.verified_user_outlined,
@@ -524,7 +521,6 @@ class _AdminIdentityDetailsScreenState
 
             const SizedBox(height: 12),
 
-            // ── صورة الهوية ──
             _SectionCard(
               title: 'صورة الهوية',
               icon: Icons.badge_outlined,
@@ -545,7 +541,7 @@ class _AdminIdentityDetailsScreenState
 
             const SizedBox(height: 24),
 
-            // ── إجراءات المراجعة — shown while pending or awaiting additional info ──
+            // Review actions — shown while pending or awaiting additional info.
             if (_status == 'pending' || _status == 'pending_additional_info')
               Column(
                 children: [

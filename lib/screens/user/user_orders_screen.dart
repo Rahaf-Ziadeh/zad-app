@@ -10,8 +10,7 @@ import 'provider_public_profile_screen.dart';
 import 'qr_code_screen.dart';
 
 class UserOrdersScreen extends StatefulWidget {
-  // ── يُستخدم فقط لتحديد التبويب المبدئي عند فتح الشاشة، وإلا فالتبويبات
-  // الأربعة الجديدة هي المصدر الفعلي للفلترة أثناء الاستخدام ──
+  // Only sets the initial tab on open; tab selection is the actual filter during use.
   final String? statusFilter;
 
   const UserOrdersScreen({
@@ -27,12 +26,10 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
-  // ── معرّفات الحجوزات الجاري إلغاؤها حالياً: تمنع ضغطة ثانية سريعة على
-  // نفس الحجز من بدء عملية إلغاء موازية، وتُستخدم لتعطيل زر "إلغاء" الخاص
-  // بتلك البطاقة فقط أثناء المعالجة ──
+  // Tracks in-progress cancels; disables only that card's button and prevents parallel cancel calls.
   final Set<String> _cancellingIds = {};
 
-  // ── null = "الكل"، وإلا القيمة الفعلية لحقل status في مجموعة reservations ──
+  // null means "All"; other values match the status field in the reservations collection.
   static const List<String?> _statuses = [
     null,
     'reserved',
@@ -71,7 +68,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
     return query.orderBy('createdAt', descending: true).snapshots();
   }
 
-  // ── تسميات التبويبات (مختلفة عن شارة الحالة داخل البطاقة والتي تبقى كما هي) ──
+  // Tab labels — distinct from the status badge text shown inside each card.
   String _tabLabel(String? status) {
     switch (status) {
       case 'reserved':
@@ -111,11 +108,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
     }
   }
 
-  // ── يستدعي ReservationService().cancelReservation — مصدر واحد لمنطق
-  // الإلغاء الذرّي (كانت هذه الشاشة تكرر معاملة Firestore بنفسها سابقاً،
-  // منفصلة عن ReservationService.cancelReservation ولا تستخدمها إطلاقاً).
-  // حارس _cancellingIds يُضبط قبل أول await فيمنع أي ضغطة إلغاء ثانية
-  // سريعة على نفس الحجز من بدء عملية موازية ──
+  // Delegates to ReservationService.cancelReservation — _cancellingIds prevents parallel cancels.
   Future<void> _cancelReservation({
     required BuildContext context,
     required String reservationId,
@@ -155,13 +148,8 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
     }
   }
 
-  // ── يسمح فقط بمرور رسائل الاستثناءات العربية النظيفة التي يضمنها
-  // ReservationService.cancelReservation بالفعل (فهي تلتقط أي خطأ غير
-  // متوقع بنفسها وتستبدله برسالة عربية آمنة قبل الرمي). تُطابَق ببادئة
-  // ثابتة بدل نص كامل حتى تبقى متزامنة مع cancellationWindowMinutes دون
-  // تكرار الرقم هنا. أي نص آخر غير معروف — بما فيه أخطاء JS-interop الخام
-  // على الويب مثل "Dart exception thrown from converted Future..." — لا
-  // يُعرض أبداً كما هو، بل يُستبدل بنفس الرسالة العامة الآمنة ──
+  // Passes through only the known Arabic messages that ReservationService already guarantees;
+  // anything else (raw platform/JS-interop errors) gets a safe generic fallback.
   static String _cancelErrorMessage(Object e) {
     final raw = e.toString().replaceAll('Exception: ', '').trim();
     const knownPrefixes = [
@@ -185,8 +173,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
   }) {
     showDialog(
       context: context,
-      // ── نستخدم سياق النافذة الخاص بها (dialogContext) لإغلاقها، وليس سياق
-      // الشاشة الخارجية: هذه الشاشة قد تكون متداخلة ضمن Navigator خاص بتبويبها ──
+      // Use dialogContext to pop the dialog — this screen may be inside a nested Navigator.
       builder: (dialogContext) => AlertDialog(
         title: const Text('إلغاء الحجز'),
         content: const Text('هل أنت متأكد من إلغاء هذا الحجز؟'),
@@ -300,7 +287,7 @@ class _UserOrdersScreenState extends State<UserOrdersScreen>
             final providerName = (data['providerName'] as String? ?? '').trim();
             final displayProvider =
                 providerName.isNotEmpty ? providerName : providerRole;
-            // ── الملف العام متاح فقط للمطاعم والجمعيات، وليس للأفراد ──
+            // Public profiles are only available for restaurants and charities, not individuals.
             final isClickableProvider =
                 (providerRole == 'restaurant' || providerRole == 'charity') &&
                     providerUserId.isNotEmpty;

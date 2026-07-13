@@ -922,7 +922,6 @@ class SheetChip extends StatelessWidget {
   }
 }
 
-// ── شارة حالة فرعية لدورة حياة التبرع ──────────────────────────────────────
 Widget _donationSubStatusBadge(String status) {
   late final String label;
   late final Color color;
@@ -957,7 +956,6 @@ Widget _donationSubStatusBadge(String status) {
   );
 }
 
-// ── بيانات التبرع الكاملة — BottomSheet ─────────────────────────────────────
 void _showDonationDetailsSheet(
   BuildContext context,
   String docId,
@@ -996,11 +994,9 @@ void _showDonationDetailsSheet(
                 controller: controller,
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                 children: [
-                  // ── صورة ──
                   _DonationDetailImage(data: data),
                   const SizedBox(height: 16),
 
-                  // ── العنوان + الحالة ──
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1030,7 +1026,6 @@ void _showDonationDetailsSheet(
                   const Divider(height: 1),
                   const SizedBox(height: 14),
 
-                  // ── تفاصيل المنتج ──
                   _DetailRow(
                       icon: Icons.category_outlined,
                       label: 'الفئة',
@@ -1057,26 +1052,16 @@ void _showDonationDetailsSheet(
                         value:
                             '${(data['latitude'] as num).toStringAsFixed(5)}, ${(data['longitude'] as num?)?.toStringAsFixed(5) ?? '—'}'),
 
-                  // ── أوقات الاستلام ──
                   _PickupTimeRow(data: data),
-
-                  // ── تاريخ الانتهاء ──
                   _ExpiryRow(data: data),
-
-                  // ── تاريخ الإنشاء ──
                   _CreatedAtRow(data: data),
 
                   const SizedBox(height: 14),
                   const Divider(height: 1),
                   const SizedBox(height: 14),
 
-                  // ── المتبرع ──
                   _DonorRow(ctx: context, data: data),
-
-                  // ── الجمعية المرتبطة ──
                   _CharityRow(data: data),
-
-                  // ── عرض مرتبط ──
                   if ((data['publishedOfferId'] as String? ?? '').isNotEmpty)
                     _DetailRow(
                         icon: Icons.share_rounded,
@@ -1092,7 +1077,6 @@ void _showDonationDetailsSheet(
   );
 }
 
-// ── صورة التبرع في الـ Sheet ─────────────────────────────────────────────────
 class _DonationDetailImage extends StatelessWidget {
   final Map<String, dynamic> data;
   const _DonationDetailImage({required this.data});
@@ -1117,7 +1101,6 @@ class _DonationDetailImage extends StatelessWidget {
   }
 }
 
-// ── صف تفصيل عام ─────────────────────────────────────────────────────────────
 class _DetailRow extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1152,7 +1135,6 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-// ── وقت الاستلام ─────────────────────────────────────────────────────────────
 class _PickupTimeRow extends StatelessWidget {
   final Map<String, dynamic> data;
   const _PickupTimeRow({required this.data});
@@ -1171,7 +1153,6 @@ class _PickupTimeRow extends StatelessWidget {
   }
 }
 
-// ── تاريخ الانتهاء ────────────────────────────────────────────────────────────
 class _ExpiryRow extends StatelessWidget {
   final Map<String, dynamic> data;
   const _ExpiryRow({required this.data});
@@ -1192,7 +1173,6 @@ class _ExpiryRow extends StatelessWidget {
   }
 }
 
-// ── تاريخ الإنشاء ─────────────────────────────────────────────────────────────
 class _CreatedAtRow extends StatelessWidget {
   final Map<String, dynamic> data;
   const _CreatedAtRow({required this.data});
@@ -1216,7 +1196,6 @@ class _CreatedAtRow extends StatelessWidget {
   }
 }
 
-// ── بيانات المتبرع مع إمكانية التنقل ─────────────────────────────────────────
 class _DonorRow extends StatelessWidget {
   final BuildContext ctx;
   final Map<String, dynamic> data;
@@ -1294,7 +1273,6 @@ class _DonorRow extends StatelessWidget {
   }
 }
 
-// ── الجمعية المرتبطة ─────────────────────────────────────────────────────────
 class _CharityRow extends StatelessWidget {
   final Map<String, dynamic> data;
   const _CharityRow({required this.data});
@@ -1346,7 +1324,7 @@ class DonationList extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        // ── فلتر الجمعية + ترتيب client-side بالأحدث ──
+        // Filter to the current charity's donations; sorted client-side since whereIn streams can't use orderBy.
         var docs = snapshot.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
           final targetCharityId = data['targetCharityId']?.toString() ?? '';
@@ -1359,7 +1337,6 @@ class DonationList extends StatelessWidget {
               reviewedBy == currentCharityId;
         }).toList();
 
-        // ترتيب client-side (يعوّض غياب orderBy في whereIn streams)
         docs.sort((a, b) {
           final aTime = (a.data() as Map)['createdAt'];
           final bTime = (b.data() as Map)['createdAt'];
@@ -1442,7 +1419,6 @@ class DonationList extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── صورة التبرع ──
                     if (imageUrl.isNotEmpty)
                       Image.network(
                         imageUrl,
@@ -1457,7 +1433,6 @@ class DonationList extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── رأس البطاقة ──
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1519,7 +1494,7 @@ class DonationList extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              // شارة الحالة الفرعية (للـ accepted tab)
+                              // Only shown on the accepted tab where multiple lifecycle stages coexist.
                               if (status == 'approved' ||
                                   status == 'received' ||
                                   status == 'redistributed' ||
@@ -1559,7 +1534,7 @@ class DonationList extends StatelessWidget {
                                 value: allergens.join('، ')),
 
                           const SizedBox(height: 14),
-                          // تمنع الـ InkWell الخارجي من التقاط نقرات الأزرار
+                          // Prevents the outer InkWell from capturing button taps.
                           buildActions(context, doc, data),
                         ],
                       ),
@@ -2098,7 +2073,6 @@ class SurplusCard extends StatelessWidget {
             const Divider(height: 1),
             const SizedBox(height: 12),
 
-            // ── تفاصيل ──
             OfferInfoRow(
                 icon: Icons.category_outlined, label: 'الفئة', value: category),
             OfferInfoRow(
@@ -2115,7 +2089,6 @@ class SurplusCard extends StatelessWidget {
 
             const SizedBox(height: 14),
 
-            // ── زرّ النشر ──
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -2143,9 +2116,6 @@ class SurplusCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة العرض المنشور
-// ─────────────────────────────────────────────
 class PublishedOfferCard extends StatelessWidget {
   final String offerId;
   final Map<String, dynamic> data;
@@ -2265,7 +2235,6 @@ class PublishedOfferCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // شريط تقدم الكمية
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2320,9 +2289,6 @@ class PublishedOfferCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة حجز الجمعية
-// ─────────────────────────────────────────────
 class CharityReservationCard extends StatelessWidget {
   final String reservationId;
   final Map<String, dynamic> data;
@@ -2567,9 +2533,6 @@ class CharityReservationCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بانر تم الاستلام
-// ─────────────────────────────────────────────
 class PickedUpReservationBanner extends StatelessWidget {
   const PickedUpReservationBanner({
     super.key,
@@ -2609,9 +2572,6 @@ class PickedUpReservationBanner extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بانر الحجز الملغي
-// ─────────────────────────────────────────────
 class CancelledReservationBanner extends StatelessWidget {
   const CancelledReservationBanner({
     super.key,
@@ -2651,9 +2611,6 @@ class CancelledReservationBanner extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// حالة عدم وجود حجوزات
-// ─────────────────────────────────────────────
 class EmptyCharityReservations extends StatelessWidget {
   final String? statusFilter;
 
@@ -2726,9 +2683,6 @@ class EmptyCharityReservations extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// نافذة تأكيد إلغاء الحجز
-// ─────────────────────────────────────────────
 Future<bool> showCancelReservationDialog({
   required BuildContext context,
 }) async {

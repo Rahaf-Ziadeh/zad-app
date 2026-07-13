@@ -14,8 +14,8 @@ import 'package:zad_app/utils/offer_utils.dart';
 
 import '../common/notifications_screen.dart';
 
-// ── تنقّل داخل قشرة لوحة تحكم المطعم: يبدّل التبويب مع فلتر اختياري ──
-// index: 1 = عروضي (مع offersFilter اختياري)، 2 = حجوزاتي (مع reservationsTab اختياري)
+// Callback for navigating within the restaurant dashboard shell.
+// index: 1 = My Offers (optional offersFilter), 2 = My Reservations (optional reservationsTab)
 typedef RestaurantTabNavigate = void Function(
   int index, {
   String? offersFilter,
@@ -46,8 +46,7 @@ class RestaurantHomeScreen extends StatelessWidget {
           .where('status', isEqualTo: 'reserved')
           .snapshots();
 
-  // ── يُفوَّض إلى الدالة المشتركة openRestaurantRelatedNotification حتى
-  // تُستخدم نفس منطق فتح الإشعارات من مصدر واحد (هنا ومن مساعد المطعم) ──
+  // Delegates to openRestaurantRelatedNotification so notification-opening logic stays in one place.
   Future<bool> _openRelatedNotification(
     BuildContext context,
     Map<String, dynamic> data,
@@ -110,11 +109,10 @@ class RestaurantHomeScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
         children: [
-          // ── بطاقة الترحيب ──
           WelcomeCard(user: user),
           const SizedBox(height: 20),
 
-          // ── شريط حالة التحقق: يظهر فقط أثناء إعادة المراجعة أو الرفض ──
+          // Verification status banner — only visible during re-review or rejection.
           StreamBuilder<DocumentSnapshot>(
             stream: _userStream(),
             builder: (context, snap) {
@@ -134,7 +132,6 @@ class RestaurantHomeScreen extends StatelessWidget {
             },
           ),
 
-          // ── إحصائيات ──
           StreamBuilder<QuerySnapshot>(
             stream: _myOffersStream(),
             builder: (context, offersSnap) {
@@ -143,10 +140,7 @@ class RestaurantHomeScreen extends StatelessWidget {
                 builder: (context, resSnap) {
                   final offers =
                       offersSnap.hasData ? offersSnap.data!.docs : [];
-                  // ── "نشطة" تعني: الحالة الفعلية 'available' (بعد اعتبار
-                  // انتهاء الصلاحية) مع وجود كمية متبقية فعلياً؛ عرض منتهي أو
-                  // نافد الكمية لا يُحتسَب كنشط حتى لو بقي status='available'
-                  // في المستند نفسه ──
+                  // "Active" = status 'available' + not expired + remaining quantity > 0.
                   final activeOffers = offers.where((doc) {
                     final d = doc.data() as Map<String, dynamic>;
                     final remaining =
@@ -196,7 +190,7 @@ class RestaurantHomeScreen extends StatelessWidget {
                       Expanded(
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-                          // ── تبويب "بانتظار الاستلام" داخل شاشة حجوزاتي (index 1) ──
+                          // Navigate to the "Waiting for pickup" sub-tab inside My Reservations (tab index 1).
                           onTap: () {
                             debugPrint(
                                 '[RestaurantHome] tapped waiting reservations -> RestaurantReservationsScreen(initialTabIndex: 1 / بانتظار الاستلام)');
@@ -274,11 +268,9 @@ void _cannotOpenRestaurantNotification(BuildContext context) {
   );
 }
 
-// ── يفتح المحتوى المرتبط بإشعار مطعم حسب نوعه (Part 13) — يتحقق دائماً من
-// وجود السجل المرتبط فعلياً قبل التنقّل، ولا يترك أي نوع بلا معالجة (أي نوع
-// غير معروف يعرض رسالة واضحة بدل عدم فعل شيء). دالة مشتركة (وليست خاصة
-// بـ RestaurantHomeScreen) حتى تُستخدم أيضاً من مساعد المطعم (ChatbotScreen)
-// عند فتح الإشعارات، دون تكرار هذا المنطق في مكانين ──
+// Opens the content linked to a restaurant notification by type. Always verifies the linked
+// record exists before navigating; unknown types show a message rather than silently doing nothing.
+// Shared function (not scoped to RestaurantHomeScreen) so the restaurant chatbot can reuse it.
 Future<bool> openRestaurantRelatedNotification(
   BuildContext context,
   AppUser user,
@@ -307,8 +299,7 @@ Future<bool> openRestaurantRelatedNotification(
           return false;
         }
         final resStatus = (doc.data()?['status'] as String?) ?? 'reserved';
-        // ── تبويب "بانتظار الاستلام" للحجوزات النشطة، وإلا التبويب المطابق
-        // لحالتها الفعلية ──
+        // Navigate to the "Waiting for pickup" tab for active reservations, or the tab matching the actual status.
         final tabIndex = resStatus == 'reserved' || resStatus == 'confirmed'
             ? 1
             : resStatus == 'picked_up'
@@ -355,8 +346,7 @@ Future<bool> openRestaurantRelatedNotification(
         return true;
 
       case 'account':
-        // ── قرار إداري بخصوص حساب المطعم نفسه (اعتماد/رفض/إعادة مراجعة) —
-        // شاشة "حسابي" تعرض حالة التحقق الحالية وسبب الرفض إن وُجد ──
+        // Admin decision about the restaurant's own account — My Account shows current verification status and rejection reason.
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -376,9 +366,7 @@ Future<bool> openRestaurantRelatedNotification(
   }
 }
 
-// ─────────────────────────────────────────────
-// شريط تنبيه حالة التحقق على الرئيسية — إعادة مراجعة أو رفض
-// ─────────────────────────────────────────────
+// Verification status banner for the home screen — shown during re-review or rejection.
 class _VerificationBanner extends StatelessWidget {
   final bool isRejected;
   final String? rejectionReason;

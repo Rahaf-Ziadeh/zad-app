@@ -62,7 +62,6 @@ class OfferDetailsScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // ── صورة كبيرة مع AppBar شفاف ──
           SliverAppBar(
             expandedHeight: 280,
             pinned: true,
@@ -106,14 +105,12 @@ class OfferDetailsScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Badge السعر
                   Positioned(
                     top: 90,
                     right: 16,
                     child: buildPriceBadge(
                         isFree: isFree, discountPercent: discountPercent),
                   ),
-                  // Badge المسافة
                   if (distance != null)
                     Positioned(
                       bottom: 16,
@@ -151,7 +148,6 @@ class OfferDetailsScreen extends StatelessWidget {
             padding: const EdgeInsets.all(18),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── العنوان ──
                 Text(title,
                     style: const TextStyle(
                         fontSize: 24,
@@ -160,7 +156,7 @@ class OfferDetailsScreen extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                // ── المزوّد: قابل للنقر لفتح الملف العام (للمطعم/الجمعية فقط) ──
+                // Provider row — tappable for restaurants and charities; individuals have no public profile.
                 if (providerRole == 'restaurant' || providerRole == 'charity')
                   _ProviderChip(
                     providerUserId: (data['providerUserId'] as String?) ?? '',
@@ -183,7 +179,6 @@ class OfferDetailsScreen extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // ── السعر ──
                 OfferPriceRow(
                   isFree: isFree,
                   originalPrice: originalPrice,
@@ -193,7 +188,6 @@ class OfferDetailsScreen extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
-                // ── تفاصيل ──
                 _DetailCard(
                   children: [
                     OfferInfoRow(
@@ -223,7 +217,6 @@ class OfferDetailsScreen extends StatelessWidget {
                                 ? 'عرض واضح المحتوى'
                                 : 'عرض طعام',
                       ),
-                    // طرق الدفع المتاحة
                     if (!isFree)
                       OfferInfoRow(
                         icon: Icons.payment_rounded,
@@ -238,7 +231,6 @@ class OfferDetailsScreen extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // ── الوصف ──
                 if (description.isNotEmpty) ...[
                   _DetailCard(
                     title: 'الوصف',
@@ -253,7 +245,6 @@ class OfferDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // ── مسببات الحساسية ──
                 if (allergens.isNotEmpty) ...[
                   _DetailCard(
                     title: 'مسببات الحساسية الغذائية',
@@ -264,7 +255,6 @@ class OfferDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // ── تحذير الكمية ──
                 if (remainingQuantity <= 3 && remainingQuantity > 0) ...[
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -291,12 +281,10 @@ class OfferDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // ── تقييمات هذا العرض ──
                 _OfferRatings(offerId: docId),
 
                 const SizedBox(height: 24),
 
-                // ── زر الحجز ──
                 if (remainingQuantity > 0)
                   _ReserveButton(
                     docId: docId,
@@ -330,9 +318,6 @@ class OfferDetailsScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// زر الحجز — يفتح شاشة الدفع لو مدفوع
-// ─────────────────────────────────────────────
 class _ReserveButton extends StatefulWidget {
   final String docId;
   final Map<String, dynamic> data;
@@ -352,9 +337,8 @@ class _ReserveButtonState extends State<_ReserveButton> {
   bool _loading = false;
 
   Future<void> _proceed() async {
-    // ── تحقق مسبق من انتهاء صلاحية العرض قبل فتح نافذة اختيار الكمية/الدفع؛
-    // التحقق داخل ReservationService.reserveOffer (ضمن المعاملة) يبقى كشبكة
-    // أمان احتياطية نهائية ──
+    // Pre-check expiry before opening the confirmation dialog; reserveOffer's
+    // transaction remains the final safety net.
     if (isOfferExpired(widget.data)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -363,9 +347,8 @@ class _ReserveButtonState extends State<_ReserveButton> {
       return;
     }
 
-    // ── تحقق مسبق من وجود حجز نشط لهذا العرض قبل فتح نافذة اختيار الكمية/
-    // التأكيد أصلاً؛ التحقق داخل ReservationService.reserveOffer يبقى كشبكة
-    // أمان احتياطية دون تغيير ──
+    // Pre-check for an existing active reservation before opening the dialog;
+    // reserveOffer's own check inside the transaction remains the final guard.
     final hasActive = await hasActiveReservationForOffer(context, widget.docId);
     if (hasActive || !mounted) return;
 
@@ -400,7 +383,7 @@ class _ReserveButtonState extends State<_ReserveButton> {
     final maxQty =
         (widget.data['remainingQuantity'] as num?)?.toInt() ?? 1;
 
-    // مُغلَّف في قائمة ليكون قابلاً للتعديل داخل StatefulBuilder
+    // Wrapped in a list so StatefulBuilder can mutate it.
     final qty = [1];
 
     final result = await showDialog<bool>(
@@ -462,7 +445,6 @@ class _ReserveButtonState extends State<_ReserveButton> {
                   value: pickupTime,
                 ),
               ],
-              // ── اختيار الكمية (يظهر فقط لو متاح أكثر من وحدة) ──
               if (maxQty > 1) ...[
                 const SizedBox(height: 14),
                 const Divider(height: 1),
@@ -618,9 +600,6 @@ class _ReserveButtonState extends State<_ReserveButton> {
   }
 }
 
-// ─────────────────────────────────────────────
-// تقييمات العرض
-// ─────────────────────────────────────────────
 class _OfferRatings extends StatelessWidget {
   final String offerId;
   const _OfferRatings({required this.offerId});
@@ -746,9 +725,6 @@ class _OfferRatings extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// شريحة المزوّد: تجلب اسمه الحقيقي وتفتح ملفه العام عند الضغط
-// ─────────────────────────────────────────────
 class _ProviderChip extends StatelessWidget {
   final String providerUserId;
   final String providerRole; // 'restaurant' | 'charity'
@@ -762,7 +738,7 @@ class _ProviderChip extends StatelessWidget {
       providerRole == 'charity' ? 'charities' : 'restaurants';
   String get _roleLabel => providerRole == 'charity' ? 'جمعية خيرية' : 'مطعم';
 
-  // ── نفس نمط استخراج الاسم المعتمد في reservation_service.dart ──
+  // Same name-resolution order used in reservation_service.dart.
   Future<String> _resolveName() async {
     if (providerUserId.isEmpty) return _roleLabel;
     try {
@@ -847,9 +823,6 @@ class _ProviderChip extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// صف معلومة في نافذة التأكيد
-// ─────────────────────────────────────────────
 class _DialogRow extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -893,9 +866,6 @@ class _DialogRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة تفاصيل
-// ─────────────────────────────────────────────
 class _DetailCard extends StatelessWidget {
   final String? title;
   final List<Widget> children;
@@ -931,9 +901,6 @@ class _DetailCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// عرض مسببات الحساسية
-// ─────────────────────────────────────────────
 class _AllergyDisplay extends StatelessWidget {
   final List<String> allergens;
 

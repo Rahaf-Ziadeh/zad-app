@@ -32,7 +32,6 @@ class _LoginScreenState extends State<LoginScreen>
   String? _errorMessage;
   _BlockType _blockType = _BlockType.none;
 
-  // ── إعادة إرسال التحقق ──
   bool _resendLoading = false;
   int _resendCooldown = 0;
   Timer? _cooldownTimer;
@@ -141,7 +140,6 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  // ── استعادة كلمة المرور عبر Firebase ──
   Future<void> _forgotPassword() async {
     final email = _emailController.text.trim();
 
@@ -173,7 +171,6 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  // ── إعادة إرسال رابط التحقق ──
   Future<void> _resendVerification() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -259,7 +256,6 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  // ── الدخول كزائر ──
   Future<void> _continueAsGuest() async {
     setState(() => _isLoading = true);
 
@@ -316,7 +312,6 @@ class _LoginScreenState extends State<LoginScreen>
                   children: [
                     const SizedBox(height: 48),
 
-                    // ── لوجو ──
                     Hero(
                       tag: 'zad_logo',
                       child: Container(
@@ -350,7 +345,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 32),
 
-                    // ── البريد ──
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -363,7 +357,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 14),
 
-                    // ── الباسورد ──
                     TextFormField(
                       controller: _passwordController,
                       obscureText: !_showPassword,
@@ -383,7 +376,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 8),
 
-                    // ── تذكرني + نسيت كلمة المرور ──
                     Row(
                       children: [
                         Transform.scale(
@@ -410,7 +402,6 @@ class _LoginScreenState extends State<LoginScreen>
                       ],
                     ),
 
-                    // ── رسالة الخطأ ──
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 8),
                       if (_blockType == _BlockType.pending)
@@ -423,7 +414,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 20),
 
-                    // ── زر الدخول ──
                     SizedBox(
                       width: double.infinity,
                       height: 54,
@@ -444,7 +434,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 12),
 
-                    // ── إعادة إرسال رابط التحقق ──
                     _resendCooldown > 0
                         ? Text(
                             'إعادة الإرسال بعد $_resendCooldown ثانية',
@@ -474,7 +463,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 16),
 
-                    // ── فاصل ──
                     const Row(
                       children: [
                         Expanded(child: Divider()),
@@ -490,7 +478,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 20),
 
-                    // ── زائر ──
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -509,7 +496,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                     const SizedBox(height: 28),
 
-                    // ── إنشاء حساب ──
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -546,9 +532,6 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة الخطأ العامة
-// ─────────────────────────────────────────────
 class _ErrorBox extends StatelessWidget {
   final String message;
   const _ErrorBox({required this.message});
@@ -583,9 +566,6 @@ class _ErrorBox extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة الحساب بانتظار الموافقة
-// ─────────────────────────────────────────────
 class _PendingBox extends StatelessWidget {
   final String message;
   const _PendingBox({required this.message});
@@ -642,9 +622,6 @@ class _PendingBox extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة الحساب المرفوض
-// ─────────────────────────────────────────────
 class _RejectedBox extends StatelessWidget {
   final String message;
   const _RejectedBox({required this.message});

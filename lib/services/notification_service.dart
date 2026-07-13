@@ -12,9 +12,8 @@ class NotificationService {
         .snapshots();
   }
 
-  // ── إشعار لمستخدم واحد. relatedId/relatedRole اختياريان: يحملان معرّف
-  // السجل المرتبط (رقم حجز، معرّف عرض، معرّف مزوّد...) ودوره إن وُجد، حتى
-  // تتمكن شاشة الإشعارات من فتح الصفحة المرتبطة مباشرة عند الضغط ──
+  // relatedId/relatedRole carry the linked record (reservation, offer, provider…)
+  // so the notifications screen can navigate directly on tap.
   Future<void> sendNotification({
     required String userId,
     required String title,
@@ -38,7 +37,7 @@ class NotificationService {
     });
   }
 
-  // ── إشعار لمجموعة مستخدمين (batch) ──
+  // Batch notification to multiple users.
   Future<void> sendBulkNotification({
     required List<String> userIds,
     required String title,
@@ -68,7 +67,6 @@ class NotificationService {
     await batch.commit();
   }
 
-  // ── تمييز إشعار كمقروء ──
   Future<void> markAsRead(String notificationId) async {
     await _firestore
         .collection('notifications')
@@ -76,7 +74,6 @@ class NotificationService {
         .update({'isRead': true, 'readAt': FieldValue.serverTimestamp()});
   }
 
-  // ── تمييز كل إشعارات مستخدم كمقروءة ──
   Future<void> markAllAsRead(String userId) async {
     final query = await _firestore
         .collection('notifications')
@@ -115,7 +112,7 @@ class NotificationService {
     }
   }
 
-  // ── إشعار أدمن بطلب توثيق هوية — batch بمعرّف حتمي لمنع التكرار ──
+  // Notifies all admins when a user submits identity docs; deterministic doc ID prevents duplicates on re-upload.
   Future<void> notifyAdminsAboutIdentityVerification({
     required String userUid,
     required String userName,
@@ -156,7 +153,7 @@ class NotificationService {
     await batch.commit();
   }
 
-  // ── إشعار أدمن بإعادة إرسال وثائق التحقق بعد طلب معلومات إضافية ──
+  // Notifies admins when a user resubmits verification docs after being asked for more info.
   Future<void> notifyAdminsAboutIdentityResubmission({
     required String userUid,
     required String userName,
@@ -195,9 +192,9 @@ class NotificationService {
     await batch.commit();
   }
 
-  // ── إشعار أدمن بشكوى أو بلاغ جديد — batch بمعرّف حتمي لمنع التكرار.
-  // reportedUserId/reportedUserName: يُمرَّران فقط في حالة البلاغ عن مزوّد؛
-  // غيابهما يُفعِّل صياغة الشكوى العادية.
+  // Notifies all admins about a new complaint or report; deterministic doc ID prevents duplicates.
+  // reportedUserId/reportedUserName are only passed for provider reports;
+  // omitting them switches to the generic complaint wording.
   Future<void> notifyAdminsAboutComplaint({
     required String complaintId,
     required String complainantId,

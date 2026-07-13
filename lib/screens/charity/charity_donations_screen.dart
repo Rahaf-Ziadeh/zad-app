@@ -5,9 +5,6 @@ import '../../services/charity_data_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/charity_widgets.dart';
 
-// ─────────────────────────────────────────────
-// شاشة التبرعات — بانتظار المراجعة
-// ─────────────────────────────────────────────
 class CharityDonationsScreen extends StatefulWidget {
   final int initialTab;
 
@@ -129,7 +126,6 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          // ── بانتظار المراجعة ──
           DonationList(
             stream: _dataService.watchPendingDonations(),
             filterByCharity: true,
@@ -179,7 +175,6 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
             emptyMessage: 'لا توجد تبرعات بانتظار المراجعة 🎉',
           ),
 
-          // ── مقبولة — جميع مراحل دورة الحياة بعد القبول ──
           DonationList(
             stream: _dataService.watchAcceptedDonations(),
             filterByCharity: false,
@@ -193,7 +188,7 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
                   data['title'] as String? ??
                   'التبرع';
 
-              // approved → تأكيد الاستلام
+              // approved → show "confirm receipt" button.
               if (status == 'approved') {
                 return SizedBox(
                   width: double.infinity,
@@ -214,7 +209,7 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
                 );
               }
 
-              // received → نشر كعرض للمستفيدين
+              // received → show "publish to beneficiaries" button.
               if (status == 'received') {
                 return SizedBox(
                   width: double.infinity,
@@ -234,7 +229,7 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
                 );
               }
 
-              // redistributed / published → حالة قراءة فقط
+              // redistributed / published → read-only state indicator.
               return Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -262,7 +257,6 @@ class _CharityDonationsScreenState extends State<CharityDonationsScreen>
             emptyMessage: 'لا توجد تبرعات مقبولة حالياً',
           ),
 
-          // ── مرفوضة ──
           DonationList(
             stream: _dataService.watchRejectedDonations(),
             filterByCharity: false,

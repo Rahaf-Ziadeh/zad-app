@@ -6,11 +6,9 @@ import '../../utils/offer_utils.dart';
 import 'offer_details_screen.dart';
 import 'provider_public_profile_screen.dart';
 
-// ─────────────────────────────────────────────
-// نتائج البحث الشامل: يجلب العروض والباقات والمطاعم والجمعيات النشطة مرة
-// واحدة، ثم يُطبّق فلترة نصية من جهة العميل (Firestore لا يدعم بحثاً نصياً
-// كاملاً مباشرة). النتائج مقسّمة إلى تبويبات: الكل/العروض/الباقات/المطاعم/
-// الجمعيات ──
+// Full-text search results: fetches active offers, packages, restaurants, and charities
+// once on open, then applies client-side text filtering (Firestore has no native
+// full-text search). Results split into tabs: All/Offers/Packages/Restaurants/Charities.
 class SearchResultsScreen extends StatefulWidget {
   final String initialQuery;
   const SearchResultsScreen({super.key, this.initialQuery = ''});
@@ -54,8 +52,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
     super.dispose();
   }
 
-  // ── يجلب البيانات النشطة مرة واحدة فقط عند فتح الشاشة، ثم كل عملية بحث
-  // لاحقة تُصفّي القوائم المحمَّلة مسبقاً دون إعادة الاستعلام من Firestore ──
+  // Fetches active data once on open; subsequent searches filter the in-memory
+  // lists without re-querying Firestore.
   Future<void> _loadData() async {
     setState(() {
       _loading = true;
@@ -263,9 +261,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
   }
 }
 
-// ─────────────────────────────────────────────
-// تبويب "الكل": أقسام مجمّعة لكل نوع نتيجة، بنفس نمط عناوين الأقسام
-// المستخدم في بقية الشاشات ──
+// "All" tab: results grouped by type with section headers.
 class _AllResultsTab extends StatelessWidget {
   final List<QueryDocumentSnapshot> offers;
   final List<QueryDocumentSnapshot> packages;
@@ -380,9 +376,6 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة نتيجة عرض/باقة
-// ─────────────────────────────────────────────
 class _OfferResultTile extends StatelessWidget {
   final QueryDocumentSnapshot doc;
   const _OfferResultTile({required this.doc});
@@ -457,9 +450,6 @@ class _OfferResultTile extends StatelessWidget {
       );
 }
 
-// ─────────────────────────────────────────────
-// بطاقة نتيجة مطعم/جمعية
-// ─────────────────────────────────────────────
 class _ProviderResultTile extends StatelessWidget {
   final QueryDocumentSnapshot doc;
   final String role; // 'restaurant' | 'charity'

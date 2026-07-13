@@ -7,7 +7,7 @@ import '../utils/offer_utils.dart';
 import '../screens/user/offer_details_screen.dart';
 
 // ─────────────────────────────────────────────
-// بطاقة الترحيب
+// Welcome card
 // ─────────────────────────────────────────────
 class WelcomeCard extends StatelessWidget {
   final AppUser user;
@@ -100,7 +100,7 @@ class WelcomeCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// بطاقة إحصائية
+// Stat card
 // ─────────────────────────────────────────────
 class StatCard extends StatelessWidget {
   final String title;
@@ -174,7 +174,7 @@ class StatCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// بطاقة تصفح سريع
+// Quick-browse card
 // ─────────────────────────────────────────────
 class BrowseCard extends StatelessWidget {
   final String title;
@@ -229,7 +229,7 @@ class BrowseCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// إجراء سريع
+// Action tile
 // ─────────────────────────────────────────────
 class ActionTile extends StatelessWidget {
   final IconData icon;
@@ -307,7 +307,7 @@ class ActionTile extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// آخر العروض
+// Latest offers preview
 // ─────────────────────────────────────────────
 class LatestOffersPreview extends StatelessWidget {
   final VoidCallback onViewAll;
@@ -316,7 +316,7 @@ class LatestOffersPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      // ── يُجلب أكثر من 3 لتعويض ما قد يُستبعَد لاحقاً كعروض منتهية الصلاحية ──
+      // Fetch more than 3 so expired offers can be filtered out client-side.
       stream: FirebaseFirestore.instance
           .collection('offers')
           .where('status', isEqualTo: 'available')

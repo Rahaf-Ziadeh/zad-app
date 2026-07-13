@@ -31,13 +31,11 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
   DateTime? _expiryDate;
   double? _latitude;
   double? _longitude;
-  String _locationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
+  String _locationSource = 'manual'; // 'gps', 'map', or 'manual'
 
-  // وقت الاستلام
   TimeOfDay? _pickupStartTime;
   TimeOfDay? _pickupEndTime;
 
-  // مسببات الحساسية
   Set<String> _selectedAllergens = {};
 
   @override
@@ -82,7 +80,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
     return '$h:$m';
   }
 
-  // ── فتح شاشة اختيار الموقع على خريطة OpenStreetMap ──
   Future<void> _openLocationPicker() async {
     final result = await Navigator.push<LocationPickerResult>(
       context,
@@ -108,7 +105,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
   Future<void> _publish() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    // ── تحقق من موقع الاستلام ──
     final locationText = _locationController.text.trim();
     if (locationText.isEmpty && _latitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -120,8 +116,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
       return;
     }
 
-    // ── تحقق من وقت الاستلام: كلا الحقلين مطلوبان، ووقت النهاية يجب أن
-    // يكون بعد وقت البداية ──
+    // End time must be strictly after start time.
     if (_pickupStartTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى تحديد وقت بداية الاستلام')),
@@ -146,15 +141,14 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
       return;
     }
 
-    // ── التحقق من رقم الهوية الوطنية وصورتها: تُطلب مرة واحدة فقط، ثم يتابع
-    // النشر تلقائياً بعد الحفظ دون الحاجة للضغط على "نشر العرض" مجدداً ──
+    // National ID is collected once; publish resumes automatically after the user saves it.
     final identityReady = await ensureNationalIdSaved(context);
     if (!mounted || !identityReady) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // ── حل موقع الاستلام إذا كان فارغاً مع وجود إحداثيات ──
+      // Reverse-geocode coords into a human-readable address if the text field is empty.
       var resolvedLocation = locationText;
       if (resolvedLocation.isEmpty && _latitude != null) {
         final address = await LocationService().getAddressFromCoordinates(
@@ -265,7 +259,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
             const SizedBox(height: 20),
 
-            // ── مجاني أو بسعر رمزي ──
             Row(
               children: [
                 Expanded(
@@ -305,7 +298,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // اسم الطعام
                     TextFormField(
                       controller: _titleController,
                       validator: (v) => v == null || v.trim().isEmpty
@@ -320,7 +312,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 14),
 
-                    // الفئة
                     const SectionLabel(text: 'الفئة'),
                     const SizedBox(height: 8),
                     Wrap(
@@ -354,7 +345,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 14),
 
-                    // الكمية
                     TextFormField(
                       controller: _quantityController,
                       keyboardType: TextInputType.number,
@@ -378,7 +368,7 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 14),
 
-                    // السعر — يظهر فقط لو مش مجاني
+                    // Price field — only shown when the offer isn't free.
                     if (!_isFree) ...[
                       TextFormField(
                         controller: _priceController,
@@ -404,7 +394,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
                       const SizedBox(height: 14),
                     ],
 
-                    // تاريخ الانتهاء (اختياري)
                     InkWell(
                       onTap: _pickDate,
                       borderRadius: BorderRadius.circular(12),
@@ -445,7 +434,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 14),
 
-                    // وقت الاستلام
                     const SectionLabel(text: 'وقت الاستلام *'),
                     const SizedBox(height: 8),
                     Row(
@@ -538,7 +526,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 14),
 
-                    // موقع الاستلام
                     TextFormField(
                       controller: _locationController,
                       decoration: const InputDecoration(
@@ -550,7 +537,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 10),
 
-                    // زر تحديد الموقع على الخريطة
                     GestureDetector(
                       onTap: _openLocationPicker,
                       child: Container(
@@ -599,7 +585,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 14),
 
-                    // الوصف
                     TextFormField(
                       controller: _descController,
                       maxLines: 3,
@@ -615,7 +600,6 @@ class _UserPublishOfferScreenState extends State<UserPublishOfferScreen> {
 
                     const SizedBox(height: 18),
 
-                    // مسببات الحساسية
                     AllergyCheckboxPanel(
                       selected: _selectedAllergens,
                       onChanged: (v) => setState(() => _selectedAllergens = v),

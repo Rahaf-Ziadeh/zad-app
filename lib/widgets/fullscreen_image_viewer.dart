@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// شاشة معاينة الصورة بملء الشاشة — خلفية داكنة، زر رجوع، وتكبير/تصغير
-/// عبر InteractiveViewer، مع حالتي التحميل والخطأ.
+/// Full-screen image viewer — dark background, back button, pinch-zoom via InteractiveViewer,
+/// with loading and error states.
 class FullScreenImageViewer extends StatelessWidget {
   final String imageUrl;
   final String? title;
@@ -48,8 +48,7 @@ class FullScreenImageViewer extends StatelessWidget {
   }
 }
 
-/// يفتح [FullScreenImageViewer] فوق الشاشة الحالية. لا شيء يحدث إن كان
-/// الرابط فارغاً.
+/// Pushes [FullScreenImageViewer] over the current screen. No-op if imageUrl is empty.
 void openFullScreenImage(BuildContext context, String imageUrl, {String? title}) {
   if (imageUrl.isEmpty) return;
   Navigator.push(
@@ -60,8 +59,8 @@ void openFullScreenImage(BuildContext context, String imageUrl, {String? title})
   );
 }
 
-/// يلفّ أي صورة بمعالج نقر يفتح معاينة ملء الشاشة لها. يُستخدم أينما ظهرت
-/// صورة العرض الرئيسية (تفاصيل العرض، شاشات المالك، بطاقات "عروضي").
+/// Wraps any image with a tap handler that opens full-screen preview. Used wherever the main
+/// offer image appears (offer details, owner screens, "my offers" cards).
 class TappableOfferImage extends StatelessWidget {
   final String imageUrl;
   final String? title;

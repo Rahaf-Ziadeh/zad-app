@@ -53,12 +53,27 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_channel: true
+  remove_alpha_ios: true
+  background_color: "#FFFFFF"
+  # Pre-padded icon: logo at 65% of canvas, centered on white background
+  image_path: "assets/images/zad_icon_padded.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  # Adaptive foreground: logo at 55% of canvas — stays within Android's 72dp safe zone
+  adaptive_icon_foreground: "assets/images/zad_adaptive_fg.png"
+  web:
+    generate: false
+  windows:
+    generate: false
+  macos:
+    generate: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

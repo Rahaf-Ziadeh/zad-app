@@ -6,12 +6,11 @@ import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/verification_utils.dart';
 
-/// إجراءات مشتركة على عرض المطعم (حذف/تبديل الحالة)، تُستخدم من كل من
-/// RestaurantOffersScreen وRestaurantOfferDetailsScreen حتى لا يتكرر منطق
-/// التحقق من الحجوزات النشطة قبل الحذف في أكثر من مكان.
+/// Shared offer actions (delete / toggle status) used by both RestaurantOffersScreen
+/// and RestaurantOfferDetailsScreen — keeps the active-reservation check in one place.
 
 Future<void> confirmDeleteOffer(BuildContext context, String offerId) async {
-  // ── حارس يمنع استدعاء pop مرتين لنفس الحوار (نقر مزدوج سريع على نفس الزر) ──
+  // Prevents double-pop on rapid double-tap of the same dialog button.
   var dialogPopped = false;
   final confirm = await showDialog<bool>(
     context: context,
@@ -44,7 +43,7 @@ Future<void> confirmDeleteOffer(BuildContext context, String offerId) async {
   final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
   try {
-    // ── قاعدة أعمال: لا يمكن حذف عرض مرتبط بحجز نشط أو مكتمل ──
+    // Business rule: offers with active or completed reservations cannot be deleted.
     final blockingSnap = await FirebaseFirestore.instance
         .collection('reservations')
         .where('offerId', isEqualTo: offerId)
@@ -119,9 +118,8 @@ Future<void> toggleOfferStatus(
     BuildContext context, String offerId, String currentStatus) async {
   final newStatus = currentStatus == 'available' ? 'closed' : 'available';
 
-  // ── إغلاق عرض مسموح دائماً أثناء إعادة المراجعة أو الرفض (لا يُغلق سوى
-  // اتجاه إعادة التفعيل closed→available)؛ يُتحقَّق من Firestore مباشرة
-  // كخط دفاع فعلي على مستوى الكتابة ──
+  // Closing is always allowed during re-review or rejection; only the closed→available
+  // direction is blocked. Firestore is checked directly as the actual write-time guard.
   if (newStatus == 'available') {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final canReactivate = await canPublishOrReactivateOffers(uid);

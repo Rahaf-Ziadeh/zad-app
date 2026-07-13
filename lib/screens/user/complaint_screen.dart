@@ -5,9 +5,6 @@ import 'package:flutter/material.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 
-// ─────────────────────────────────────────────
-// شاشة الشكوى
-// ─────────────────────────────────────────────
 class ComplaintScreen extends StatefulWidget {
   const ComplaintScreen({super.key});
 
@@ -186,7 +183,6 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
       child: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          // ── تنبيه ──
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -218,7 +214,6 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // رقم العرض
                   TextFormField(
                     controller: _offerIdController,
                     decoration: const InputDecoration(
@@ -228,7 +223,6 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // نوع الشكوى
                   const Text('نوع الشكوى',
                       style: TextStyle(
                           fontSize: 13,
@@ -271,7 +265,6 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // وصف الشكوى
                   TextFormField(
                     controller: _descController,
                     maxLines: 5,

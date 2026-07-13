@@ -22,13 +22,11 @@ class PackagesTab extends StatefulWidget {
 }
 
 class _PackagesTabState extends State<PackagesTab> {
-  // ── فلاتر ──
   String _packageTypeFilter = 'all'; // all | mystery | restaurant
   String _priceFilter = 'all';       // all | free | paid
   String _sortOrder = 'newest';      // newest | nearest | price_asc
   double _radiusKm = 10.0;
 
-  // ── موقع ──
   Position? _userPosition;
   bool _locationLoading = true;
 
@@ -119,7 +117,6 @@ class _PackagesTabState extends State<PackagesTab> {
                   ),
                 ),
               ),
-              // عنوان + مسح
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
                 child: Row(
@@ -336,7 +333,6 @@ class _PackagesTabState extends State<PackagesTab> {
 
     return Column(
       children: [
-        // ── شريط الفلاتر ──
         Container(
           color: AppColors.card,
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -437,7 +433,6 @@ class _PackagesTabState extends State<PackagesTab> {
         ),
         const Divider(height: 1),
 
-        // ── قائمة الباقات ──
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
@@ -501,9 +496,6 @@ class _PackagesTabState extends State<PackagesTab> {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة الباقة
-// ─────────────────────────────────────────────
 class _PackageCard extends StatelessWidget {
   final String docId;
   final Map<String, dynamic> data;
@@ -680,9 +672,6 @@ class _PackageCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// زر الحجز
-// ─────────────────────────────────────────────
 class _ReserveButton extends StatefulWidget {
   final String docId;
   final Map<String, dynamic> data;
@@ -767,8 +756,8 @@ class _ReserveButtonState extends State<_ReserveButton> {
       return;
     }
 
-    // ── تحقق مسبق من وجود حجز نشط لهذه الباقة قبل فتح صحيفة اختيار الكمية؛
-    // التحقق داخل ReservationService.reserveOffer يبقى كشبكة أمان احتياطية ──
+    // Pre-check for an existing active reservation before opening the quantity sheet;
+    // ReservationService.reserveOffer also checks, acting as a final safety net.
     final hasActive = await hasActiveReservationForOffer(context, widget.docId);
     if (hasActive || !mounted) return;
 

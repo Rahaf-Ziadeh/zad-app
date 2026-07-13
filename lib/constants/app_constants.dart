@@ -1,10 +1,9 @@
 class AppConstants {
-  /// الرابط الافتراضي لصورة الباقة الغامضة عند عدم رفع صورة مخصصة
+  /// Fallback image for mystery packages when no custom image is uploaded.
   static const String defaultMysteryPackageImageUrl =
       'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da'
       '?w=800&auto=format&fit=crop&q=75';
 
-  // ── خيارات الحساسية الغذائية ──
   static const List<String> allergenOptions = [
     'حليب',
     'بيض',

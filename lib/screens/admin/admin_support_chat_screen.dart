@@ -34,7 +34,7 @@ class _AdminSupportChatScreenState extends State<AdminSupportChatScreen> {
   String get _chatUserName =>
       widget.chatData['userName'] as String? ?? 'مستخدم';
 
-  // ── يميّز الأدمن بين طلب دعم فرد أو مطعم أثناء الرد (Part 9) ──
+  // Distinguishes individual vs. restaurant/charity while the admin is replying.
   String get _chatUserRoleLabel {
     final role = widget.chatData['userRole'] as String? ?? 'user';
     return switch (role) {

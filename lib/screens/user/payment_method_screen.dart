@@ -32,15 +32,14 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   String get _title => widget.data['title'] ?? 'عرض طعام';
 
   Future<void> _confirm() async {
-    // ── حارس إضافي ضد الضغط المتكرر السريع، فوق تعطيل الزر أثناء التحميل ──
+    // Extra guard against rapid double-tap, on top of button-disable during loading.
     if (_isLoading) return;
     setState(() => _isLoading = true);
     try {
       if (_selectedMethod == 'online') {
-        // ── لا يُنشأ أي حجز هنا إطلاقاً: يُفتح مباشرة نموذج بيانات البطاقة،
-        // ولن يُستدعى ReservationService().reserveOffer إلا بعد نجاح الدفع
-        // (داخل _OnlinePaymentScreen). إن ضغط المستخدم رجوع أو ألغى الدفع أو
-        // فشلت العملية، لن يتبقّى أي أثر في Firestore ──
+        // No reservation is created here: we open the card-entry form directly.
+        // reserveOffer is only called inside _OnlinePaymentScreen after a successful payment.
+        // If the user goes back, cancels, or payment fails — nothing is written to Firestore.
         debugPrint(
             '[Payment] opening card-entry screen, no reservation yet offerId=${widget.docId}');
         if (!mounted) return;
@@ -57,14 +56,12 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
             ),
           ),
         );
-        // ── _OnlinePaymentScreen تتولى إنشاء الحجز والانتقال لشاشة QR بنفسها
-        // بعد نجاح الدفع؛ لا شيء إضافي مطلوب هنا بعد العودة منها ──
+        // _OnlinePaymentScreen handles both the reservation and QR navigation; nothing more needed here.
         return;
       }
 
-      // ── كاش: يُنشأ الحجز فوراً كما كان تماماً (لا تغيير في توقيت أو سلوك
-      // مسار الدفع النقدي) — طريقة/حالة الدفع تُكتَبان الآن مباشرة ضمن نفس
-      // معاملة الإنشاء بدل تحديث منفصل لاحق ──
+      // Cash path: reservation is created immediately — payment method/status
+      // are written inside the same transaction instead of a separate update.
       debugPrint(
           '[Payment] cash flow — creating reservation immediately offerId=${widget.docId}');
       final reservationId = await ReservationService().reserveOffer(
@@ -111,7 +108,6 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          // ── ملخص الطلب ──
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -154,7 +150,6 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                   color: AppColors.textDark)),
           const SizedBox(height: 14),
 
-          // ── كاش ──
           _PaymentOption(
             icon: Icons.payments_outlined,
             title: 'كاش عند الاستلام',
@@ -167,7 +162,6 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
 
           const SizedBox(height: 12),
 
-          // ── أونلاين ──
           _PaymentOption(
             icon: Icons.credit_card_rounded,
             title: 'دفع إلكتروني',
@@ -179,7 +173,6 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
 
           const SizedBox(height: 28),
 
-          // ── ملاحظة الأمان ──
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -233,9 +226,6 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
   }
 }
 
-// ─────────────────────────────────────────────
-// خيار طريقة الدفع
-// ─────────────────────────────────────────────
 class _PaymentOption extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -353,9 +343,6 @@ class _PaymentOption extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// شاشة الدفع الإلكتروني — mock
-// ─────────────────────────────────────────────
 class _OnlinePaymentScreen extends StatefulWidget {
   final String docId;
   final Map<String, dynamic> data;
@@ -383,9 +370,8 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
   final _cvvController = TextEditingController();
   bool _isProcessing = false;
 
-  // ── true فقط بعد إنشاء الحجز فعلياً بنجاح؛ تُستخدم في dispose() لتمييز
-  // "المستخدم غادر قبل اكتمال الدفع" (إلغاء حقيقي، يُسجَّل) عن "غادرت الشاشة
-  // كجزء طبيعي من الانتقال لشاشة QR بعد نجاح العملية" ──
+  // True only after the reservation is created — distinguishes "user left before
+  // completion" (real abandonment, logged) from "screen closed as part of QR navigation".
   bool _paymentCompleted = false;
 
   @override
@@ -397,8 +383,7 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
 
   @override
   void dispose() {
-    // ── يغطي كل طرق مغادرة الشاشة دون إتمام الدفع: زر الرجوع، السحب للخلف،
-    // إغلاق الشاشة برمجياً... إلخ — دون حاجة لاعتراض الإغلاق نفسه ──
+    // Covers all exit paths (back button, swipe, programmatic close) without intercepting close.
     if (!_paymentCompleted) {
       debugPrint('[Payment] cancelled — user left the payment screen before '
           'completion offerId=${widget.docId}');
@@ -410,8 +395,7 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
   }
 
   Future<void> _processPayment() async {
-    // ── حارس ضد الإرسال المتكرر: يُضبط قبل أي await، فلا يمكن أن تبدأ
-    // معالجتان متزامنتان حتى مع الضغط السريع المتكرر على نفس الزر ──
+    // Set before any await — prevents concurrent processing even on rapid double-tap.
     if (_isProcessing) {
       debugPrint('[Payment] tap ignored — already processing');
       return;
@@ -428,16 +412,13 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
 
     setState(() => _isProcessing = true);
 
-    // ── محاكاة معالجة الدفع لدى بوابة الدفع؛ لا يُنشأ أي حجز ولا يُخصم أي
-    // مبلغ حقيقي أثناء هذا الانتظار — إن غادر المستخدم الآن فلن يتبقّى أي
-    // أثر في Firestore على الإطلاق ──
+    // Simulates payment gateway processing; no reservation or charge happens during this delay.
     await Future.delayed(const Duration(seconds: 2));
     debugPrint('[Payment] succeeded (simulated) offerId=${widget.docId}');
 
     if (!mounted) return;
 
-    // ── تحقق مسبق إضافي فور نجاح الدفع مباشرة، فوق التحقق المدمج داخل
-    // reserveOffer نفسها (الذي يبقى شبكة الأمان النهائية) ──
+    // Extra pre-check right after simulated success; reserveOffer's internal transaction remains the final safety net.
     final existing =
         await ReservationService().getActiveReservation(widget.docId);
     if (!mounted) return;
@@ -493,12 +474,10 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
         (route) => route.isFirst,
       );
     } catch (e) {
-      // ── الدفع (المحاكى) نجح لكن تعذّر إنشاء الحجز (مثلاً نفدت الكمية بين
-      // نجاح الدفع وإنشاء الحجز) — لا حجز ولا خصم كمية يبقى في Firestore،
-      // لكن بما أن الدفع (المحاكى) قد "خُصم" فعلياً من منظور المستخدم، يُسجَّل
-      // استرداد منطقي في سجل التسوية (لا توجد بوابة دفع حقيقية هنا لاسترداد
-      // فعلي منها) حتى يبقى الحساب قابلاً للمراجعة، بدل مجرد القول أنه لم
-      // يُخصم شيء ──
+      // Simulated payment succeeded but reservation creation failed (e.g. quantity ran out).
+      // No reservation or quantity change persists in Firestore, but since the user saw a
+      // "charged" state, a logical reversal is recorded in the reconciliation collection
+      // for admin review — there's no real gateway to refund from.
       debugPrint(
           '[Payment] reservation creation FAILED after payment: $e');
       try {
@@ -550,7 +529,6 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          // ملخص
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -604,7 +582,6 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
                           color: AppColors.textDark)),
                   const SizedBox(height: 16),
 
-                  // رقم البطاقة
                   TextField(
                     controller: _cardController,
                     keyboardType: TextInputType.number,
@@ -657,7 +634,6 @@ class _OnlinePaymentScreenState extends State<_OnlinePaymentScreen> {
 
           const SizedBox(height: 20),
 
-          // أيقونات بطاقات مقبولة
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

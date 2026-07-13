@@ -28,8 +28,7 @@ class UserOfferService {
     required double? longitude,
     required String pickupStartTime,
     required String pickupEndTime,
-    // ── تاريخ الانتهاء اختياري: إن لم يُحدَّد يُعتمد انتهاء تلقائي بعد 24
-    // ساعة من النشر بدل تكرار حقل "تاريخ انتهاء الصلاحية" في الواجهة ──
+    // Expiry is optional — defaults to 24 hours from now if not supplied.
     DateTime? expiryDate,
     List<String>? allergyInfo,
     String? locationSource,

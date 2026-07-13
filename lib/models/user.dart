@@ -9,7 +9,7 @@ class AppUser {
   final String? nationalId;
   final String status;
   final bool isApproved;
-  final bool isSuspended; // رقم الهوية الوطنية — للمساءلة القانونية
+  final bool isSuspended;
 
   AppUser({
     required this.uid,

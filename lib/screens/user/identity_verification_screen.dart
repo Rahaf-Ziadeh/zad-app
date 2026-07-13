@@ -208,7 +208,6 @@ class _IdentityVerificationScreenState
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
-            // ── بانر المعلومات الإضافية ──
             if (!_loadingStatus &&
                 _existingStatus == 'pending_additional_info' &&
                 (_additionalInfoMessage ?? '').isNotEmpty) ...[
@@ -253,7 +252,6 @@ class _IdentityVerificationScreenState
               ),
               const SizedBox(height: 16),
             ],
-            // ── تعليمات ──
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -283,7 +281,6 @@ class _IdentityVerificationScreenState
             ),
             const SizedBox(height: 20),
 
-            // ── رقم الهوية ──
             TextFormField(
               controller: _identityController,
               keyboardType: TextInputType.number,
@@ -301,7 +298,6 @@ class _IdentityVerificationScreenState
             ),
             const SizedBox(height: 16),
 
-            // ── رفع المستند ──
             GestureDetector(
               onTap: _pickDocument,
               child: Container(
@@ -382,7 +378,6 @@ class _IdentityVerificationScreenState
             ),
             const SizedBox(height: 24),
 
-            // ── زر الإرسال ──
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(

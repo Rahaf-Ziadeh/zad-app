@@ -3,9 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:zad_app/utils/phone_formatter.dart';
 import '../../theme/app_colors.dart';
 
-// ─────────────────────────────────────────────
-// تعريف حقل واحد يُعرض في بطاقة الإحصائية
-// ─────────────────────────────────────────────
+// One field definition for a stats card row.
 class AdminFieldDef {
   final IconData icon;
   final String label;
@@ -22,22 +20,20 @@ class AdminFieldDef {
   });
 }
 
-// ─────────────────────────────────────────────
-// شاشة قائمة الإحصائية (عامة وقابلة لإعادة الاستخدام)
-// ─────────────────────────────────────────────
+// Generic reusable list screen for admin stats items.
 class AdminStatsDetailScreen extends StatelessWidget {
   final String title;
   final String emptyMessage;
   final Stream<QuerySnapshot> stream;
   final Color accentColor;
 
-  /// المفتاح الذي تُستخرج منه قيمة العنوان الرئيسي للبطاقة
+  /// Doc field key used as the card's primary title.
   final String titleKey;
 
-  /// مفتاح ثانوي (اختياري) يُعرض أسفل العنوان مباشرةً
+  /// Optional secondary key shown directly below the title.
   final String? subtitleKey;
 
-  /// الحقول التفصيلية المعروضة كصفوف داخل كل بطاقة
+  /// Detail field rows displayed inside each card.
   final List<AdminFieldDef> fields;
 
   const AdminStatsDetailScreen({
@@ -51,7 +47,7 @@ class AdminStatsDetailScreen extends StatelessWidget {
     this.accentColor = AppColors.primary,
   });
 
-  // ── تحويل آمن لأي قيمة Firestore إلى نص مقروء ──
+  // Safe conversion of any Firestore value to a readable string.
   String _display(dynamic raw, String fallback) {
     if (raw == null) return fallback;
     if (raw is Timestamp) {
@@ -79,7 +75,6 @@ class AdminStatsDetailScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: stream,
         builder: (context, snapshot) {
-          // ── خطأ ──
           if (snapshot.hasError) {
             return Center(
               child: Padding(
@@ -108,14 +103,13 @@ class AdminStatsDetailScreen extends StatelessWidget {
             );
           }
 
-          // ── تحميل ──
           if (!snapshot.hasData) {
             return Center(
               child: CircularProgressIndicator(color: accentColor),
             );
           }
 
-          // ── فرز client-side بالأحدث أولاً ──
+          // Client-side newest-first sort; callers don't add orderBy to the stream query.
           final docs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs)
             ..sort((a, b) {
               final aRaw =
@@ -130,7 +124,6 @@ class AdminStatsDetailScreen extends StatelessWidget {
               return bTs.compareTo(aTs);
             });
 
-          // ── فارغ ──
           if (docs.isEmpty) {
             return Center(
               child: Padding(
@@ -165,7 +158,6 @@ class AdminStatsDetailScreen extends StatelessWidget {
             );
           }
 
-          // ── القائمة ──
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             itemCount: docs.length,
@@ -189,7 +181,6 @@ class AdminStatsDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ── رأس البطاقة ──
                         Row(
                           children: [
                             CircleAvatar(
@@ -231,7 +222,6 @@ class AdminStatsDetailScreen extends StatelessWidget {
                           ],
                         ),
 
-                        // ── الحقول التفصيلية ──
                         if (fields.isNotEmpty) ...[
                           const SizedBox(height: 10),
                           const Divider(height: 1, color: AppColors.border),
@@ -260,9 +250,6 @@ class AdminStatsDetailScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// صف حقل واحد داخل بطاقة الإحصائية
-// ─────────────────────────────────────────────
 class _FieldRow extends StatelessWidget {
   final IconData icon;
   final String label;

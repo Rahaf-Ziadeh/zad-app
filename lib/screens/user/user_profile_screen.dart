@@ -34,7 +34,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _loadIndividualAddress();
   }
 
-  // ── العنوان أصبح مخزّناً في مجموعة individuals وليس users ──
+  // Address is stored in 'individuals', not 'users'.
   Future<void> _loadIndividualAddress() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -119,8 +119,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      // ── نستخدم سياق النافذة الخاص بها (dialogContext) لإغلاقها، وليس سياق
-      // الشاشة الخارجية، تفادياً لأي التباس مع Navigator غير الجذري ──
+      // Use dialogContext to pop the dialog — avoids ambiguity with the non-root Navigator.
       builder: (dialogContext) => AlertDialog(
         title: const Text('تسجيل الخروج'),
         content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
@@ -144,9 +143,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     if (confirm != true) return;
     if (!mounted) return;
 
-    // ── نلتقط الـ Navigator الجذري صراحةً قبل await تسجيل الخروج: تغيّر حالة
-    // المصادقة قد يُعيد بناء الشجرة فوق هذه الشاشة بمجرد اكتمال signOut،
-    // فنفقد إمكانية استخدام context بأمان بعد ذلك ──
+    // Capture the root Navigator before awaiting signOut — auth state change may rebuild the tree and invalidate context.
     final rootNavigator = Navigator.of(context, rootNavigator: true);
 
     await FirebaseAuth.instance.signOut();
@@ -280,7 +277,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          // ── الصورة والاسم ──
           Center(
             child: Column(
               children: [
@@ -317,7 +313,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
           const SizedBox(height: 24),
 
-          // ── معلومات الحساب ──
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -368,7 +363,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
           const SizedBox(height: 16),
 
-          // ── إجراءات إضافية ──
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -382,8 +376,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   title: 'نشر عرض طعام',
                   color: AppColors.primary,
                   onTap: () async {
-                    // ── يفتح مباشرة شاشة نشر الطعام للكل، دون المرور بصفحة
-                    // الدخول المحايدة، بعد التحقق من توثيق الهوية ──
+                    // Skip the neutral entry screen and go directly to the publish form, after verifying national ID.
                     final identityReady = await ensureNationalIdSaved(context);
                     if (!context.mounted || !identityReady) return;
                     Navigator.push(

@@ -44,13 +44,10 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
   bool _uploadingImage = false;
   bool _isLoading = false;
 
-  // ── تاريخ ووقت انتهاء العرض — يُحمَّل من القيمة الحالية (expiresAt، مع
-  // الرجوع إلى الحقل القديم expiryDate للعروض السابقة) ويبقى كما هو إن لم
-  // يُغيَّر ──
+  // Loaded from expiresAt (falls back to legacy expiryDate field); preserved as-is if not changed.
   DateTime? _expiresAt;
 
-  // ── إحداثيات مكان الاستلام — تُحمَّل من العرض الحالي إن وُجدت، وتبقى
-  // قابلة للتحديث عبر شاشة اختيار الموقع (نفس شاشة إضافة عرض) ──
+  // Loaded from the current offer if present; updatable via the map picker (same screen as add offer).
   double? _latitude;
   double? _longitude;
   String _locationSource = 'manual';
@@ -78,9 +75,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     if (_locationSource.isEmpty) _locationSource = 'manual';
   }
 
-  // ── فتح شاشة اختيار الموقع على الخريطة (نفس الشاشة المستخدمة في إضافة
-  // عرض) — تُمرَّر الإحداثيات الحالية إن وُجدت كي تُعرض مبدئياً وتكون قابلة
-  // للتحديث ──
   Future<void> _openLocationPicker() async {
     final result = await Navigator.push<LocationPickerResult>(
       context,
@@ -167,7 +161,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
   }
 
   Future<void> _saveChanges() async {
-    // ── جمع قيم الحقول والتحقق منها قبل أي await ──
+    // All field reads and sync validation before any await.
     final title = _titleController.text.trim();
     final desc = _descController.text.trim();
     final quantityStr = _quantityController.text.trim();
@@ -226,7 +220,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
       return;
     }
 
-    // التحقق من تسجيل الدخول — قبل أي await
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -235,17 +228,15 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
       return;
     }
 
-    // ── يُحتفَظ بالقيمة الحالية إن لم تُغيَّر؛ إن حُذفت (null) يُطبَّق
-    // الانتهاء التلقائي بعد 24 ساعة من هذا التعديل ──
+    // Preserved as-is if not changed; cleared (null) means auto-expire 24 h from this save.
     final expiresAt =
         _expiresAt ?? DateTime.now().add(const Duration(hours: 24));
 
-    // ── يُمنع الحفظ إن كان سيعيد تفعيل عرض لم يكن نشطاً قبل التعديل (مغلق،
-    // منتهي، أو نافد الكمية) بينما الحساب قيد إعادة المراجعة أو مرفوض؛
-    // بما أن هذه الشاشة لا تُعدّل حقل status، فالتفعيل هنا يحدث فقط عبر رفع
-    // الكمية المتبقية عن صفر و/أو تمديد تاريخ الانتهاء لعرض كان منتهياً —
-    // ولأن expiresAt الجديد يُشترَط دائماً أن يكون بالمستقبل (تحقق أعلاه)،
-    // فتعديل أي عرض منتهي يُعيد تفعيله تلقائياً إن بقيت حالته الخام 'available' ──
+    // Blocked if save would re-activate an offer that wasn't active before (closed/expired/sold out)
+    // while the account is under re-review or rejected. This screen doesn't touch status, so
+    // re-activation only happens by raising quantity above zero or extending an expired expiresAt —
+    // and since a new expiresAt must always be in the future (checked above), editing any
+    // expired offer auto-reactivates it if its raw status was still 'available'.
     final rawStatus = (widget.offerData['status'] as String?) ?? 'available';
     final wasActiveBefore = rawStatus == 'available' &&
         !isOfferExpired(widget.offerData) &&
@@ -276,7 +267,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ── تحديد رابط الصورة: رفع الجديدة أو الاحتفاظ بالحالية ──
       String imageUrl = _currentImageUrl;
       if (_selectedImage != null) {
         final uploaded = await _uploadImage();
@@ -313,7 +303,7 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // الإشعار غير حرج — لا يوقف تدفق الحفظ عند الفشل
+      // Non-critical — notification failure must not roll back the save.
       try {
         await NotificationService().sendNotification(
           userId: user.uid,
@@ -368,7 +358,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          // ── تنبيه ──
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -406,7 +395,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1 ── اسم الباقة ──
                   FormFieldWidget(
                     controller: _titleController,
                     label: 'اسم الباقة',
@@ -415,7 +403,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 2 ── صورة ──
                   _ImagePickerSection(
                     selectedImage: _selectedImage,
                     currentImageUrl: _currentImageUrl,
@@ -424,7 +411,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 3 ── السعر الأصلي / بعد الخصم ──
                   Row(
                     children: [
                       Expanded(
@@ -450,7 +436,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 4 ── الكمية ──
                   FormFieldWidget(
                     controller: _quantityController,
                     label: 'الكمية المتبقية',
@@ -460,7 +445,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 5 ── مكان الاستلام ──
                   FormFieldWidget(
                     controller: _pickupController,
                     label: 'مكان الاستلام',
@@ -469,7 +453,6 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // 5.1 ── تحديد/تحديث موقع الاستلام على الخريطة ──
                   LocationPickerRow(
                     hasLocation: _latitude != null,
                     latitude: _latitude,
@@ -483,14 +466,12 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 5.5 ── تاريخ ووقت انتهاء العرض ──
                   ExpiryDateTimeField(
                     value: _expiresAt,
                     onChanged: (v) => setState(() => _expiresAt = v),
                   ),
                   const SizedBox(height: 14),
 
-                  // 6 ── وصف الباقة ──
                   TextField(
                     controller: _descController,
                     maxLines: 3,
@@ -506,14 +487,12 @@ class _EditOfferScreenState extends State<EditOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 7 ── معلومات الحساسية الغذائية ──
                   AllergyCheckboxPanel(
                     selected: _selectedAllergens,
                     onChanged: (v) => setState(() => _selectedAllergens = v),
                   ),
                   const SizedBox(height: 20),
 
-                  // ── زر الحفظ ──
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(

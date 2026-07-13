@@ -29,27 +29,25 @@ class _ChatMessage {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
-/// مساعد زاد — شاشة واحدة مشتركة بين كل الأدوار (فرد/مطعم، وقابلة للتوسّع
-/// لاحقاً بجمعية)، تُحدَّد محتوياتها (رسالة الترحيب، الأسئلة المقترحة،
-/// الردود، رسالة الفشل) بالكامل من [ChatbotRoleConfig] حسب [userRole] —
-/// لا يوجد أي فرع "if role == restaurant" داخل build() نفسها. التنقّل
-/// الفعلي (تبديل تبويب في اللوحة الأم، أو فتح شاشة مباشرة) يبقى هنا فقط،
-/// عبر خرائط استدعاءات (callbacks) يُمرّرها كل Dashboard حسب دوره.
+/// Single shared chatbot screen for all roles (individual/restaurant, extensible to charity).
+/// All content (welcome message, suggested chips, responses, fallback) is driven by
+/// [ChatbotRoleConfig] based on [userRole] — no `if role == restaurant` branches in build().
+/// Actual navigation (tab switch or direct screen push) lives here, via callbacks
+/// passed by each Dashboard according to its role.
 class ChatbotScreen extends StatefulWidget {
-  // ── الدور — يُفضَّل تمريره صراحةً من الشاشة الأم (لا حاجة لأي قراءة
-  // إضافية من Firestore هنا). أي قيمة غير معروفة تُعامَل كفرد (individual) ──
+  // Passed explicitly from the parent screen — unknown values fall back to individual.
   final String userRole;
 
-  // ── تنقّل مشترك بين الأدوار (نفس المعنى وإن اختلفت التسمية المعروضة) ──
-  final VoidCallback? onGoToOffers; // "عروضي" (مطعم) أو "العروض" (فرد)
-  final VoidCallback? onGoToOrders; // "حجوزاتي" (مطعم) أو "طلباتي" (فرد)
-  final VoidCallback? onGoToNotifications; // مشتركة — كل لوحة تفتح شاشتها الخاصة
+  // Shared across roles (same semantics, different label in each dashboard).
+  final VoidCallback? onGoToOffers;
+  final VoidCallback? onGoToOrders;
+  final VoidCallback? onGoToNotifications;
 
-  // ── خاصة بالفرد ──
+  // Individual-only callbacks.
   final VoidCallback? onGoToPackages;
   final VoidCallback? onGoToDonate;
 
-  // ── خاصة بالمطعم ──
+  // Restaurant-only callback.
   final VoidCallback? onGoToAddOffer;
 
   // Null when user is anonymous — disables contact-admin flow
@@ -149,14 +147,14 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   }
 
   Future<void> _processIntent(String text) async {
-    // ── Contact-admin sub-flow: waiting for issue category (مشتركة) ────────
+    // Contact-admin sub-flow: waiting for the user to pick an issue category.
     if (_awaitingIssueCategory) {
       await _handleIssueCategorySelected(text);
       return;
     }
 
-    // ── أزرار/إجراءات مشتركة بين كل الأدوار، خارج نطاق ChatbotRoleConfig
-    // لأنها تدفّقات حالة (state) وليست ردوداً نصية ثابتة ──
+    // Shared actions across all roles — these are stateful flows, not static text responses,
+    // so they live here rather than in ChatbotRoleConfig.
     if (text == 'رجوع للقائمة') {
       setState(() => _awaitingIssueCategory = false);
       _addBotMessage('ما الذي تودّ الاستفسار عنه؟', chips: _config.defaultChips);
@@ -179,8 +177,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       return;
     }
 
-    // ── المُحلِّل المشترك — يطابق ضمن نيّات هذا الدور فقط، بلا خلط مع
-    // الدور الآخر (Part 10) ──
+    // Matches only intents defined for this role — no cross-role intent bleed.
     final response = resolveIntent(role: _role, message: text);
 
     if (response != null && response.navigationActionId != null) {
@@ -192,19 +189,16 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       return;
     }
 
-    // ── لم يُطابَق أي شيء — رسالة الفشل الخاصة بالدور مع الأسئلة المقترحة
-    // من جديد (Part 11) ──
+    // Nothing matched — show the role-specific fallback with the default chips.
     _addBotMessage(_config.fallbackMessage, chips: _config.defaultChips);
   }
 
   // ─── Navigation dispatch ────────────────────────────────────────────────
   //
-  // يُنفَّذ التنقّل الفعلي هنا فقط (وليس داخل chatbot_role_config.dart، التي
-  // لا تعرف شيئاً عن BuildContext أو Navigator). الإجراءات المشتركة بين
-  // الأدوار (offers/orders/notifications) تستخدم استدعاءات اللوحة الأم؛
-  // الشاشات الثابتة الخاصة بالمطعم (QR/التبرع لجمعية/التقييمات/الشكاوى)
-  // تُفتَح مباشرة هنا لأنها نفس الوجهة دائماً بصرف النظر عن اللوحة الأم،
-  // فلا داعي لتمرير 4 استدعاءات إضافية عبر كل Dashboard لمجرّد فتحها.
+  // All navigation runs here, not in chatbot_role_config.dart (which has no BuildContext).
+  // Shared actions (offers/orders/notifications) use the parent dashboard's callbacks;
+  // restaurant-specific screens (QR/charity-donation/reviews/complaints) are pushed
+  // directly here because their destination is always the same regardless of the parent.
 
   Future<void> _dispatchNavigation(String actionId) async {
     switch (actionId) {
@@ -247,22 +241,19 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     }
   }
 
-  /// يُغلق شاشة المساعد ثم يستدعي استدعاء اللوحة الأم (لتبديل تبويب مثلاً)؛
-  /// إن كان الاستدعاء غير مُمرَّر (null) — لا شيء يحدث بعد الإغلاق.
+  // Closes the chatbot screen then calls the parent callback (e.g. to switch a tab);
+  // if callback is null, nothing happens after the pop.
   void _popThenCall(VoidCallback? callback) {
     Navigator.pop(context);
     callback?.call();
   }
 
-  /// يفتح شاشة ثابتة مباشرة فوق نفس Navigator الذي تعيش عليه شاشة المساعد
-  /// نفسها (بدل إغلاقها أولاً) — نفس نمط فتح المحادثات (فتح المحادثة/عرض
-  /// محادثاتي) أعلاه.
+  // Pushes a screen on top of the chatbot without closing it first — same pattern as the support chat links above.
   void _pushDirect(Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
-  // ─── نية غير متزامنة خاصة بالفرد: أقرب العروض (Firestore + GPS) ──────────
-  // منسوخة دون أي تغيير عن السلوك الأصلي لمساعد المستخدم ──
+  // Async intent — nearest offers (Firestore + GPS). Individual-only.
 
   Future<void> _replyNearestOffers() async {
     setState(() => _isTyping = true);
@@ -354,11 +345,11 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     }
   }
 
-  // ─── Contact-admin flow (مشتركة بين كل الأدوار) ──────────────────────────
+  // ─── Contact-admin flow (shared across all roles) ────────────────────────
   //
-  // نفس التدفّق الأصلي تماماً، مع فرقين فقط: userRole يُمرَّر للخدمة كما هو
-  // (بدل 'user' الثابتة)، ويُتحقَّق أولاً من وجود محادثة مفتوحة لنفس
-  // المستخدم لتفادي إنشاء أكثر من محادثة مفتوحة واحدة (Part 9).
+  // Same logic as the original user chatbot, with two differences: userRole is passed
+  // as-is (not hardcoded to 'user'), and we check for an existing open chat first
+  // to avoid creating duplicate open conversations for the same user.
 
   void _replyContactAdmin() {
     final isAnonymous = FirebaseAuth.instance.currentUser?.isAnonymous ?? true;
@@ -386,7 +377,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     });
 
     try {
-      // ── تفادي محادثة مفتوحة مكرّرة لنفس المستخدم (Part 9) ──
+      // Reuse an existing open chat to avoid duplicates.
       final existingChatId =
           await SupportService().findOpenChatId(widget.userId!);
       if (!mounted) return;

@@ -10,9 +10,6 @@ import '../../theme/app_colors.dart';
 import '../common/notifications_screen.dart';
 import '../user/chatbot_screen.dart';
 
-// ─────────────────────────────────────────────
-// Dashboard الرئيسي
-// ─────────────────────────────────────────────
 class RestaurantDashboard extends StatefulWidget {
   final AppUser user;
 
@@ -25,20 +22,17 @@ class RestaurantDashboard extends StatefulWidget {
 class _RestaurantDashboardState extends State<RestaurantDashboard> {
   int _selectedIndex = 0;
 
-  // ── فلتر تبويب "عروضي" وتبويب "حجوزاتي" الفرعي، يُضبطان عبر بطاقات إحصائيات الرئيسية ──
+  // Current filter for My Offers tab and sub-tab index for My Reservations — set from the home stats cards.
   String? _offersFilter;
   int _reservationsTabIndex = 0;
 
-  // ── عدّادات تُستخدم لإجبار إعادة إنشاء التنقّل الداخلي للتبويب (تصفير أي شاشة
-  // مفتوحة داخله والعودة لأعلى المكدس) عند الوصول عبر بطاقات إحصائيات الرئيسية فقط ──
+  // Nonces that force-recreate the tab's internal Navigator when navigating from home stats cards.
   int _offersNavNonce = 0;
   int _reservationsNavNonce = 0;
 
-  // ── مفتاح Navigator مستقل ثابت لكل تبويب سفلي؛ يُستخدم لإعادة التبويب
-  // إلى شاشته الجذرية (popUntil) عند الضغط على تبويب محدد حالياً بالفعل،
-  // دون التأثير على مكدّسات بقية التبويبات — بنفس نمط user_dashboard.dart.
-  // مستقل عمداً عن عدّادات إعادة الإنشاء أعلاه: يبقى ثابتاً عبر عمليات
-  // إعادة البناء العادية حتى يستمر popUntil في استهداف الـ Navigator الحي ──
+  // Stable per-tab Navigator key for popUntil when re-tapping an already-active tab.
+  // Intentionally independent of the nonces — stays constant across normal rebuilds
+  // so popUntil keeps targeting the live NavigatorState.
   final GlobalKey<NavigatorState> _homeNavigatorKey = GlobalKey<NavigatorState>();
   final GlobalKey<NavigatorState> _offersNavigatorKey = GlobalKey<NavigatorState>();
   final GlobalKey<NavigatorState> _reservationsNavigatorKey =
@@ -56,19 +50,14 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
         _profileNavigatorKey,
       ];
 
-  // ── تنقّل من الشاشة الرئيسية: يبدّل التبويب مع تطبيق الفلتر المطلوب فوراً.
+  // Navigates from the home screen: switches tab and applies the requested filter immediately.
   //
-  // ملاحظة جذر المشكلة: تغيير ValueKey الخاص بـ _RestaurantTabView (عبر
-  // العدّادات أعلاه) وحده لا يكفي لإجبار Navigator الداخلي على إعادة بناء
-  // أول Route فيه — GlobalKey الخاص بذلك الـ Navigator (_offersNavigatorKey/
-  // _reservationsNavigatorKey) يبقى بلا تغيير، فيقوم Flutter بإعادة استخدام
-  // (reparenting) نفس الـ NavigatorState القديم بمكدّسه القديم بدل إنشاء واحد
-  // جديد؛ ولأن onGenerateRoute يُستدعى مرة واحدة فقط عند إنشاء أول Route، يبقى
-  // ذلك الـ Route عالقاً بالفلتر/التبويب من أول مرة عُرض فيها التبويب، بغض
-  // النظر عن أي بطاقة إحصائية ضُغطت لاحقاً — وهذا هو السبب الفعلي وراء عدم
-  // تفعيل الفلتر الصحيح عند الضغط على البطاقات. الحل: استبدال محتوى ذلك
-  // الـ Navigator صراحةً عبر pushAndRemoveUntil مباشرة بعد كل ضغطة، فيُبنى
-  // Route جديد بالفلتر/التبويب الصحيح في كل مرة ──
+  // Root cause: changing _RestaurantTabView's ValueKey (via nonces) alone doesn't force the inner
+  // Navigator to rebuild its first route. Flutter reparents the existing NavigatorState with its old
+  // stack because the GlobalKey (_offersNavigatorKey / _reservationsNavigatorKey) doesn't change,
+  // and onGenerateRoute only fires on the first route creation. The route stays stuck at the filter
+  // from the first time that tab was shown, regardless of which stats card is tapped later.
+  // Fix: explicitly replace the Navigator's content via pushAndRemoveUntil after each tap.
   void _navigateFromHome(
     int index, {
     String? offersFilter,
@@ -111,12 +100,10 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
     }
   }
 
-  // ── تنقّل عبر شريط التنقّل السفلي مباشرة: يعرض كل العروض/الحجوزات دون فلتر،
-  // مع الحفاظ على أي تنقّل داخلي سابق ضمن التبويب نفسه ──
+  // Bottom nav tap: shows all offers/reservations without a filter, preserving any existing in-tab navigation.
   void _onDestinationSelected(int index) {
     if (index == _selectedIndex) {
-      // ── التبويب المحدد بالفعل: إعادة تصفّحه إلى شاشته الجذرية فقط، دون
-      // تبديل تبويب ودون التأثير على مكدّسات بقية التبويبات ──
+      // Already on this tab — pop to root without switching tabs or affecting other stacks.
       _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
       return;
     }
@@ -138,10 +125,7 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
         RestaurantProfileScreen(user: widget.user),
       ];
 
-  // ── فتح مساعد المطعم — نفس ChatbotScreen المشتركة المستخدمة في لوحة
-  // المستخدم، بفرق واحد فقط: userRole: 'restaurant'، الذي يُحدِّد وحده كل
-  // محتوى الشاشة (الترحيب، الأسئلة المقترحة، الردود) عبر ChatbotRoleConfig
-  // — لا يوجد أي فرع دور داخل هذه اللوحة نفسها ──
+  // Same shared ChatbotScreen used in the user dashboard; userRole: 'restaurant' controls all content via ChatbotRoleConfig.
   void _openChatbot() {
     final authUser = FirebaseAuth.instance.currentUser;
     final isAnonymous = authUser?.isAnonymous ?? true;
@@ -169,8 +153,7 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
     );
   }
 
-  // ── مفاتيح كل تبويب: ثابتة للتبويبات التي لا تملك فلتراً، ومرتبطة بالعدّاد
-  // للتبويبات القابلة للفلترة كي يُعاد إنشاء التنقّل الداخلي عند تغييرها فقط ──
+  // Tab keys: static for unfiltered tabs, nonce-stamped for filterable ones to force Navigator rebuild when filter changes.
   List<Key> get _tabKeys => [
         const ValueKey('home'),
         ValueKey('offers_$_offersNavNonce'),
@@ -185,9 +168,7 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
     final keys = _tabKeys;
     final navigatorKeys = _navigatorKeys;
     return Scaffold(
-      // ── كل تبويب يحصل على Navigator مستقل خاص به: أي Navigator.push من
-      // داخل محتوى التبويب (مثل UserPublicProfileScreen) يُكدَّس فوق هذا
-      // الـ Navigator الداخلي فقط، فيبقى شريط التنقّل السفلي لهذه الشاشة ظاهراً ──
+      // Each tab has its own Navigator — pushes inside a tab stack above it, keeping the bottom bar visible.
       body: IndexedStack(
         index: _selectedIndex,
         children: List.generate(
@@ -199,9 +180,6 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
           ),
         ),
       ),
-      // ── نفس موضع FAB الافتراضي المستخدم في لوحة المستخدم (أعلى شريط
-      // التنقّل السفلي مباشرة، بهامش Scaffold المدمج) — لا يوجد أي FAB أو
-      // زر عائم آخر في هذه اللوحة، فلا تعارض مع أي زر آخر ──
       floatingActionButton: FloatingActionButton(
         onPressed: _openChatbot,
         backgroundColor: AppColors.primary,
@@ -246,11 +224,7 @@ class _RestaurantDashboardState extends State<RestaurantDashboard> {
   }
 }
 
-// ─────────────────────────────────────────────
-// Navigator مستقل لكل تبويب — يسمح بعمل Navigator.push داخل التبويب
-// (مثل فتح الملف الشخصي العام للمستخدم من شاشة الحجوزات) دون فقدان
-// شريط التنقّل السفلي الخاص بلوحة تحكم المطعم، ودون كسر زر الرجوع.
-// ─────────────────────────────────────────────
+// Per-tab Navigator that allows Navigator.push within a tab without losing the restaurant bottom bar.
 class _RestaurantTabView extends StatelessWidget {
   final Widget child;
   final GlobalKey<NavigatorState> navigatorKey;

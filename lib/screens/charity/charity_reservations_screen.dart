@@ -7,7 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/charity_widgets.dart';
 
 class CharityReservationsScreen extends StatefulWidget {
-  // يستخدم فقط لتحديد التبويب الأول
+  // Used only to set the initial active tab.
   final String? statusFilter;
 
   const CharityReservationsScreen({
@@ -27,7 +27,7 @@ class _CharityReservationsScreenState extends State<CharityReservationsScreen>
 
   late final TabController _tabController;
 
-  // null = الكل
+  // null = all statuses.
   static const List<String?> _statuses = [
     null,
     'reserved',

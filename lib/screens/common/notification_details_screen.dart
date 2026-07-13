@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 
-/// يحاول فتح المحتوى المرتبط بالإشعار؛ يتولى بنفسه أي حالة "لم يعد
-/// موجوداً" (SnackBar ودّي بدل الانهيار) ويُعيد true فقط إذا نجح فتح شاشة
-/// فعلية. يُستخدَم زر "فتح المحتوى المرتبط" في هذه الشاشة مباشرة.
+/// Tries to open the content linked to a notification. Handles "no longer exists"
+/// gracefully (friendly SnackBar instead of crashing) and returns true only when
+/// an actual screen was pushed. Wired to the "Open related content" button here.
 typedef NotificationOpenHandler = Future<bool> Function(
   BuildContext context,
   Map<String, dynamic> data,
@@ -111,10 +111,8 @@ String _formatDateTime(Timestamp? ts) {
   return '$d/$m/$y — $h:$min';
 }
 
-// ─────────────────────────────────────────────
-// شاشة تفاصيل الإشعار — تعرض عنوانه ونصه الكامل وتاريخه وحالة القراءة، مع
-// زر يفتح المحتوى المرتبط عبر resolver خاص بكل دور (مطعم/جمعية/أدمن/مستخدم) ──
-// ─────────────────────────────────────────────
+// Shows a notification's title, full body, date, and read state, with a button that
+// opens the related content via a role-specific resolver (restaurant/charity/admin/user).
 class NotificationDetailsScreen extends StatefulWidget {
   final String notificationId;
   final Map<String, dynamic> data;
@@ -141,7 +139,7 @@ class _NotificationDetailsScreenState extends State<NotificationDetailsScreen> {
     super.initState();
     _isRead = widget.data['isRead'] == true;
     if (!_isRead) {
-      // ── تمييز كمقروء فور فتح التفاصيل؛ فشله غير حرج ──
+      // Mark as read immediately on open; failure is non-critical.
       NotificationService().markAsRead(widget.notificationId).catchError((_) {});
       _isRead = true;
     }

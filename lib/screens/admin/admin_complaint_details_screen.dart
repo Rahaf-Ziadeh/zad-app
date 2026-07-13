@@ -213,7 +213,6 @@ class _AdminComplaintDetailsScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── معلومات الشكوى ──
             ComplaintSectionCard(
               title: 'معلومات الشكوى',
               icon: Icons.report_outlined,
@@ -263,14 +262,12 @@ class _AdminComplaintDetailsScreenState
             ),
             const SizedBox(height: 12),
 
-            // ── مقدم الشكوى ──
             ComplaintSectionCard(
               title: 'مقدم الشكوى',
               icon: Icons.person_outline_rounded,
               children: _buildComplainantRows(),
             ),
 
-            // ── صور مرفقة ──
             if (images.isNotEmpty) ...[
               const SizedBox(height: 12),
               ComplaintSectionCard(
@@ -312,9 +309,7 @@ class _AdminComplaintDetailsScreenState
 
             const SizedBox(height: 24),
 
-            // ── إجراءات المسؤول ──
             if (isOpen) ...[
-              // ملاحظة الحل (اختيارية)
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(

@@ -6,9 +6,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/offer_widgets.dart';
 import 'provider_public_profile_screen.dart';
 
-// ─────────────────────────────────────────────
-// تبرعاتي — سجل تبرعات المستخدم فقط (لا علاقة له بـ"طلباتي")
-// ─────────────────────────────────────────────
+// Donation history for the current user only. Separate from "My Orders" (reservations).
 class UserDonationsHistoryScreen extends StatefulWidget {
   const UserDonationsHistoryScreen({super.key});
 
@@ -21,7 +19,7 @@ class _UserDonationsHistoryScreenState extends State<UserDonationsHistoryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
-  // ── null = الكل، وإلا القيمة الفعلية لحقل status في مجموعة donations ──
+  // null = all statuses; otherwise the actual donations.status field value.
   static const List<String?> _statuses = [
     null,
     'pending',
@@ -89,7 +87,6 @@ class _UserDonationsHistoryScreenState extends State<UserDonationsHistoryScreen>
 
   Stream<QuerySnapshot> _donationsStream(String? status) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    // ── تبرعات هذا المستخدم فقط، مهما كان التبويب ──
     Query query = FirebaseFirestore.instance
         .collection('donations')
         .where('donorUserId', isEqualTo: uid);
@@ -205,9 +202,6 @@ class _DonationsList extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة تبرع واحد — بنفس أسلوب بطاقات "طلباتي" (رأس بشارة الحالة + صفوف تفاصيل)
-// ─────────────────────────────────────────────
 class _DonationCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final String Function(String) statusLabel;
@@ -309,7 +303,7 @@ class _DonationCard extends StatelessWidget {
             const SizedBox(height: 14),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            // ── اسم الجمعية قابل للنقر فقط عند توفر معرّف حسابها ──
+            // Charity name is tappable only when a charity account ID is available.
             if (charityName.isNotEmpty)
               OfferInfoRow(
                 icon: Icons.volunteer_activism_outlined,
@@ -364,9 +358,6 @@ class _DonationCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// تقييماتي
-// ─────────────────────────────────────────────
 class UserRatingsScreen extends StatelessWidget {
   const UserRatingsScreen({super.key});
 
@@ -555,9 +546,6 @@ class UserRatingsScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// شكاواي
-// ─────────────────────────────────────────────
 class UserComplaintsScreen extends StatelessWidget {
   const UserComplaintsScreen({super.key});
 

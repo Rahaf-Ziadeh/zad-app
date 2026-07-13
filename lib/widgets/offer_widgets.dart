@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:zad_app/utils/phone_formatter.dart';
 import '../theme/app_colors.dart';
 
-/// صف معلومة واحدة — أيقونة + عنوان + قيمة
-/// إن مُرِّر [onTap] يصبح الصف قابلاً للنقر بأسلوب بسيط يميّزه عن بقية الصفوف.
+/// Icon + label + value info row. Tappable when [onTap] is provided.
 class OfferInfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -68,7 +67,7 @@ class OfferInfoRow extends StatelessWidget {
   }
 }
 
-/// سعر العرض — مجاني أو مخفض
+/// Price row — free badge or original/discounted price pair.
 class OfferPriceRow extends StatelessWidget {
   final bool isFree;
   final num originalPrice;
@@ -135,13 +134,13 @@ class OfferPriceRow extends StatelessWidget {
   }
 }
 
-/// حساب نسبة الخصم
+/// Calculates discount percentage from original and discounted prices.
 int calcDiscountPercent(num originalPrice, num discountPrice) {
   if (originalPrice <= 0 || discountPrice < 0) return 0;
   return (((originalPrice - discountPrice) / originalPrice) * 100).round();
 }
 
-/// Badge السعر فوق الصورة
+/// Price badge overlaid on the offer image (free or discount%).
 Widget buildPriceBadge({required bool isFree, required int discountPercent}) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -164,7 +163,7 @@ Widget buildPriceBadge({required bool isFree, required int discountPercent}) {
   );
 }
 
-/// Placeholder للصورة
+/// Placeholder shown when an offer image is missing.
 Widget buildImagePlaceholder({required IconData icon, double height = 180}) {
   return Container(
     height: height,

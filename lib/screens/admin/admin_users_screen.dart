@@ -398,7 +398,6 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
       ),
       body: Column(
         children: [
-          // ── فلتر ──
           Container(
             color: AppColors.card,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

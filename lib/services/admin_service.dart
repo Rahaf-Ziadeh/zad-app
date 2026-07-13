@@ -176,7 +176,7 @@ class AdminService {
     });
   }
 
-  // ── مجموعة التفاصيل الخاصة بدور المطعم/الجمعية إن وُجد ──
+  // Returns the role-specific Firestore collection for restaurants or charities; null for other roles.
   String? _roleCollectionFor(String? role) {
     if (role == 'restaurant') return 'restaurants';
     if (role == 'charity') return 'charities';
@@ -192,10 +192,8 @@ class AdminService {
       'updatedAt': FieldValue.serverTimestamp(),
       if (roleCollection != null) 'verificationStatus': 'approved',
       if (roleCollection != null) 'rejectionReason': null,
-      // ── علامة دائمة لا تُعاد أبداً إلى false: تُستخدم لاحقاً للتمييز بين
-      // "طلب مرفوض للمرة الأولى" (يُحظر الدخول بالكامل) و"مطعم/جمعية كان
-      // معتمَداً سابقاً ثم رُفض تحديث لاحق كتعديل الرخصة" (يُسمح بدخول محدود
-      // لإكمال الحجوزات القائمة) — راجع AuthService.login وmain.dart ──
+      // Permanent flag — never reset to false. Distinguishes first-time rejection (full block)
+      // from re-rejection after prior approval (limited access). See AuthService.login and main.dart.
       if (roleCollection != null) 'wasEverApproved': true,
     });
     if (roleCollection != null) {
@@ -238,10 +236,8 @@ class AdminService {
     }
     await batch.commit();
 
-    // ── إخفاء/تعليق العروض العامة النشطة لهذا المزوّد فور الرفض (Part 9
-    // item 79) — نفس المنطق المستخدم في شاشتَي مراجعة التحقق، حتى يبقى
-    // السلوك متطابقاً بصرف النظر عن أي شاشة إدارية نُفِّذ الرفض منها.
-    // غير حرج: فشله لا يُبطل قرار الرفض نفسه ──
+    // Suspend all active public offers for this provider immediately on rejection.
+    // Non-critical — failure doesn't roll back the rejection decision.
     if (roleCollection != null) {
       try {
         final activeOffers = await _firestore
@@ -331,7 +327,6 @@ class AdminService {
     );
   }
 
-  // ── عروض: جلب الكل مرتبة بالأحدث ──
   Stream<QuerySnapshot> getAllOffersStream() {
     return _firestore
         .collection('offers')
@@ -339,7 +334,6 @@ class AdminService {
         .snapshots();
   }
 
-  // ── عروض: حذف مع فحص الحجوزات وتسجيل الإجراء ──
   Future<void> deleteOffer({
     required String offerId,
     required String offerTitle,
@@ -369,7 +363,6 @@ class AdminService {
     });
   }
 
-  // ── جميع المستخدمين حسب الدور (بدون فلتر موافقة) ──
   Stream<QuerySnapshot> getUsersByRole(String role) {
     return _firestore
         .collection('users')
@@ -377,17 +370,15 @@ class AdminService {
         .snapshots();
   }
 
-  // ── جميع الحجوزات (مرتبة client-side لتجنب الفهرس المركب) ──
+  // Sorted client-side to avoid requiring a composite Firestore index.
   Stream<QuerySnapshot> getAllReservations() {
     return _firestore.collection('reservations').snapshots();
   }
 
-  // ── جميع جلسات الدعم ──
   Stream<QuerySnapshot> getSupportChats() {
     return _firestore.collection('support_chats').snapshots();
   }
 
-  // ── جميع التقييمات ──
   Stream<QuerySnapshot> getReviews() {
     return _firestore.collection('reviews').snapshots();
   }

@@ -91,8 +91,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      // ── نستخدم سياق النافذة الخاص بها (dialogContext) لإغلاقها، وليس سياق
-      // الشاشة الخارجية، تفادياً لأي التباس مع Navigator غير الجذري ──
+      // Use dialogContext to close the dialog — avoids ambiguity with the root Navigator.
       builder: (dialogContext) => AlertDialog(
         title: const Text('تسجيل الخروج'),
         content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
@@ -116,9 +115,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     if (confirm != true) return;
     if (!mounted) return;
 
-    // ── نلتقط الـ Navigator الجذري صراحةً قبل await تسجيل الخروج: تغيّر حالة
-    // المصادقة قد يُعيد بناء الشجرة فوق هذه الشاشة بمجرد اكتمال signOut،
-    // فنفقد إمكانية استخدام context بأمان بعد ذلك ──
+    // Capture root navigator before awaiting signOut — auth state change may rebuild the tree and make context unsafe.
     final rootNavigator = Navigator.of(context, rootNavigator: true);
 
     await FirebaseAuth.instance.signOut();
@@ -169,7 +166,6 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          // ── الصورة والاسم ──
           Center(
             child: Column(
               children: [
@@ -204,7 +200,6 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
 
           const SizedBox(height: 24),
 
-          // ── معلومات ──
           _ProfileField(
             icon: Icons.person_outline_rounded,
             label: 'الاسم الكامل',
@@ -238,7 +233,6 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
 
           const SizedBox(height: 16),
 
-          // ── تغيير كلمة المرور ──
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(

@@ -13,10 +13,6 @@ class CharityReservationsService {
 
   String get currentUserId => _auth.currentUser?.uid ?? '';
 
-  // ─────────────────────────────────────────────
-  // جلب حجوزات الجمعية
-  // null = جميع الحالات
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchReservations({
     String? status,
   }) {
@@ -41,10 +37,7 @@ class CharityReservationsService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // إلغاء الحجز
-  // مسموح خلال 10 دقائق فقط
-  // ─────────────────────────────────────────────
+  // Cancels within the 10-minute window; restores quantity atomically.
   Future<void> cancelReservation({
     required String reservationId,
     required String offerId,
@@ -114,9 +107,6 @@ class CharityReservationsService {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // تحويل خطأ الإلغاء إلى رسالة عربية واضحة
-  // ─────────────────────────────────────────────
   String cancelErrorMessage(Object error) {
     final rawMessage = error.toString();
 

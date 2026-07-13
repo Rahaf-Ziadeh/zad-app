@@ -13,9 +13,6 @@ import 'user_home_screen.dart';
 import 'user_orders_screen.dart';
 import 'user_profile_screen.dart';
 
-// ─────────────────────────────────────────────
-// Dashboard الرئيسي
-// ─────────────────────────────────────────────
 class UserDashboard extends StatefulWidget {
   final AppUser user;
   const UserDashboard({super.key, required this.user});
@@ -28,13 +25,10 @@ class _UserDashboardState extends State<UserDashboard> {
   int _selectedIndex = 0;
   int _browseTabIndex = 0;
 
-  // ── عدّاد يُجبر إعادة إنشاء التنقّل الداخلي لتبويب "تصفح" (تصفير أي شاشة
-  // تفاصيل/ملف عام مفتوحة داخله) عند الوصول إليه عبر روابط الشاشة الرئيسية فقط ──
+  // Nonce to force-recreate the Browse tab's internal Navigator when navigating from home screen links.
   int _browseNavNonce = 0;
 
-  // ── مفتاح Navigator مستقل ثابت لكل تبويب سفلي؛ يُستخدم لإعادة التبويب
-  // إلى شاشته الجذرية (popUntil) عند الضغط على تبويب محدد حالياً بالفعل،
-  // دون التأثير على مكدّس بقية التبويبات ──
+  // Stable per-tab Navigator key for popUntil when re-tapping an already-active tab.
   final GlobalKey<NavigatorState> _homeNavigatorKey = GlobalKey<NavigatorState>();
   final GlobalKey<NavigatorState> _browseNavigatorKey =
       GlobalKey<NavigatorState>();
@@ -50,9 +44,7 @@ class _UserDashboardState extends State<UserDashboard> {
         _profileNavigatorKey,
       ];
 
-  // ── التنقّل إلى تبويب فرعي داخل شاشة "تصفح"؛ تبويب "التبرع" هو الآن
-  // مركز تبرّع محايد (بطاقتا اختيار فقط) لا يحتاج توثيق هوية بحد ذاته —
-  // التحقق يتم داخل DonateTab نفسها قبل فتح أي من مسارَي التبرع/النشر ──
+  // Navigate to a sub-tab inside the Browse screen. Identity verification happens inside DonateTab, not here.
   void _goToBrowseTab(int tabIndex) {
     setState(() {
       _browseTabIndex = tabIndex;
@@ -75,9 +67,7 @@ class _UserDashboardState extends State<UserDashboard> {
         UserProfileScreen(user: widget.user),
       ];
 
-  // ── مفاتيح كل تبويب: ثابتة للتبويبات التي لا تملك تنقّلاً مُبرمَجاً من
-  // الخارج، ومرتبطة بالعدّاد لتبويب "تصفح" كي يُعاد إنشاء Navigator الداخلي
-  // فقط عند الوصول إليه عبر روابط الشاشة الرئيسية ──
+  // Tab keys: static for unfiltered tabs, nonce-stamped for Browse to force Navigator rebuild when navigating from home.
   List<Key> get _tabKeys => [
         const ValueKey('home'),
         ValueKey('browse_$_browseNavNonce'),
@@ -114,9 +104,7 @@ class _UserDashboardState extends State<UserDashboard> {
     final keys = _tabKeys;
     final navigatorKeys = _navigatorKeys;
     return Scaffold(
-      // ── كل تبويب يحصل على Navigator مستقل خاص به: أي Navigator.push من
-      // داخل محتوى التبويب (مثل OfferDetailsScreen أو ProviderPublicProfileScreen)
-      // يُكدَّس فوق هذا الـ Navigator الداخلي فقط، فيبقى شريط التنقّل السفلي ظاهراً ──
+      // Each tab has its own Navigator — pushes inside a tab stack above it, keeping the bottom bar visible.
       body: IndexedStack(
         index: _selectedIndex,
         children: List.generate(
@@ -138,8 +126,7 @@ class _UserDashboardState extends State<UserDashboard> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) {
           if (i == _selectedIndex) {
-            // ── التبويب المحدد بالفعل: إعادة تصفّحه إلى شاشته الجذرية فقط،
-            // دون تبديل تبويب ودون التأثير على مكدّسات التبويبات الأخرى ──
+            // Already on this tab — pop to root without switching tabs or affecting other stacks.
             _navigatorKeys[i].currentState?.popUntil((route) => route.isFirst);
             return;
           }
@@ -174,11 +161,7 @@ class _UserDashboardState extends State<UserDashboard> {
   }
 }
 
-// ─────────────────────────────────────────────
-// Navigator مستقل لكل تبويب — يسمح بعمل Navigator.push داخل التبويب
-// (مثل فتح تفاصيل عرض أو الملف العام لمزوّد) دون فقدان شريط التنقّل
-// السفلي الخاص بلوحة تحكم المستخدم، ودون كسر زر الرجوع.
-// ─────────────────────────────────────────────
+// Per-tab Navigator that allows Navigator.push within a tab without losing the user dashboard bottom bar.
 class _UserTabView extends StatelessWidget {
   final Widget child;
   final GlobalKey<NavigatorState> navigatorKey;
@@ -197,9 +180,6 @@ class _UserTabView extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// شاشة التصفح — Tabs
-// ─────────────────────────────────────────────
 class UserBrowseTabsScreen extends StatelessWidget {
   final int initialIndex;
 

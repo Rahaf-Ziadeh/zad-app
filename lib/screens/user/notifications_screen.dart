@@ -21,10 +21,9 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  // ── حارس معالجة لكل إشعار على حدة: يمنع الضغطات المتكررة السريعة على نفس
-  // الإشعار من تشغيل عدة معالجات غير متزامنة وفتح نفس الصفحة أكثر من مرة.
-  // يُضبط قبل أول await في _handleTap، ويُزال دائماً (نجاحاً أو فشلاً) بعد
-  // إغلاق الصفحة المفتوحة أو انتهاء المعالجة ──
+  // Per-notification processing guard — prevents rapid double-taps from launching multiple
+  // async handlers and opening the same screen more than once. Set before the first await
+  // in _handleTap; always removed (success or failure) after the pushed screen closes.
   final Set<String> _processingIds = {};
 
   Stream<QuerySnapshot> _notificationsStream() {
@@ -36,9 +35,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         .snapshots();
   }
 
-  // ── لا يجوز أن يوقف فشل هذا الاستدعاء عملية التنقّل؛ لذا يُستدعى دائماً
-  // من داخل try/catch في _handleTap، ويعيد true/false بدل رمي الاستثناء
-  // للأعلى دون داعٍ ──
+  // Failure here must not block navigation — always called from inside _handleTap's
+  // try/catch; returns true/false instead of throwing.
   Future<bool> _markAsRead(String notificationId) async {
     try {
       await FirebaseFirestore.instance
@@ -53,17 +51,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  // ── يفتح الصفحة المرتبطة بالإشعار حسب نوعه. تعليم الإشعار كمقروء يتم أولاً
-  // لكن فشله لا يمنع التنقّل مطلقاً (مغلَّف بمفرده في _markAsRead). يعتمد
-  // التوجيه حصراً على الحقول البنيوية المخزَّنة (type/relatedId/relatedRole)
-  // وليس على نص العنوان/الرسالة. أي حالة لا يمكن فتحها (نوع غير معروف، أو
-  // معرّف مرتبط مفقود، أو خطأ أثناء الجلب) تُظهر SnackBar صريحاً بدل
-  // الفشل الصامت. يُستخدم Navigator.push العادي من داخل التبويب الحالي
-  // فيبقى شريط التنقّل السفلي ظاهراً، دون أي Navigator جذري.
+  // Opens the screen linked to a notification based on its type. Mark-as-read runs first
+  // but its failure never blocks navigation (isolated inside _markAsRead). Routing relies
+  // only on structural fields (type/relatedId/relatedRole), never on title/message text.
+  // Unhandled cases (unknown type, missing relatedId, fetch error) show an explicit SnackBar
+  // rather than silently doing nothing. Uses regular Navigator.push within the current tab
+  // so the bottom nav stays visible — no root Navigator involved.
   //
-  // حارس المعالجة: يُضبط هنا قبل أول await (منعاً لتشغيل عدة معالجات من
-  // ضغطات سريعة متكررة)، وتُنتظَر كل عمليات Navigator.push حتى إغلاق
-  // الصفحة المفتوحة قبل تحرير الحارس في finally ──
+  // Processing guard: set here before the first await (prevents multiple handlers from
+  // rapid taps); all Navigator.push calls are awaited until the pushed screen closes
+  // before releasing the guard in finally.
   Future<void> _handleTap(
     BuildContext context,
     String notificationId,
@@ -124,7 +121,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         case 'donation':
           debugPrint('[Notifications] id=$notificationId branch=donation');
           if (!context.mounted) return;
-          // ── يُنتظَر حتى إغلاق الصفحة قبل تحرير الحارس ──
+          // Awaited so the guard isn't released until the screen closes.
           await Navigator.push(
             context,
             MaterialPageRoute(
@@ -171,7 +168,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           );
           break;
         case 'account':
-          // ── قرار إداري بخصوص حساب المستخدم نفسه — يفتح ملفه الشخصي ──
+          // Admin decision about the user's own account — opens their profile.
           debugPrint('[Notifications] id=$notificationId branch=account');
           final uid = FirebaseAuth.instance.currentUser?.uid;
           if (uid == null) {
@@ -195,8 +192,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           );
           break;
         default:
-          // ── أنواع أخرى (complaint/report...) لا ترتبط بصفحة محددة
-          // حالياً؛ يُعرض توضيح بدل عدم فعل أي شيء ──
+          // Other types (complaint/report…) have no dedicated screen yet — show a SnackBar instead.
           debugPrint('[Notifications] id=$notificationId branch=unhandled '
               'type="$type"');
           showCannotOpen();
@@ -207,15 +203,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           '[Notifications] id=$notificationId navigation FAILED: $e\n$stack');
       showCannotOpen();
     } finally {
-      // ── يُحرَّر الحارس دائماً — سواء انتهت المعالجة بنجاح، بفشل، أو بعد
-      // إغلاق الصفحة المفتوحة (لأن الأفرع أعلاه تنتظر Navigator.push) ──
+      // Guard always released — whether the handler succeeded, failed, or the pushed screen closed.
       _processingIds.remove(notificationId);
       debugPrint('[Notifications] id=$notificationId guard RELEASED');
     }
   }
 
-  // ── حجز نشط (reserved) يفتح شاشة QR للاستلام؛ وإلا (مستلم/ملغى) تُفتح
-  // شاشة طلباتي على تبويب حالته مباشرةً بما أن رمز QR لم يعد مفيداً ──
+  // Active reservation ('reserved') opens the QR screen; otherwise (picked up/cancelled)
+  // opens the orders screen on the matching tab since the QR code is no longer useful.
   Future<void> _openReservation(
       BuildContext context, String reservationId) async {
     debugPrint(

@@ -136,7 +136,6 @@ class _ComplaintsListState extends State<_ComplaintsList>
     super.build(context);
     return Column(
       children: [
-        // ── شريط الترتيب ──
         Container(
           color: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -167,7 +166,6 @@ class _ComplaintsListState extends State<_ComplaintsList>
         ),
         const Divider(height: 1),
 
-        // ── القائمة ──
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: widget.stream,
@@ -387,7 +385,6 @@ class _ComplaintCardState extends State<_ComplaintCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── رأس البطاقة: صورة + اسم + تاريخ + شارة الحالة ──
                 Row(
                   children: [
                     _UserAvatar(name: name, photoUrl: photo, size: 40),
@@ -437,7 +434,6 @@ class _ComplaintCardState extends State<_ComplaintCard> {
                   ],
                 ),
 
-                // ── نص الشكوى ──
                 if (description.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text(
@@ -452,7 +448,6 @@ class _ComplaintCardState extends State<_ComplaintCard> {
                   ),
                 ],
 
-                // ── رقم العرض المرتبط ──
                 if (relatedOffer.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Row(
@@ -469,7 +464,6 @@ class _ComplaintCardState extends State<_ComplaintCard> {
                   ),
                 ],
 
-                // ── إجراءات ──
                 if (widget.showResolveButton) ...[
                   const SizedBox(height: 12),
                   Row(

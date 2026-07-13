@@ -15,14 +15,12 @@ class CharityBrowseScreen extends StatefulWidget {
 class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
   final CharityBrowseService _browseService = CharityBrowseService();
 
-  // ── فلاتر ──
   String _priceFilter = 'all'; // all | free | paid
   String _providerTypeFilter = 'all'; // all | restaurant | charity | individual
   String _categoryFilter = 'all';
   String _sortOrder = 'newest'; // newest | nearest | price_asc
   double _radiusKm = 10.0;
 
-  // ── موقع ──
   double? _userLat;
   double? _userLng;
   bool _locationLoading = true;
@@ -70,7 +68,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
     );
   }
 
-  // ── عدد الفلاتر النشطة ──
   int get _activeFilterCount => _browseService.activeFilterCount(
         priceFilter: _priceFilter,
         providerTypeFilter: _providerTypeFilter,
@@ -154,7 +151,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                   ),
                 ),
               ),
-              // عنوان + مسح
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
                 child: Row(
@@ -190,7 +186,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // نوع المزود
                       SheetSection(title: 'نوع المزود', chips: [
                         SheetChip(
                             label: 'الكل',
@@ -210,7 +205,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                             onTap: () => ss(() => tempProvider = 'individual')),
                       ]),
 
-                      // السعر
                       SheetSection(title: 'السعر', chips: [
                         SheetChip(
                             label: 'الكل',
@@ -226,7 +220,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                             onTap: () => ss(() => tempPrice = 'paid')),
                       ]),
 
-                      // الفئة
                       SheetSection(title: 'الفئة', chips: [
                         SheetChip(
                             label: 'الكل',
@@ -255,7 +248,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                             onTap: () => ss(() => tempCategory = 'أخرى')),
                       ]),
 
-                      // الترتيب
                       SheetSection(title: 'الترتيب', chips: [
                         SheetChip(
                             label: 'الأحدث',
@@ -275,7 +267,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
                             onTap: () => ss(() => tempSort = 'price_asc')),
                       ]),
 
-                      // النطاق
                       if (tempSort == 'nearest' && _hasLocation) ...[
                         const Text('النطاق',
                             style: TextStyle(
@@ -356,7 +347,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
       ),
       body: Column(
         children: [
-          // ── شريط الفلاتر ──
           Container(
             color: AppColors.card,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -455,7 +445,6 @@ class _CharityBrowseScreenState extends State<CharityBrowseScreen> {
           ),
           const Divider(height: 1),
 
-          // ── قائمة العروض ──
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _browseService.watchAvailableOffers(),

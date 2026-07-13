@@ -5,9 +5,6 @@ import '../../services/charity_data_service.dart';
 import '../../services/charity_helper_service.dart';
 import '../../theme/app_colors.dart';
 
-// ─────────────────────────────────────────────
-// سجل التبرعات
-// ─────────────────────────────────────────────
 class CharityHistoryScreen extends StatelessWidget {
   CharityHistoryScreen({super.key});
 

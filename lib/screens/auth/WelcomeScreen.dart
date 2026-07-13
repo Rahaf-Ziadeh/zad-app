@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
-// ─────────────────────────────────────────────
-// بيانات صفحات الـ Onboarding
-// ─────────────────────────────────────────────
 class _OnboardingPage {
   final String title;
   final String subtitle;
@@ -43,9 +40,6 @@ const _pages = [
   ),
 ];
 
-// ─────────────────────────────────────────────
-// WelcomeScreen
-// ─────────────────────────────────────────────
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -58,7 +52,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  // كل صفحة عندها controller خاص فيها
+  // Each page has its own AnimationController.
   late final List<AnimationController> _controllers;
   late final List<Animation<double>> _fades;
   late final List<Animation<Offset>> _slides;
@@ -87,7 +81,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             ).animate(CurvedAnimation(parent: c, curve: Curves.easeOutBack)))
         .toList();
 
-    // شغّل أنيميشن الصفحة الأولى فوراً
+    // Kick off the first page's animation immediately.
     _controllers[0].forward();
   }
 
@@ -133,7 +127,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // ── زر تخطي ──
             Align(
               alignment: AlignmentDirectional.topEnd,
               child: Padding(
@@ -148,7 +141,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               ),
             ),
 
-            // ── الصفحات ──
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
@@ -189,7 +181,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
             const SizedBox(height: 36),
 
-            // ── الأزرار ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Column(
@@ -234,9 +225,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }
 }
 
-// ─────────────────────────────────────────────
-// صفحة onboarding واحدة
-// ─────────────────────────────────────────────
 class _OnboardingPageWidget extends StatelessWidget {
   final _OnboardingPage page;
 
@@ -249,7 +237,6 @@ class _OnboardingPageWidget extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // ── أيقونة كبيرة ──
           Container(
             width: 140,
             height: 140,
@@ -284,7 +271,6 @@ class _OnboardingPageWidget extends StatelessWidget {
 
           const SizedBox(height: 40),
 
-          // ── شعار زاد ──
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -330,9 +316,6 @@ class _OnboardingPageWidget extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// Buttons
-// ─────────────────────────────────────────────
 class _PrimaryButton extends StatelessWidget {
   final String text;
   final Color color;

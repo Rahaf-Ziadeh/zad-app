@@ -17,13 +17,10 @@ class CharityDataService {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
-  // موجودة لخدمات الحجز الأخرى داخل هذا السيرفس.
+  // Kept for other reservation services inside this class.
   // ignore: unused_field
   final ReservationService _reservationService;
 
-  // ─────────────────────────────────────────────
-  // التبرعات قيد الانتظار
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchPendingDonations() {
     return _firestore
         .collection('donations')
@@ -32,9 +29,6 @@ class CharityDataService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // التبرعات المقبولة (الحالة القديمة: approved فقط)
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchApprovedDonations() {
     return _firestore
         .collection('donations')
@@ -43,11 +37,8 @@ class CharityDataService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // التبرعات المقبولة — جميع مراحل دورة الحياة بعد pending/rejected
-  // (approved → received → redistributed/published)
-  // بدون orderBy لتجنّب فهرس مركّب — الترتيب يتم client-side
-  // ─────────────────────────────────────────────
+  // All post-pending/rejected lifecycle stages: approved → received → redistributed/published.
+  // No orderBy — avoids a composite index; sorted client-side by callers.
   Stream<QuerySnapshot> watchAcceptedDonations() {
     return _firestore
         .collection('donations')
@@ -60,9 +51,6 @@ class CharityDataService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // التبرعات التي تم استلامها وجاهزة للنشر
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchReceivedDonations() {
     return _firestore
         .collection('donations')
@@ -71,9 +59,6 @@ class CharityDataService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // التبرعات المرفوضة
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchRejectedDonations() {
     return _firestore
         .collection('donations')
@@ -82,9 +67,6 @@ class CharityDataService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // تحديث حالة التبرع (قبول / رفض)
-  // ─────────────────────────────────────────────
   Future<void> updateDonationStatus({
     required String donationId,
     required String newStatus,
@@ -113,10 +95,7 @@ class CharityDataService {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // تأكيد استلام التبرع — يغيّر الحالة إلى received
-  // وينبّه المتبرع أن الجمعية استلمت التبرع
-  // ─────────────────────────────────────────────
+  // Changes status to 'received' and notifies the donor that the charity collected the donation.
   Future<void> confirmDonationReceipt({
     required String donationId,
     required String donorUserId,
@@ -124,7 +103,6 @@ class CharityDataService {
   }) async {
     final uid = _auth.currentUser!.uid;
 
-    // جلب اسم الجمعية من مستند المستخدم لإدراجه في الإشعار
     final userDoc = await _firestore.collection('users').doc(uid).get();
     final charityName =
         userDoc.data()?['name'] as String? ?? 'الجمعية الخيرية';
@@ -148,9 +126,6 @@ class CharityDataService {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // سجل التبرعات — يشمل جميع حالات ما بعد pending
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchDonationHistory() {
     return _firestore.collection('donations').where(
       'status',
@@ -205,9 +180,6 @@ class CharityDataService {
     return history;
   }
 
-  // ─────────────────────────────────────────────
-  // الإشعارات غير المقروءة
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchUnreadNotifications() {
     final currentCharityId = _auth.currentUser?.uid ?? '';
 
@@ -218,16 +190,10 @@ class CharityDataService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // جميع التبرعات
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchAllDonations() {
     return _firestore.collection('donations').snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // إحصائيات الصفحة الرئيسية
-  // ─────────────────────────────────────────────
   ({
     int pending,
     int approved,
@@ -288,9 +254,6 @@ class CharityDataService {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // جميع إشعارات الجمعية
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchNotifications() {
     final uid = _auth.currentUser?.uid ?? '';
 
@@ -300,9 +263,6 @@ class CharityDataService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // تعليم جميع الإشعارات كمقروءة
-  // ─────────────────────────────────────────────
   Future<void> markAllNotificationsAsRead(
     List<QueryDocumentSnapshot> documents,
   ) async {
@@ -325,18 +285,12 @@ class CharityDataService {
     await batch.commit();
   }
 
-  // ─────────────────────────────────────────────
-  // تعليم إشعار واحد كمقروء
-  // ─────────────────────────────────────────────
   Future<void> markNotificationAsRead(
     String notificationId,
   ) {
     return NotificationService().markAsRead(notificationId);
   }
 
-  // ─────────────────────────────────────────────
-  // تحميل ملف الجمعية
-  // ─────────────────────────────────────────────
   Future<Map<String, dynamic>?> loadCharityProfile() async {
     final uid = _auth.currentUser?.uid;
 
@@ -349,9 +303,6 @@ class CharityDataService {
     return document.data();
   }
 
-  // ─────────────────────────────────────────────
-  // حفظ ملف الجمعية
-  // ─────────────────────────────────────────────
   Future<void> saveCharityProfile({
     required String name,
     required String phone,
@@ -391,17 +342,10 @@ class CharityDataService {
     await batch.commit();
   }
 
-  // ─────────────────────────────────────────────
-  // تسجيل الخروج
-  // ─────────────────────────────────────────────
   Future<void> logout() {
     return _auth.signOut();
   }
 
-  // ─────────────────────────────────────────────
-  // العروض التي نشرتها الجمعية
-  // مطابق للاستعلام الموجود في الكلاس الأصلي
-  // ─────────────────────────────────────────────
   Stream<QuerySnapshot> watchPublishedCharityOffers() {
     final uid = _auth.currentUser?.uid ?? '';
 
@@ -413,10 +357,6 @@ class CharityDataService {
         .snapshots();
   }
 
-  // ─────────────────────────────────────────────
-  // إغلاق العرض
-  // مطابق للكلاس الأصلي
-  // ─────────────────────────────────────────────
   Future<void> closeOffer(String offerId) async {
     await _firestore.collection('offers').doc(offerId).update({
       'status': 'closed',
@@ -424,10 +364,6 @@ class CharityDataService {
     });
   }
 
-  // ─────────────────────────────────────────────
-  // نشر عرض جديد من الفائض
-  // هذا المنطق مطابق للكلاس الأصلي
-  // ─────────────────────────────────────────────
   Future<void> publishSurplusOffer({
     required String title,
     required String description,
@@ -447,10 +383,9 @@ class CharityDataService {
 
     final charityName = userDocument.data()?['name'] ?? 'جمعية خيرية';
 
-    // ── 1. إنشاء العرض ──
     final offerReference = _firestore.collection('offers').doc();
 
-    // صورة التبرع الأصلية — تُحفظ للمراجعة حتى لو استُبدلت
+    // Saved for audit/traceability even if the charity replaced it with a new image.
     final originalDonationImageUrl = prefillData != null
         ? (prefillData['imageUrl'] as String? ??
             prefillData['donationImageUrl'] as String? ??
@@ -490,7 +425,7 @@ class CharityDataService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // ── 2. تحديث التبرع إذا كان العرض منشورًا من تبرع ──
+    // Mark the source donation as redistributed when the offer is published from one.
     if (prefillDonationId != null) {
       await _firestore.collection('donations').doc(prefillDonationId).update({
         'status': 'redistributed',
@@ -501,7 +436,6 @@ class CharityDataService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // ── 3. إشعار المتبرع بأن تبرعه أُعيد توزيعه ──
       final donationData = prefillData;
 
       if (donationData != null) {
@@ -526,10 +460,6 @@ class CharityDataService {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // فلترة التبرعات المقبولة للجمعية الحالية
-  // مطابق للكلاس الأصلي
-  // ─────────────────────────────────────────────
   List<QueryDocumentSnapshot> filterDonationsForCurrentCharity(
     List<QueryDocumentSnapshot> documents,
   ) {

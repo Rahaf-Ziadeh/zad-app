@@ -40,14 +40,12 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   bool _isLoading = false;
   bool _isMysteryPackage = false;
 
-  // ── تاريخ ووقت انتهاء العرض — اختياري؛ إن لم يُحدَّد يُطبَّق انتهاء
-  // تلقائي بعد 24 ساعة من النشر ──
+  // Defaults to 24 h from publish time when the user doesn't pick an expiry.
   DateTime? _expiresAt;
 
-  // ── إحداثيات مكان الاستلام ──
   double? _latitude;
   double? _longitude;
-  String _locationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
+  String _locationSource = 'manual'; // 'gps' | 'map' | 'manual'
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -100,7 +98,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     }
   }
 
-  // ── فتح شاشة اختيار الموقع على خريطة OpenStreetMap ──
   Future<void> _openLocationPicker() async {
     final result = await Navigator.push<LocationPickerResult>(
       context,
@@ -137,9 +134,8 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   }
 
   Future<void> _addOffer() async {
-    // ── يُمنع نشر أي عرض/باقة جديدة أثناء إعادة المراجعة أو بعد الرفض؛
-    // يُتحقَّق من Firestore مباشرة (وليس من حالة مخزَّنة محلياً) كخط دفاع
-    // فعلي على مستوى الكتابة، وليس مجرد تعطيل الزر في الواجهة ──
+    // Publishing is blocked during re-review or after rejection — checked directly in
+    // Firestore (not cached state) as the actual write-time guard, not just a UI disable.
     final guardUid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final canPublish = await canPublishOrReactivateOffers(guardUid);
     if (!mounted) return;
@@ -159,7 +155,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
       return;
     }
 
-    // ── جمع قيم الحقول وتحقق منها قبل أي await ──
+    // All field reads and sync validation before any await.
     final title = _titleController.text.trim();
     final desc = _descController.text.trim();
     final quantityStr = _quantityController.text.trim();
@@ -244,7 +240,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
       return;
     }
 
-    // التحقق من تسجيل الدخول — قبل أي await
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -257,7 +252,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ── حل موقع الاستلام إذا كان فارغاً مع وجود إحداثيات ──
+      // Resolve pickup address from coordinates if the text field was left empty.
       var pickupLocation = pickup;
       if (pickupLocation.isEmpty && _latitude != null) {
         final address = await LocationService().getAddressFromCoordinates(
@@ -277,7 +272,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         setState(() => _pickupController.text = address);
       }
 
-      // ── رفع الصورة أو استخدام الرابط الافتراضي للباقة الغامضة ──
       final String imageUrl;
       if (_selectedImage != null) {
         final uploaded = await _uploadImage();
@@ -290,7 +284,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         }
         imageUrl = uploaded;
       } else {
-        // باقة غامضة بدون صورة — رابط افتراضي
+        // Mystery package with no image — use the default placeholder.
         imageUrl = AppConstants.defaultMysteryPackageImageUrl;
       }
 
@@ -330,7 +324,7 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // الإشعار غير حرج — لا يوقف تدفق النشر عند الفشل
+      // Non-critical — notification failure must not roll back the publish.
       try {
         await NotificationService().sendNotification(
           userId: uid,
@@ -432,7 +426,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1 ── اسم الباقة ──
                   FormFieldWidget(
                     controller: _titleController,
                     label: 'اسم الباقة',
@@ -441,7 +434,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 2 ── صورة العرض ──
                   GestureDetector(
                     onTap: _pickImage,
                     child: Container(
@@ -489,7 +481,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 3 ── السعر الأصلي / بعد الخصم ──
                   Row(
                     children: [
                       Expanded(
@@ -515,7 +506,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 4 ── عدد الباقات ──
                   FormFieldWidget(
                     controller: _quantityController,
                     label: 'عدد الباقات',
@@ -525,7 +515,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 5 ── مكان الاستلام (نص) ──
                   FormFieldWidget(
                     controller: _pickupController,
                     label: 'مكان الاستلام',
@@ -534,7 +523,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // 6 ── تحديد موقع الاستلام على الخريطة ──
                   LocationPickerRow(
                     hasLocation: _latitude != null,
                     latitude: _latitude,
@@ -548,7 +536,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 7 ── بداية وقت الاستلام ──
                   TextField(
                     controller: _pickupStartTimeController,
                     readOnly: true,
@@ -569,7 +556,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 8 ── نهاية وقت الاستلام ──
                   TextField(
                     controller: _pickupEndTimeController,
                     readOnly: true,
@@ -590,14 +576,12 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 8.5 ── تاريخ ووقت انتهاء العرض ──
                   ExpiryDateTimeField(
                     value: _expiresAt,
                     onChanged: (v) => setState(() => _expiresAt = v),
                   ),
                   const SizedBox(height: 14),
 
-                  // 9 ── نوع الباقة ──
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -648,7 +632,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // 10 ── محتوى العرض ──
                   if (!_isMysteryPackage)
                     TextField(
                       controller: _descController,
@@ -686,14 +669,12 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
                     ),
                   const SizedBox(height: 14),
 
-                  // 11 ── معلومات الحساسية الغذائية ──
                   AllergyCheckboxPanel(
                     selected: _selectedAllergens,
                     onChanged: (v) => setState(() => _selectedAllergens = v),
                   ),
                   const SizedBox(height: 20),
 
-                  // 12 ── نشر الباقة ──
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(

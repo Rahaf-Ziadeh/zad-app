@@ -10,9 +10,6 @@ import 'package:zad_app/theme/app_colors.dart';
 import 'package:zad_app/widgets/offer_widgets.dart';
 import '../../services/reservation_service.dart';
 
-// ─────────────────────────────────────────────
-// ثوابت الألوان للحجز والدفع
-// ─────────────────────────────────────────────
 const _kReservedColor = AppColors.primary;
 const _kPickedUpColor = AppColors.success;
 const _kCancelledColor = AppColors.danger;
@@ -20,9 +17,6 @@ const _kPendingCashColor = Color(0xFFF59E0B); // amber
 const _kPendingOnlineColor = Color(0xFF7C3AED); // purple
 const _kPaidColor = AppColors.success;
 
-// ─────────────────────────────────────────────
-// مساعدات على مستوى الملف
-// ─────────────────────────────────────────────
 String _statusLabel(String status) {
   switch (status) {
     case 'reserved':
@@ -99,18 +93,17 @@ String _formatDateTime(Timestamp? ts) {
   return '$d/$m/$y  $h:$min';
 }
 
-/// يُحوّل أي قيمة من Firestore إلى نص آمن مع fallback.
-/// يتجنب استدعاء .trim() أو .isNotEmpty على dynamic null.
+/// Converts any Firestore value to a safe string with a fallback — avoids calling
+/// .trim() or .isNotEmpty on a dynamic null.
 String _safeStr(dynamic raw, String fallback) {
   if (raw == null) return fallback;
   final s = raw.toString().trim();
   return s.isEmpty ? fallback : s;
 }
 
-// ── يفتح تفاصيل العرض المرتبط بحجز معيّن عبر offerId الفعلي المخزَّن على
-// الحجز نفسه (وليس أي قيمة افتراضية)؛ يُستخدم Navigator.push العادي من
-// داخل التبويب الحالي فيبقى شريط التنقّل السفلي ظاهراً، بنفس أسلوب فتح
-// UserPublicProfileScreen وScanQrScreen في هذا الملف ──
+// Opens the offer linked to a reservation using the real offerId stored on the
+// reservation doc. Uses a regular Navigator.push from within the current tab so
+// the bottom nav stays visible — same pattern as UserPublicProfileScreen and ScanQrScreen.
 Future<void> _openOfferFromReservation(
     BuildContext context, String offerId) async {
   if (offerId.isEmpty) {
@@ -146,11 +139,8 @@ Future<void> _openOfferFromReservation(
   }
 }
 
-// ─────────────────────────────────────────────
-// الشاشة الرئيسية
-// ─────────────────────────────────────────────
 class RestaurantReservationsScreen extends StatefulWidget {
-  // ── التبويب المبدئي: 0=الكل، 1=بانتظار الاستلام، 2=مكتملة، 3=ملغاة ──
+  // Tab indices: 0=all, 1=pending pickup, 2=completed, 3=cancelled.
   final int initialTabIndex;
 
   const RestaurantReservationsScreen({super.key, this.initialTabIndex = 0});
@@ -191,10 +181,9 @@ class _RestaurantReservationsScreenState
           .where('providerUserId', isEqualTo: _uid)
           .snapshots();
 
-  // ── التأكيد اليدوي (Part 7/8): يفتح نفس صحيفة المعاينة الكاملة المستخدمة
-  // في شاشة مسح QR بالضبط — نفس التحقق المسبق (الملكية/الحالة)، نفس عرض
-  // البيانات، ونفس معاملة ReservationService.confirmPickup النهائية — فلا
-  // يوجد أي فرق في الأمان أو التحقق بين نقطتَي الدخول ──
+  // Manual confirmation opens the same full preview sheet as QR scan — same ownership/status
+  // pre-check, same data view, same ReservationService.confirmPickup call. No security
+  // difference between the two entry points.
   Future<void> _openManualConfirmation(
     BuildContext context,
     QueryDocumentSnapshot doc,
@@ -216,9 +205,8 @@ class _RestaurantReservationsScreenState
     );
   }
 
-  // ── رفض الطلب من طرف المطعم (Part 10) — لا يوجد قيد زمني هنا على عكس
-  // إلغاء المستخدم؛ الاسترداد وإرجاع الكمية والإشعار كلها تتم داخل
-  // ReservationService.rejectReservationByProvider ذرّياً ──
+  // No time-window restriction unlike user cancellation; quantity restore,
+  // refund, and notification are all handled atomically in rejectReservationByProvider.
   Future<void> _rejectReservation(
     BuildContext context,
     QueryDocumentSnapshot doc,
@@ -279,19 +267,17 @@ class _RestaurantReservationsScreenState
       body: StreamBuilder<QuerySnapshot>(
         stream: _reservationsStream(),
         builder: (context, snapshot) {
-          // ── حالة الخطأ ──
           if (snapshot.hasError) {
             return _ErrorState(message: snapshot.error.toString());
           }
 
-          // ── حالة التحميل ──
           if (!snapshot.hasData) {
             return const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             );
           }
 
-          // مساعد آمن: يُعيد قيمة حقل status دون أي استثناء
+          // Returns status without throwing — guards against pending writes and unexpected types.
           String safeStatus(QueryDocumentSnapshot d) {
             try {
               final raw = d.data();
@@ -302,7 +288,7 @@ class _RestaurantReservationsScreenState
             }
           }
 
-          // ترتيب client-side بدلاً من orderBy في الاستعلام (يتجنب الحاجة لـ composite index)
+          // Client-side sort — avoids the composite index Firestore would require for orderBy.
           final all = List<QueryDocumentSnapshot>.from(snapshot.data!.docs)
             ..sort((a, b) {
               final aRaw = (a.data() as Map<String, dynamic>)['createdAt'];
@@ -315,7 +301,7 @@ class _RestaurantReservationsScreenState
               return bTs.compareTo(aTs);
             });
 
-          // reserved + confirmed معاً في تبويب "بانتظار الاستلام"
+          // Both 'reserved' and 'confirmed' land in the "pending pickup" tab.
           final reserved = all
               .where((d) =>
                   safeStatus(d) == 'reserved' || safeStatus(d) == 'confirmed')
@@ -327,7 +313,6 @@ class _RestaurantReservationsScreenState
 
           return Column(
             children: [
-              // ── بطاقات الملخص ──
               _SummaryRow(
                 total: all.length,
                 active: reserved.length,
@@ -336,7 +321,6 @@ class _RestaurantReservationsScreenState
                 tabController: _tabController,
               ),
 
-              // ── قوائم التبويب ──
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
@@ -376,9 +360,6 @@ class _RestaurantReservationsScreenState
   }
 }
 
-// ─────────────────────────────────────────────
-// صف بطاقات الملخص
-// ─────────────────────────────────────────────
 class _SummaryRow extends StatelessWidget {
   final int total;
   final int active;
@@ -458,9 +439,6 @@ class _SummaryRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// قائمة الحجوزات
-// ─────────────────────────────────────────────
 class _ReservationList extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
   final String emptyMessage;
@@ -493,7 +471,6 @@ class _ReservationList extends StatelessWidget {
 
           final status = data['status']?.toString() ?? 'reserved';
 
-          // أظهر أزرار التأكيد/الرفض للحجوزات المنتظرة والمؤكدة فقط
           final showActions = status == 'reserved' || status == 'confirmed';
           return _ReservationCard(
             doc: doc,
@@ -510,9 +487,6 @@ class _ReservationList extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة الحجز الواحد
-// ─────────────────────────────────────────────
 class _ReservationCard extends StatelessWidget {
   final QueryDocumentSnapshot doc;
   final Map<String, dynamic> data;
@@ -526,7 +500,7 @@ class _ReservationCard extends StatelessWidget {
     required this.onReject,
   });
 
-  // استخراج Timestamp بأمان: يتجنب الأعطال عند وجود pending write
+  // Guards against crashes from pending writes or unexpected field types.
   Timestamp? _ts(String key) {
     final v = data[key];
     return v is Timestamp ? v : null;
@@ -543,12 +517,11 @@ class _ReservationCard extends StatelessWidget {
   }
 
   Widget _buildCard(BuildContext context) {
-    // _safeStr: يعالج null وأنواع غير String بأمان كامل
     final offerTitle = _safeStr(data['offerTitle'], 'طلب طعام');
     final userName = _safeStr(data['userName'], 'مستخدم');
     final status = _safeStr(data['status'], 'reserved');
     final pickupLocation = _safeStr(data['pickupLocation'], 'غير محدد');
-    // رقم الحجز: reservationCode → reservationId → doc.id
+    // Resolution order: reservationCode → reservationId → doc.id.
     final reservationCode = () {
       final code = _safeStr(data['reservationCode'], '');
       if (code.isNotEmpty) return code;
@@ -558,14 +531,13 @@ class _ReservationCard extends StatelessWidget {
     final pickupTime = data['pickupTime']?.toString() ?? '';
     final price = data['price'];
     final currency = _safeStr(data['currency'], 'ILS');
-    // حقول الدفع: null يعني العرض مجاني
+    // null payment fields mean the offer was free.
     final paymentMethod = data['paymentMethod']?.toString();
     final paymentStatus = data['paymentStatus']?.toString();
-    // Timestamp: is-check يحمي من pending-write أو بيانات غير متوقعة
     final createdAt = _ts('createdAt');
     final pickedAt = _ts('pickedAt');
     final qrValidatedAt = _ts('qrValidatedAt');
-    // الكمية: is-check آمن بدل as num? الذي يرمي عند أنواع غير رقمية
+    // is-check instead of `as num?` — avoids a throw when the field is a non-numeric type.
     final rawQty = data['quantity'];
     final quantity = rawQty is num ? rawQty.toInt() : 1;
     final statusColor = _statusColor(status);
@@ -585,7 +557,6 @@ class _ReservationCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── رأس البطاقة: أيقونة + العنوان + شارة الحالة ──
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -661,7 +632,6 @@ class _ReservationCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // شارة الحالة
                 _StatusBadge(status: status),
               ],
             ),
@@ -670,7 +640,6 @@ class _ReservationCard extends StatelessWidget {
             const Divider(height: 1, color: AppColors.border),
             const SizedBox(height: 10),
 
-            // ── تفاصيل الحجز ──
             OfferInfoRow(
               icon: Icons.confirmation_number_outlined,
               label: 'رقم الحجز',
@@ -716,7 +685,6 @@ class _ReservationCard extends StatelessWidget {
                 value: _formatDateTime(pickedAt),
               ),
 
-            // ── شارة حالة الدفع ──
             if (paymentStatus != null) ...[
               const SizedBox(height: 6),
               Row(
@@ -736,7 +704,6 @@ class _ReservationCard extends StatelessWidget {
               ),
             ],
 
-            // ── مؤشر مسح QR ──
             if (qrValidatedAt != null) ...[
               const SizedBox(height: 6),
               Row(
@@ -755,9 +722,8 @@ class _ReservationCard extends StatelessWidget {
               ),
             ],
 
-            // ── أزرار العمل (فقط للحجوزات بانتظار الاستلام) — "تأكيد يدوياً"
-            // يفتح صحيفة المعاينة الكاملة مباشرة (هي نفسها تحوي تأكيد/إلغاء
-            // نهائيَّين، فلا حاجة لنافذة تأكيد إضافية قبلها) ──
+            // "Confirm manually" opens the full preview sheet directly; the sheet
+            // itself has the final confirm/reject buttons, so no extra dialog is needed.
             if (onConfirm != null) ...[
               const SizedBox(height: 10),
               Row(
@@ -805,7 +771,6 @@ class _ReservationCard extends StatelessWidget {
               ],
             ],
 
-            // ── مؤشر اكتمال الاستلام ──
             if (status == 'picked_up') ...[
               const SizedBox(height: 8),
               Container(
@@ -833,7 +798,6 @@ class _ReservationCard extends StatelessWidget {
               ),
             ],
 
-            // ── مؤشر الإلغاء ──
             if (status == 'cancelled') ...[
               const SizedBox(height: 8),
               Container(
@@ -868,9 +832,6 @@ class _ReservationCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// شارة حالة الحجز
-// ─────────────────────────────────────────────
 class _StatusBadge extends StatelessWidget {
   final String status;
   const _StatusBadge({required this.status});
@@ -896,9 +857,6 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// شارة حالة الدفع
-// ─────────────────────────────────────────────
 class _PaymentBadge extends StatelessWidget {
   final String paymentStatus;
   const _PaymentBadge({required this.paymentStatus});
@@ -924,9 +882,6 @@ class _PaymentBadge extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// حالة فارغة
-// ─────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final String message;
   const _EmptyState({required this.message});
@@ -968,10 +923,8 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// نافذة إدخال سبب رفض الطلب — تُعيد النص المُدخَل (بعد trim) عند الإرسال،
-// أو null إن أُلغيت. الإرسال يتطلب سبباً غير فارغ ──
-// ─────────────────────────────────────────────
+// Returns the trimmed rejection reason on submit, or null if dismissed.
+// Submit is blocked if the field is empty.
 class _RejectReasonDialog extends StatefulWidget {
   final String offerTitle;
   const _RejectReasonDialog({required this.offerTitle});
@@ -1041,9 +994,6 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
   }
 }
 
-// ─────────────────────────────────────────────
-// حالة الخطأ
-// ─────────────────────────────────────────────
 class _ErrorState extends StatelessWidget {
   final String message;
   const _ErrorState({required this.message});

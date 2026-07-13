@@ -58,9 +58,8 @@ class SupportService {
     return chatId;
   }
 
-  // ── يبحث عن محادثة دعم مفتوحة (غير مغلقة) لنفس المستخدم لتفادي إنشاء
-  // أكثر من محادثة مفتوحة واحدة في نفس الوقت؛ فلتر مساواة وحيد (بلا orderBy)
-  // لتفادي فهرس مركّب، والفرز/الاختيار يتم على العميل ──
+  // Finds an existing open (non-closed) chat for this user to avoid duplicates.
+  // Single equality filter with no orderBy — sorted client-side to skip a composite index.
   Future<String?> findOpenChatId(String userId) async {
     final snap =
         await _db.collection('support_chats').where('userId', isEqualTo: userId).get();

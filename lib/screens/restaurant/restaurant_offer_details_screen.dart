@@ -10,10 +10,9 @@ import 'edit_offer_screen.dart';
 import 'offer_actions.dart';
 import 'restaurant_widgets.dart';
 
-// ─────────────────────────────────────────────
-// شاشة تفاصيل العرض من منظور المطعم صاحب العرض: تعرض حالة العرض ومعلوماته
-// بشكل حي (StreamBuilder على المستند نفسه)، مع إجراءات التعديل/التفعيل-
-// الإغلاق/الحذف. تُغلَق تلقائياً إن حُذف العرض من هذه الشاشة أو من مكان آخر ──
+// Offer detail screen from the restaurant owner's perspective: live status and data
+// via StreamBuilder, with edit/toggle/delete actions. Auto-closes if the offer is
+// deleted from here or anywhere else.
 class RestaurantOfferDetailsScreen extends StatelessWidget {
   final String offerId;
   final Map<String, dynamic> offerData;
@@ -75,7 +74,7 @@ class RestaurantOfferDetailsScreen extends StatelessWidget {
 
           final doc = snapshot.data;
           if (doc != null && !doc.exists) {
-            // العرض حُذف — أعد المستخدم تلقائياً للشاشة السابقة
+            // Offer was deleted — auto-pop back to the previous screen.
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (Navigator.canPop(context)) Navigator.pop(context);
             });
@@ -340,9 +339,6 @@ class RestaurantOfferDetailsScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة تفاصيل
-// ─────────────────────────────────────────────
 class _DetailCard extends StatelessWidget {
   final String? title;
   final List<Widget> children;

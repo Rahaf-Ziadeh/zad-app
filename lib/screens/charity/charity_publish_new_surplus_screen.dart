@@ -9,9 +9,6 @@ import '../../services/cloudinary_service.dart';
 import '../../theme/app_colors.dart';
 import '../common/location_picker_screen.dart';
 
-// ─────────────────────────────────────────────
-// شاشة نشر عرض جديد من الفائض
-// ─────────────────────────────────────────────
 class PublishNewSurplusScreen extends StatefulWidget {
   final String? prefillDonationId;
   final Map<String, dynamic>? prefillData;
@@ -40,10 +37,9 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
   DateTime? _expiryDate;
   double? _latitude;
   double? _longitude;
-  String _locationSource = 'manual'; // 'gps' أو 'map' أو 'manual'
+  String _locationSource = 'manual'; // 'gps' | 'map' | 'manual'
 
-  // ── صورة التبرع ──
-  // صورة التبرع الأصلية (من Firestore) — تُستخدم ما لم تختر الجمعية بديلاً
+  // Original donation image from Firestore — used unless the charity picks a replacement.
   String _existingImageUrl = '';
   XFile? _newImageFile;
   Uint8List? _newImageBytes;
@@ -52,7 +48,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
   void initState() {
     super.initState();
     final d = widget.prefillData;
-    // ملء البيانات تلقائياً من التبرع لو موجود
     _titleController = TextEditingController(
         text: d != null ? 'فائض: ${d['foodName'] ?? ''}' : '');
     _descController = TextEditingController(
@@ -64,7 +59,7 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
     _locationController =
         TextEditingController(text: d != null ? '${d['location'] ?? ''}' : '');
 
-    // تحميل صورة التبرع الأصلية بأولوية الحقول المتاحة
+    // Field priority: imageUrl → donationImageUrl → foodImageUrl.
     if (d != null) {
       _existingImageUrl = (d['imageUrl'] as String? ??
               d['donationImageUrl'] as String? ??
@@ -92,7 +87,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
       });
 
   Widget _buildImageSection() {
-    // إذا اختارت الجمعية صورة جديدة → عرضها مع زر إزالة
     if (_newImageBytes != null) {
       return Stack(
         children: [
@@ -139,7 +133,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
       );
     }
 
-    // إذا كان التبرع الأصلي يحتوي على صورة → عرضها مع زر الاستبدال
     if (_existingImageUrl.isNotEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,7 +197,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
       );
     }
 
-    // لا توجد صورة أصلية → زر رفع صورة جديدة
     return GestureDetector(
       onTap: _pickImage,
       child: Container(
@@ -254,7 +246,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
     if (picked != null) setState(() => _expiryDate = picked);
   }
 
-  // ── فتح شاشة اختيار الموقع على خريطة OpenStreetMap ──
   Future<void> _openLocationPicker() async {
     final result = await Navigator.push<LocationPickerResult>(
       context,
@@ -286,7 +277,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
       return;
     }
 
-    // ── تحقق من موقع الاستلام ──
     final locationText = _locationController.text.trim();
     if (locationText.isEmpty && _latitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -300,7 +290,7 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ── حل موقع الاستلام إذا كان فارغاً مع وجود إحداثيات ──
+      // Resolve pickup address from coordinates if the text field was left empty.
       var resolvedLocation = locationText;
       if (resolvedLocation.isEmpty && _latitude != null) {
         final address = await _locationService.getAddressFromCoordinates(
@@ -321,9 +311,7 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
         setState(() => _locationController.text = address);
       }
 
-      // ── حل URL الصورة النهائي ──
-      // إذا اختارت الجمعية صورة جديدة → رفعها إلى Cloudinary
-      // وإلا → إعادة استخدام الصورة الأصلية من التبرع
+      // Upload new image to Cloudinary if picked; otherwise reuse the donation's original URL.
       String finalImageUrl = _existingImageUrl;
       if (_newImageBytes != null && _newImageFile != null) {
         final uploaded = await CloudinaryService().uploadBytes(
@@ -426,7 +414,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
 
             const SizedBox(height: 16),
 
-            // لو من تبرع — عرض معلومات التبرع الأصلي
             if (isFromDonation && widget.prefillData != null) ...[
               Container(
                 padding: const EdgeInsets.all(14),
@@ -457,11 +444,9 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
               const SizedBox(height: 14),
             ],
 
-            // ── قسم الصورة ──
             _buildImageSection(),
             const SizedBox(height: 16),
 
-            // ── نوع التوزيع (ثابت للجمعيات) ──
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -526,7 +511,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // عنوان العرض
                     TextFormField(
                       controller: _titleController,
                       validator: (v) => v == null || v.trim().isEmpty
@@ -539,7 +523,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // الكمية
                     TextFormField(
                       controller: _quantityController,
                       keyboardType: TextInputType.number,
@@ -561,7 +544,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // تاريخ الانتهاء
                     InkWell(
                       onTap: _pickDate,
                       borderRadius: BorderRadius.circular(12),
@@ -594,7 +576,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // مكان الاستلام
                     TextFormField(
                       controller: _locationController,
                       decoration: const InputDecoration(
@@ -604,7 +585,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
                     ),
                     const SizedBox(height: 10),
 
-                    // زر تحديد الموقع على الخريطة
                     GestureDetector(
                       onTap: _openLocationPicker,
                       child: Container(
@@ -650,7 +630,6 @@ class _PublishNewSurplusScreenState extends State<PublishNewSurplusScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // الوصف
                     TextFormField(
                       controller: _descController,
                       maxLines: 3,

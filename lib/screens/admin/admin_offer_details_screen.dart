@@ -189,7 +189,6 @@ class _AdminOfferDetailsScreenState extends State<AdminOfferDetailsScreen> {
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // ── صورة + شريط العنوان ──
           SliverAppBar(
             expandedHeight: imageUrl != null && imageUrl.isNotEmpty ? 240 : 0,
             pinned: true,
@@ -222,7 +221,6 @@ class _AdminOfferDetailsScreenState extends State<AdminOfferDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── حالة + نوع ──
                   Row(
                     children: [
                       _StatusBadge(
@@ -245,7 +243,6 @@ class _AdminOfferDetailsScreenState extends State<AdminOfferDetailsScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // ── معلومات العرض ──
                   _SectionCard(
                     title: 'تفاصيل العرض',
                     icon: Icons.local_offer_outlined,
@@ -288,12 +285,10 @@ class _AdminOfferDetailsScreenState extends State<AdminOfferDetailsScreen> {
 
                   const SizedBox(height: 12),
 
-                  // ── مسببات الحساسية ──
                   _buildAllergenSection(d),
 
                   const SizedBox(height: 12),
 
-                  // ── معلومات الناشر ──
                   _SectionCard(
                     title: 'معلومات الناشر',
                     icon: Icons.person_outline_rounded,
@@ -302,7 +297,6 @@ class _AdminOfferDetailsScreenState extends State<AdminOfferDetailsScreen> {
 
                   const SizedBox(height: 24),
 
-                  // ── زر الحذف ──
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(

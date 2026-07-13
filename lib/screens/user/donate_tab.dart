@@ -15,13 +15,9 @@ import '../common/location_picker_screen.dart';
 import 'national_id_step_screen.dart';
 import 'provider_public_profile_screen.dart';
 
-// ─────────────────────────────────────────────
-// تبويب "التبرع" ضمن شاشة "تصفح": سجلّ عرض فقط (تبرعاتي السابقة + عروضي
-// المنشورة) — لا يحتوي أي بطاقتَي إجراء محايدتين. الدخول الفعلي لمساري
-// التبرع لجمعية أو نشر الطعام للكل يتم مباشرة من أزرار الشاشة الرئيسية
-// (تبرع الآن / تبويب التبرع / نشر عرض طعام)، كلٌّ يفتح شاشته المخصصة
-// (CharityDonationScreen أو UserPublishOfferScreen) مباشرة بعد التحقق من
-// توثيق الهوية عبر ensureNationalIdSaved، دون المرور بأي صفحة وسيطة ──
+// "Donate" tab inside the Browse screen — a read-only list (past donations + published offers).
+// Actual entry into the donate-to-charity or publish-for-all flows happens from the home screen
+// buttons; each opens its own screen after ensureNationalIdSaved, with no intermediate page.
 class DonateTab extends StatelessWidget {
   const DonateTab({super.key});
 
@@ -65,7 +61,6 @@ class DonateTab extends StatelessWidget {
 
         const SizedBox(height: 20),
 
-        // ── تبرعاتي السابقة ──
         const Text('تبرعاتي السابقة',
             style: TextStyle(
                 fontSize: 17,
@@ -175,7 +170,6 @@ class DonateTab extends StatelessWidget {
 
         const SizedBox(height: 24),
 
-        // ── عروضي المنشورة ──
         const Text(
           'عروضي المنشورة',
           style: TextStyle(
@@ -204,13 +198,9 @@ Widget _defaultLeadingIcon() {
   );
 }
 
-// ─────────────────────────────────────────────
-// تدفّق التبرع لجمعية محددة — مسار منفصل تماماً عن نشر الطعام للكل.
-// يحفظ في مجموعة donations كما هو معمول به حالياً.
-// ─────────────────────────────────────────────
+// Donation to a specific charity — saved to 'donations', not 'offers'.
 class CharityDonationScreen extends StatefulWidget {
-  // ── جمعية مبدئية اختيارية: تُستخدم عند فتح شاشة التبرع من "تبرع الآن" في
-  // الملف العام لجمعية محددة، أو من زر "تبرع" بجانب جمعية في قائمة الاختيار ──
+  // Optional pre-selected charity — passed when opening from a charity's public profile or list.
   final String? initialCharityId;
   final String? initialCharityName;
 
@@ -236,29 +226,23 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
   bool _isLoading = false;
   bool _acceptedResponsibility = false;
 
-  // بيانات المستخدم
   String? _userNationalId;
   String? _userName;
   bool _loadingUser = true;
 
-  // الجمعية المختارة
   String? _selectedCharityId;
   String? _selectedCharityName;
 
-  // موقع الاستلام
   double? _latitude;
   double? _longitude;
   String _locationSource = 'manual';
 
-  // الصورة
   Uint8List? _imageBytes;
   bool _isPickingImage = false;
 
-  // وقت الاستلام
   TimeOfDay? _pickupStartTime;
   TimeOfDay? _pickupEndTime;
 
-  // مسببات الحساسية
   Set<String> _selectedAllergens = {};
 
   final _categories = ['وجبات', 'مخبوزات', 'خضار وفواكه', 'معلبات', 'حلويات'];
@@ -439,7 +423,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
   }
 
   Future<void> _donateFood() async {
-    // ── التحقق من المصادقة ──
     if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يجب تسجيل الدخول أولاً للتبرع')),
@@ -447,7 +430,7 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
       return;
     }
 
-    // ── التحقق من الحقول المطلوبة (sync قبل أي await) ──
+    // All sync validation runs before any await so we never await mid-validation.
     if (_imageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى إضافة صورة للتبرع')),
@@ -488,17 +471,15 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
       return;
     }
 
-    // ── بوابة توثيق الهوية النهائية: شبكة أمان احتياطية فقط، فالمسار
-    // الأساسي يتحقق منها قبل فتح هذه الشاشة أصلاً عبر ensureNationalIdSaved
-    // في DonateTab/ProviderPublicProfileScreen. تُستخدم نفس الدالة المشتركة
-    // هنا أيضاً حتى لا يوجد أي منطق توثيق منفصل ──
+    // Safety net — the primary path already verified identity via ensureNationalIdSaved
+    // before opening this screen, but we call the same shared function here too.
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final identityReady = await ensureNationalIdSaved(context);
     debugPrint('[CharityDonationScreen] identityReady=$identityReady');
     if (!mounted || !identityReady) return;
 
-    // ── إعادة قراءة رقم الهوية بعد الحفظ المحتمل ليُستخدم في مستند التبرع؛
-    // فشل هذه القراءة الثانوية وحدها لا يجب أن يُلغي التبرع بأكمله ──
+    // Re-read national ID in case ensureNationalIdSaved just saved it;
+    // failure here is non-fatal and must not abort the whole donation.
     try {
       final userSnap =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -516,7 +497,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ── رفع الصورة إلى Cloudinary ──
       final imageUrl = await CloudinaryService().uploadBytes(
         bytes: _imageBytes!,
         filename: 'donation_${DateTime.now().millisecondsSinceEpoch}.jpg',
@@ -537,14 +517,12 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
       final title = _foodNameController.text.trim();
       final charityId = _selectedCharityId ?? '';
       final charityName = _selectedCharityName ?? '';
-      // ── إن لم يُحدَّد تاريخ انتهاء، يُعتمد انتهاء تلقائي بعد 24 ساعة من
-      // النشر بدل تكرار حقل "تاريخ انتهاء الصلاحية" في الواجهة ──
+      // Default to 24 h from now if the user didn't pick an expiry date.
       final expiresAt =
           _expiryDate ?? DateTime.now().add(const Duration(hours: 24));
 
       final docRef =
           await FirebaseFirestore.instance.collection('donations').add({
-        // ── حقول المواصفة الجديدة ──
         'donorUserId': uid,
         'donorName': _userName ?? '',
         'charityId': charityId,
@@ -565,7 +543,7 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        // ── حقول قديمة للتوافق مع السجلات السابقة ──
+        // Legacy fields kept for backward compatibility with existing records.
         'userId': uid,
         'userName': _userName ?? '',
         'nationalId': _userNationalId ?? '',
@@ -591,8 +569,7 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
       if (!mounted) return;
 
       if (!mounted) return;
-      // ── يُلتقط المرجع قبل الإغلاق: عرض شريط الرسائل عبر الـ context الخاص
-      // بهذه الشاشة بعد Navigator.pop غير آمن لأن الـ context يصبح غير فعّال ──
+      // Capture ScaffoldMessenger before pop — context is invalid after Navigator.pop.
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
       messenger.showSnackBar(
@@ -668,8 +645,8 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
           : ListView(
               padding: const EdgeInsets.all(18),
               children: [
-                // ── هوية المتبرع: تُعرض فقط إن كانت محفوظة مسبقاً؛ فالتحقق
-                // الفعلي يتم قبل فتح هذه الشاشة عبر ensureNationalIdSaved ──
+                // Shown only when national ID was already saved; actual verification
+                // happens before this screen opens, via ensureNationalIdSaved.
                 if ((_userNationalId ?? '').isNotEmpty)
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -707,7 +684,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                 const SizedBox(height: 14),
 
-                // ── اختيار الجمعية ──
                 GestureDetector(
                   onTap: _pickCharity,
                   child: AnimatedContainer(
@@ -795,7 +771,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                 const SizedBox(height: 20),
 
-                // ── الفورم ──
                 Card(
                   elevation: 0,
                   shape: RoundedRectangleBorder(
@@ -807,7 +782,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ── صورة التبرع ──
                         _SectionLabel(label: 'صورة التبرع *'),
                         GestureDetector(
                           onTap: _pickImage,
@@ -875,7 +849,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 14),
 
-                        // ── اسم الطعام ──
                         _SectionLabel(label: 'اسم الطعام *'),
                         TextField(
                           controller: _foodNameController,
@@ -887,7 +860,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 14),
 
-                        // ── الوصف ──
                         _SectionLabel(label: 'الوصف (اختياري)'),
                         TextField(
                           controller: _descController,
@@ -903,7 +875,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 14),
 
-                        // ── الفئة ──
                         _SectionLabel(label: 'الفئة'),
                         Wrap(
                           spacing: 8,
@@ -938,7 +909,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 14),
 
-                        // ── الكمية ──
                         _SectionLabel(label: 'الكمية'),
                         TextField(
                           controller: _quantityController,
@@ -951,7 +921,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 14),
 
-                        // ── تاريخ انتهاء الصلاحية (اختياري) ──
                         InkWell(
                           onTap: _pickDate,
                           borderRadius: BorderRadius.circular(12),
@@ -992,7 +961,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 14),
 
-                        // ── مكان الاستلام ──
                         _SectionLabel(label: 'مكان الاستلام *'),
                         TextField(
                           controller: _locationController,
@@ -1003,7 +971,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
                         ),
                         const SizedBox(height: 10),
 
-                        // زر خريطة الموقع
                         GestureDetector(
                           onTap: _openLocationPicker,
                           child: Container(
@@ -1053,7 +1020,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 14),
 
-                        // ── وقت الاستلام ──
                         _SectionLabel(label: 'وقت الاستلام *'),
                         Row(
                           children: [
@@ -1147,7 +1113,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 14),
 
-                        // ── ملاحظات ──
                         _SectionLabel(label: 'ملاحظات (اختياري)'),
                         TextField(
                           controller: _notesController,
@@ -1163,7 +1128,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 18),
 
-                        // ── مسببات الحساسية ──
                         AllergyCheckboxPanel(
                           selected: _selectedAllergens,
                           onChanged: (v) =>
@@ -1172,7 +1136,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
 
                         const SizedBox(height: 18),
 
-                        // ── إقرار المسؤولية ──
                         GestureDetector(
                           onTap: () => setState(() => _acceptedResponsibility =
                               !_acceptedResponsibility),
@@ -1248,9 +1211,6 @@ class _CharityDonationScreenState extends State<CharityDonationScreen> {
   }
 }
 
-// ─────────────────────────────────────────────
-// Bottom Sheet اختيار الجمعية
-// ─────────────────────────────────────────────
 class CharityPickerSheet extends StatelessWidget {
   final String? selectedId;
   final void Function(String id, String name) onSelected;
@@ -1457,7 +1417,6 @@ class _CharityListTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // ── الأيقونة + الاسم + العنوان + الهاتف: يفتح الملف العام للجمعية ──
           Expanded(
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
@@ -1540,7 +1499,6 @@ class _CharityListTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          // ── زر "تبرع": يبدأ تدفق التبرع لهذه الجمعية مباشرةً (دون تغيير) ──
           GestureDetector(
             onTap: onDonate,
             child: isSelected
@@ -1634,9 +1592,6 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// عروضي المنشورة — قائمة عروض الفرد القابلة لإعادة المشاركة
-// ─────────────────────────────────────────────
 class _MyPublishedOffers extends StatelessWidget {
   const _MyPublishedOffers();
 
@@ -1698,9 +1653,6 @@ class _MyPublishedOffers extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة العرض المنشور مع زر "إعادة مشاركة"
-// ─────────────────────────────────────────────
 class _MyOfferCard extends StatefulWidget {
   final String docId;
   final Map<String, dynamic> data;

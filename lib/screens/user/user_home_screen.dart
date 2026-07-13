@@ -15,14 +15,9 @@ import 'search_results_screen.dart';
 import 'user_extra_screens.dart';
 import 'user_publish_offer_screen.dart';
 
-// ─────────────────────────────────────────────
-// اختصارات تبرع/نشر: تفتح الشاشة المخصصة مباشرة (CharityDonationScreen أو
-// UserPublishOfferScreen) بعد التحقق من توثيق الهوية عبر نفس الدالة
-// المشتركة ensureNationalIdSaved، دون أي صفحة دخول وسيطة. charityId/
-// charityName اختياريان: يُمرَّران عند وجود جمعية محددة مسبقاً (مثل زر
-// "تبرع" بجانب جمعية بعينها)، ويُتركان فارغين عند عدم وجود جمعية محددة
-// (كزر "تبرع الآن" العام أو تصنيف "التبرع")، فيختار المستخدم الجمعية من
-// داخل CharityDonationScreen نفسها ──
+// Shortcut to open the donation or publish screen directly after verifying national ID.
+// charityId/charityName are optional — pass them when a specific charity is known,
+// leave empty to let the user choose inside CharityDonationScreen.
 Future<void> _openCharityDonation(
   BuildContext context, {
   String? charityId,
@@ -488,8 +483,6 @@ class _CategorySection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        // ── شبكة من 3 أعمدة: توزّع الفئات الخمس على صفّين بحجم موحّد بدل
-        // ازدحامها في صفّ واحد ──
         GridView.count(
           crossAxisCount: 3,
           shrinkWrap: true,
@@ -505,8 +498,7 @@ class _CategorySection extends StatelessWidget {
                 } else if (item.$1 == 'تبرعاتي') {
                   onMyDonations();
                 } else if (item.$1 == 'التبرع') {
-                  // ── لا يرتبط بجمعية محددة، فيفتح CharityDonationScreen
-                  // مباشرة ويختار المستخدم الجمعية من داخلها ──
+                  // No specific charity — let the user choose inside CharityDonationScreen.
                   onDonateToCharity();
                 } else {
                   onBrowseTab(item.$3);
@@ -706,8 +698,7 @@ class _UrgentCharitiesSection extends StatelessWidget {
                       side: const BorderSide(color: AppColors.border),
                     ),
                     child: ListTile(
-                      // ── يفتح الملف العام للجمعية؛ زر "تبرع" في trailing
-                      // له منطقة لمس خاصة به فلا يتعارض مع هذا الفتح ──
+                      // Opens the charity's public profile; the trailing "Donate" button has its own tap area so there's no conflict.
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(

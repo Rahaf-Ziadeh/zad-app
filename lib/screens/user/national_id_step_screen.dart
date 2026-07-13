@@ -9,21 +9,19 @@ import '../../services/cloudinary_service.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
 
-// ─────────────────────────────────────────────
-// يتحقق من وجود رقم الهوية الوطنية وصورتها معاً لدى المستخدم الحالي
-// (users/{uid}.nationalId و users/{uid}.nationalIdImageUrl). كلا الحقلين
-// مطلوبان — رقم الهوية وحده لا يكفي أبداً لتجاوز هذه الخطوة.
+// Checks that the current user has both a national ID and its image stored
+// (users/{uid}.nationalId and users/{uid}.nationalIdImageUrl). Both fields are
+// required — the ID number alone is never enough to pass this step.
 //
-// إن كانا محفوظين مسبقاً يُعاد true فوراً دون أي واجهة — لا تُطلب الهوية
-// مرة أخرى. وإلا تُفتح خطوة توثيق الهوية، وتُتابَع العملية الأصلية
-// (تبرع أو نشر عرض) تلقائياً فقط بعد نجاح الحفظ.
+// Returns true immediately if both are already saved — the user won't be asked again.
+// Otherwise opens the identity step; the original action (donate or post an offer)
+// only resumes automatically after a successful save.
 //
-// معالجة آمنة: أي خطأ غير متوقع (شبكة، صلاحيات...) يُلغي الإجراء الأصلي
-// بإرجاع false بدل ترك الاستثناء يتسرّب ويُعلّق التدفق بصمت.
-// ─────────────────────────────────────────────
+// Error safety: any unexpected error (network, permissions…) cancels the original action
+// by returning false instead of letting the exception leak and silently stall the flow.
 Future<bool> ensureNationalIdSaved(BuildContext context) async {
   try {
-    // ── 1) تحقق من وجود مستخدم مسجّل دخول قبل أي شيء آخر — دون علامة تعجب ──
+    // Null-safe currentUser check — no ! operators used anywhere in this function.
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
       debugPrint('[ensureNationalIdSaved] currentUser is null — cancelling');
@@ -31,12 +29,10 @@ Future<bool> ensureNationalIdSaved(BuildContext context) async {
     }
     final uid = currentUser.uid;
 
-    // ── 2) قراءة آمنة لمستند users/{uid} ──
     final userDoc =
         await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
-    // ── 3) إن لم يكن المستند موجوداً إطلاقاً (مستخدم جديد)، تُعامَل الهوية
-    // كغير موجودة وتُفتح شاشة التوثيق مباشرة ──
+    // Missing user doc (brand-new account) — treat identity as absent and open the step screen.
     if (!userDoc.exists) {
       debugPrint(
           '[ensureNationalIdSaved] users/$uid does not exist — treating '
@@ -54,8 +50,7 @@ Future<bool> ensureNationalIdSaved(BuildContext context) async {
       return _openIdentityStep(context, uid);
     }
 
-    // ── 4) قراءة آمنة للحقلين دون أي علامة تعجب، مع تحقق من النوع بدل
-    // استخدام "as String?" الذي قد يرمي استثناءً لو كان النوع مختلفاً ──
+    // is-check instead of 'as String?' — avoids a throw if the field type is unexpected.
     final nationalId = userData['nationalId'];
     final nationalIdImageUrl = userData['nationalIdImageUrl'];
     final hasNationalId =
@@ -72,7 +67,7 @@ Future<bool> ensureNationalIdSaved(BuildContext context) async {
           '[ensureNationalIdSaved] uid=$uid nationalIdImageUrl missing/empty');
     }
 
-    // ── 5) يجب توفّر الحقلين معاً؛ أحدهما فقط لا يكفي إطلاقاً ──
+    // Both fields required — having only one is not enough.
     if (hasNationalId && hasImage) {
       debugPrint(
           '[ensureNationalIdSaved] uid=$uid identity already verified — '
@@ -121,10 +116,8 @@ Future<bool> _openIdentityStep(BuildContext context, String uid) async {
   return true;
 }
 
-// ─────────────────────────────────────────────
-// خطوة توثيق الهوية: رقم الهوية الوطنية + صورتها — تُحفظ في users/{uid}
-// و individuals/{uid} معاً عبر WriteBatch واحد.
-// ─────────────────────────────────────────────
+// Identity step: saves nationalId + nationalIdImageUrl to both users/{uid} and
+// individuals/{uid} in a single WriteBatch.
 class NationalIdStepScreen extends StatefulWidget {
   const NationalIdStepScreen({super.key});
 
@@ -351,7 +344,6 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
-            // ── بانر المعلومات الإضافية — يظهر عند طلب الأدمن مزيداً من المعلومات ──
             if (!_loadingStatus &&
                 _existingStatus == 'pending_additional_info' &&
                 (_additionalInfoMessage ?? '').isNotEmpty) ...[
@@ -396,7 +388,6 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            // ── تعليمات ──
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -424,7 +415,6 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── رقم الهوية الوطنية ──
             TextFormField(
               controller: _idController,
               keyboardType: TextInputType.number,
@@ -444,7 +434,7 @@ class _NationalIdStepScreenState extends State<NationalIdStepScreen> {
             ),
             const SizedBox(height: 18),
 
-            // ── صورة الهوية: بنفس أسلوب أزرار رفع صور العروض والتراخيص ──
+            // Same upload button pattern as offer and license image pickers.
             const Text('صورة الهوية *',
                 style: TextStyle(
                     fontSize: 13,

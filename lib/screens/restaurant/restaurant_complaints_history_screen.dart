@@ -6,14 +6,10 @@ import '../../theme/app_colors.dart';
 import '../admin/admin_complaint_details_screen.dart'
     show ComplaintSectionCard, ComplaintInfoRow;
 
-// ─────────────────────────────────────────────
-// سجلّ الشكاوى المتعلقة بهذا المطعم — عرض فقط، بلا أي حل أو حذف أو تعديل
-// لقرارات الإدارة. يعرض الشكاوى التي يكون فيها المطعم هو الحساب المُبلَّغ
-// عنه/المزوّد (reportedUserId)، والتي تُكتَب فعلياً عبر _ReportProviderDialog
-// في provider_public_profile_screen.dart عندما يُبلّغ مستخدم عن مطعم من
-// ملفه العام — وهو حقل حقيقي موجود بالفعل في مخطط complaints، وليس حقلاً
-// افتراضياً جديداً ──
-// ─────────────────────────────────────────────
+// Complaints filed against this restaurant — read-only, no resolve/delete/edit;
+// admin decisions stay with admins. Filters on reportedUserId (the field that
+// _ReportProviderDialog in provider_public_profile_screen.dart writes when a user
+// reports a restaurant from its public profile).
 class RestaurantComplaintsHistoryScreen extends StatelessWidget {
   const RestaurantComplaintsHistoryScreen({super.key});
 
@@ -28,9 +24,8 @@ class RestaurantComplaintsHistoryScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      // ── فلتر مساواة وحيد (بلا orderBy) لتفادي الحاجة لفهرس مركّب غير
-      // موجود؛ الترتيب الأحدث أولاً يتم على العميل، والمستندات بلا createdAt
-      // صالح تُوضَع في النهاية ──
+      // Single equality filter (no orderBy) — avoids a composite index we don't have.
+      // Newest-first sorting is client-side; docs without a valid createdAt go last.
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('complaints')
@@ -151,10 +146,8 @@ class RestaurantComplaintsHistoryScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// تفاصيل شكوى واحدة — عرض فقط، بلا أي إجراء (لا حل ولا إعادة فتح ولا حذف؛
-// قرارات الإدارة تبقى للإدارة حصراً)
-// ─────────────────────────────────────────────
+// Detail view for one complaint — read-only, no actions (no resolve/reopen/delete;
+// admin decisions stay with admins exclusively).
 class _RestaurantComplaintDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> data;
 

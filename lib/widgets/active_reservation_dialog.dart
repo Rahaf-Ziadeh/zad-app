@@ -5,11 +5,11 @@ import '../services/reservation_service.dart';
 import '../theme/app_colors.dart';
 
 // ─────────────────────────────────────────────
-// يتحقق من وجود حجز نشط للمستخدم الحالي على هذا العرض قبل فتح صحيفة اختيار
-// الكمية أو الدفع في أي نقطة دخول للحجز. إن وُجد حجز نشط، تُعرض رسالة توضح
-// ذلك بدل فتح تدفق حجز جديد، ويُعاد true لإلغاء المتابعة في المستدعي.
-// يبقى التحقق الموجود داخل ReservationService.reserveOffer كشبكة أمان
-// احتياطية دون أي تغيير ──
+// Checks for an active reservation on this offer before opening the
+// quantity/payment sheet. Shows a dialog instead of starting a new
+// booking flow, and returns true so the caller aborts.
+// ReservationService.reserveOffer still has its own guard as a final
+// safety net — this is just an early-exit UX shortcut.
 Future<bool> hasActiveReservationForOffer(
   BuildContext context,
   String offerId,
@@ -39,8 +39,7 @@ Future<bool> hasActiveReservationForOffer(
         ElevatedButton(
           onPressed: () {
             Navigator.pop(dialogContext);
-            // ── يفتح ضمن الـ Navigator المتداخل الحالي فيبقى شريط التنقّل
-            // السفلي ظاهراً، بنفس أسلوب فتح الشاشات الأخرى من داخل التبويبات ──
+            // Push within the nested Navigator so the bottom bar stays visible.
             Navigator.push(
               context,
               MaterialPageRoute(

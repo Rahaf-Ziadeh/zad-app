@@ -21,14 +21,12 @@ class OffersTab extends StatefulWidget {
 }
 
 class _OffersTabState extends State<OffersTab> {
-  // ── فلاتر ──
   String _priceFilter = 'all';        // all | free | paid
   String _providerTypeFilter = 'all'; // all | restaurant | charity | individual
   String _categoryFilter = 'all';
   String _sortOrder = 'newest';       // newest | nearest | price_asc
   double _radiusKm = 10.0;
 
-  // ── موقع ──
   Position? _userPosition;
   bool _locationLoading = true;
 
@@ -62,7 +60,6 @@ class _OffersTabState extends State<OffersTab> {
     });
   }
 
-  // ── عدد الفلاتر النشطة ──
   int get _activeFilterCount {
     int c = 0;
     if (_priceFilter != 'all') c++;
@@ -72,7 +69,6 @@ class _OffersTabState extends State<OffersTab> {
     return c;
   }
 
-  // ── الفلاتر النشطة كـ chips ──
   List<(String, VoidCallback)> get _activeChips {
     final chips = <(String, VoidCallback)>[];
 
@@ -108,7 +104,6 @@ class _OffersTabState extends State<OffersTab> {
     return chips;
   }
 
-  // ── فتح صحيفة الفلترة ──
   void _openFilterSheet() {
     var tempPrice = _priceFilter;
     var tempProvider = _providerTypeFilter;
@@ -145,7 +140,6 @@ class _OffersTabState extends State<OffersTab> {
                   ),
                 ),
               ),
-              // ── عنوان + مسح ──
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
                 child: Row(
@@ -175,14 +169,12 @@ class _OffersTabState extends State<OffersTab> {
               ),
               const Divider(height: 1),
 
-              // ── محتوى قابل للتمرير ──
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // نوع المزود
                       _SheetSection(title: 'نوع المزود', chips: [
                         _SheetChip(
                             label: 'الكل',
@@ -202,7 +194,6 @@ class _OffersTabState extends State<OffersTab> {
                             onTap: () => ss(() => tempProvider = 'individual')),
                       ]),
 
-                      // السعر
                       _SheetSection(title: 'السعر', chips: [
                         _SheetChip(
                             label: 'الكل',
@@ -218,7 +209,6 @@ class _OffersTabState extends State<OffersTab> {
                             onTap: () => ss(() => tempPrice = 'paid')),
                       ]),
 
-                      // الفئة
                       _SheetSection(title: 'الفئة', chips: [
                         _SheetChip(
                             label: 'الكل',
@@ -247,7 +237,6 @@ class _OffersTabState extends State<OffersTab> {
                             onTap: () => ss(() => tempCategory = 'أخرى')),
                       ]),
 
-                      // الترتيب
                       _SheetSection(title: 'الترتيب', chips: [
                         _SheetChip(
                             label: 'الأحدث',
@@ -268,7 +257,6 @@ class _OffersTabState extends State<OffersTab> {
                             onTap: () => ss(() => tempSort = 'price_asc')),
                       ]),
 
-                      // النطاق — يظهر فقط عند اختيار الأقرب
                       if (tempSort == 'nearest' &&
                           _userPosition != null) ...[
                         const Text('النطاق',
@@ -296,7 +284,6 @@ class _OffersTabState extends State<OffersTab> {
               ),
 
               const Divider(height: 1),
-              // ── تطبيق ──
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                 child: SizedBox(
@@ -323,7 +310,6 @@ class _OffersTabState extends State<OffersTab> {
     );
   }
 
-  // ── فلترة وترتيب ──
   List<QueryDocumentSnapshot> _sortAndFilter(
       List<QueryDocumentSnapshot> docs) {
     var filtered = List<QueryDocumentSnapshot>.from(docs);
@@ -430,13 +416,11 @@ class _OffersTabState extends State<OffersTab> {
 
     return Column(
       children: [
-        // ── شريط الفلاتر ──
         Container(
           color: AppColors.card,
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
           child: Row(
             children: [
-              // زر فلترة
               GestureDetector(
                 onTap: _openFilterSheet,
                 child: AnimatedContainer(
@@ -493,7 +477,6 @@ class _OffersTabState extends State<OffersTab> {
                 ),
               ),
 
-              // الفلاتر النشطة
               if (chips.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Expanded(
@@ -513,7 +496,6 @@ class _OffersTabState extends State<OffersTab> {
               ] else
                 const Spacer(),
 
-              // مؤشر الموقع
               const SizedBox(width: 8),
               if (_locationLoading)
                 const SizedBox(
@@ -534,7 +516,6 @@ class _OffersTabState extends State<OffersTab> {
         ),
         const Divider(height: 1),
 
-        // ── قائمة العروض ──
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
@@ -601,9 +582,6 @@ class _OffersTabState extends State<OffersTab> {
   }
 }
 
-// ─────────────────────────────────────────────
-// بطاقة العرض
-// ─────────────────────────────────────────────
 class _OfferCard extends StatelessWidget {
   final String docId;
   final Map<String, dynamic> data;
@@ -816,9 +794,6 @@ class _OfferCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// زر الحجز
-// ─────────────────────────────────────────────
 class _ReserveButton extends StatefulWidget {
   final String docId;
   final Map<String, dynamic> data;
@@ -903,8 +878,8 @@ class _ReserveButtonState extends State<_ReserveButton> {
       return;
     }
 
-    // ── تحقق مسبق من وجود حجز نشط لهذا العرض قبل فتح صحيفة اختيار الكمية؛
-    // التحقق داخل ReservationService.reserveOffer يبقى كشبكة أمان احتياطية ──
+    // Pre-check for an existing active reservation before opening the quantity sheet;
+    // ReservationService.reserveOffer also checks, acting as a final safety net.
     final hasActive = await hasActiveReservationForOffer(context, widget.docId);
     if (hasActive || !mounted) return;
 

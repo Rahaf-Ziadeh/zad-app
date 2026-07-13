@@ -22,7 +22,7 @@ class QrCodeScreen extends StatelessWidget {
     this.reservationCode = '',
   });
 
-  // بيانات QR بصيغة JSON بدل plain text
+  // QR payload as JSON instead of plain text.
   String get _qrData => jsonEncode({
         'reservationId': reservationId,
         'offerId': offerId,
@@ -42,7 +42,6 @@ class QrCodeScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
         children: [
-          // ── تعليمات ──
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -131,7 +130,6 @@ class QrCodeScreen extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          // ── تفاصيل الحجز ──
           _InfoBox(
             title: 'رقم الحجز',
             value: reservationCode.isNotEmpty ? reservationCode : reservationId,
@@ -160,7 +158,6 @@ class QrCodeScreen extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          // ── تحذير ──
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -187,7 +184,6 @@ class QrCodeScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // ── عرض حجوزاتي ──
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -212,7 +208,6 @@ class QrCodeScreen extends StatelessWidget {
 
           const SizedBox(height: 10),
 
-          // ── العودة للرئيسية ──
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(

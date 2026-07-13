@@ -171,8 +171,7 @@ class _AdminChatCard extends StatelessWidget {
       _ => ('انتظار', AppColors.secondary),
     };
 
-    // ── يميّز الأدمن بين طلبات الدعم القادمة من مستخدم فرد أو مطعم دون
-    // فتح المحادثة (Part 9) ──
+    // Role badge lets the admin distinguish individual vs. restaurant/charity requests without opening the chat.
     final (roleLabel, roleColor) = switch (userRole) {
       'restaurant' => ('مطعم', Color(0xFF7C3AED)),
       'charity' => ('جمعية', Color(0xFFE11D48)),

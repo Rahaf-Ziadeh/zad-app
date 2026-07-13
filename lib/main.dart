@@ -13,10 +13,7 @@ import 'screens/charity/charity_dashboard.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'theme/app_theme.dart';
 
-// ─────────────────────────────────────────────
-// ⚠️ نقل هاي القيم لـ .env أو firebase_options.dart
-// لا تحطها على GitHub
-// ─────────────────────────────────────────────
+// ⚠️ Move these to .env or firebase_options.dart — do NOT commit to GitHub
 const _firebaseOptions = FirebaseOptions(
   apiKey: "AIzaSyAvMajBi4k8xnckT0IoTkiZac0YCWfNn_k",
   appId: "1:1043940728580:android:b57764c4a71726cfe5fa51",
@@ -28,7 +25,6 @@ const _firebaseOptions = FirebaseOptions(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── اتجاه الشريط العلوي ──
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -36,7 +32,6 @@ void main() async {
     ),
   );
 
-  // ── تأمين الاتجاه العمودي فقط ──
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -47,9 +42,6 @@ void main() async {
   runApp(const ZadApp());
 }
 
-// ─────────────────────────────────────────────
-// التطبيق الرئيسي
-// ─────────────────────────────────────────────
 class ZadApp extends StatelessWidget {
   const ZadApp({super.key});
 
@@ -71,9 +63,7 @@ class ZadApp extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// نقطة الدخول — تقرر أين يذهب المستخدم
-// ─────────────────────────────────────────────
+// App entry point — decides which screen to show based on auth state and user role.
 class _AppEntry extends StatelessWidget {
   const _AppEntry();
 
@@ -82,19 +72,16 @@ class _AppEntry extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnapshot) {
-        // ── جاري التحقق ──
         if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const _SplashScreen();
         }
 
-        // ── مش مسجّل دخول ──
         if (!authSnapshot.hasData || authSnapshot.data == null) {
           return const WelcomeScreen();
         }
 
         final user = authSnapshot.data!;
 
-        // ── مسجّل دخول — جلب بياناته من Firestore ──
         return FutureBuilder<DocumentSnapshot>(
           future: FirebaseFirestore.instance
               .collection('users')
@@ -105,7 +92,6 @@ class _AppEntry extends StatelessWidget {
               return const _SplashScreen();
             }
 
-            // لو ما في بيانات أو حصل خطأ → Login
             if (!userSnapshot.hasData ||
                 !userSnapshot.data!.exists ||
                 userSnapshot.hasError) {
@@ -119,32 +105,26 @@ class _AppEntry extends StatelessWidget {
             final isProviderRole = role == 'restaurant' || role == 'charity';
             final wasEverApproved = data['wasEverApproved'] == true;
             final verificationStatus = data['verificationStatus'] as String?;
-            // ── دخول محدود: مطعم/جمعية كان معتمَداً سابقاً ثم رُفض تحديث
-            // لاحق لبياناته (كتعديل الرخصة) — يبقى بإمكانه فتح لوحة التحكم
-            // لإكمال العمليات القائمة؛ راجع نفس المنطق في AuthService.login.
-            // يُعتمَد على verificationStatus (وليس status): شاشة مراجعة
-            // التحقق الفعلية (admin_verification_panel.dart) لا تُغيّر حقل
-            // status إطلاقاً عند الرفض ──
+            // Limited access: a restaurant/charity previously approved but later re-rejected (e.g. license update)
+            // can still open the dashboard to complete existing operations.
+            // Uses verificationStatus, not status — the verification review screen never touches status on rejection.
             final restrictedRejectedAccess = verificationStatus == 'rejected' &&
                 isProviderRole &&
                 wasEverApproved;
 
-            // ── حساب معلّق، أو مرفوض دون أي اعتماد سابق → Login مع رسالة ──
+            // Suspended or rejected without prior approval — redirect to login.
             if (status == 'suspended' ||
                 (status == 'rejected' && !restrictedRejectedAccess)) {
               return const LoginScreen();
             }
 
-            // ── بانتظار موافقة الأدمن لأول مرة (لم يُعتمَد إطلاقاً بعد) —
-            // لا تشمل حالة restrictedRejectedAccess فهي كانت معتمَدة سابقاً
-            // ويجب أن تصل للوحة التحكم لإكمال عملياتها القائمة ──
+            // Waiting for first-time admin approval — show pending screen (excludes restrictedRejectedAccess).
             if (isProviderRole && !isApproved && !restrictedRejectedAccess) {
               return const _PendingApprovalScreen();
             }
 
             final appUser = AppUser.fromMap(user.uid, data);
 
-            // ── توجيه حسب الدور ──
             switch (role) {
               case 'admin':
                 return AdminDashboard(user: appUser);
@@ -265,9 +245,6 @@ class _SplashScreenState extends State<_SplashScreen>
   }
 }
 
-// ─────────────────────────────────────────────
-// شاشة انتظار الموافقة
-// ─────────────────────────────────────────────
 class _PendingApprovalScreen extends StatelessWidget {
   const _PendingApprovalScreen();
 

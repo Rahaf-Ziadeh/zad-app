@@ -6,9 +6,6 @@ import '../../theme/app_colors.dart';
 import '../../widgets/charity_widgets.dart';
 import 'charity_publish_new_surplus_screen.dart';
 
-// ─────────────────────────────────────────────
-// شاشة إعادة نشر الفائض — FR-36
-// ─────────────────────────────────────────────
 class CharityPublishSurplusScreen extends StatelessWidget {
   const CharityPublishSurplusScreen({super.key});
 
@@ -39,7 +36,6 @@ class CharityPublishSurplusScreen extends StatelessWidget {
           ],
         ),
 
-        // زر نشر عرض جديد من الفائض
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () {
             Navigator.push(
@@ -67,9 +63,6 @@ class CharityPublishSurplusScreen extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// Tab 1 — التبرعات المقبولة الجاهزة للنشر
-// ─────────────────────────────────────────────
 class AvailableSurplusTab extends StatelessWidget {
   const AvailableSurplusTab({super.key});
 
@@ -78,8 +71,7 @@ class AvailableSurplusTab extends StatelessWidget {
     final dataService = CharityDataService();
 
     return StreamBuilder<QuerySnapshot>(
-      // تعرض فقط التبرعات التي أكدت الجمعية استلامها (received)
-      // وجاهزة للنشر كعروض للمستفيدين
+      // Only donations the charity has confirmed receiving (status='received') appear here.
       stream: dataService.watchReceivedDonations(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -162,9 +154,6 @@ class AvailableSurplusTab extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// Tab 2 — العروض التي تم نشرها
-// ─────────────────────────────────────────────
 class PublishedSurplusTab extends StatelessWidget {
   const PublishedSurplusTab({super.key});
 

@@ -12,7 +12,7 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ── تسجيل محاولة الدخول — fire-and-forget: لا يوقف تدفق الدخول أبداً ──
+  // Fire-and-forget login log — never blocks the login flow.
   void _writeLoginLog({
     required String email,
     required String? userId,
@@ -76,7 +76,7 @@ class AuthService {
       final uid = credential.user!.uid;
       capturedUid = uid;
 
-      // ── جلب مستند المستخدم أولاً حتى نعرف الدور قبل فحص التحقق ──
+      // Fetch the user doc first so we know the role before checking verification.
       final userDoc = await _firestore.collection('users').doc(uid).get();
       if (!userDoc.exists) {
         _writeLoginLog(
@@ -89,7 +89,7 @@ class AuthService {
       final role = data['role'] ?? 'individual';
       capturedRole = role;
 
-      // ── التحقق من تأكيد البريد الإلكتروني — يُتجاوَز لحسابات المسؤولين ──
+      // Email verification check — skipped for admin accounts.
       if (role != 'admin') {
         await credential.user!.reload();
         if (!(credential.user!.emailVerified)) {
@@ -364,10 +364,9 @@ class AuthService {
     }
   }
 
-  // ── إنشاء حساب مسؤول جديد دون إنهاء جلسة المسؤول الحالي.
-  // يستخدم تطبيق Firebase ثانوياً مؤقتاً معزولاً عن الجلسة الرئيسية، ويُحذف
-  // فور الانتهاء. لا يُرسل بريد تحقق لأن المسؤولين يُنشَؤون بواسطة مسؤولين
-  // موثوقين آخرين ولا يحتاجون التحقق من البريد ──
+  // Creates a new admin account without signing out the current admin session.
+  // Uses a temporary secondary Firebase app that's deleted after use.
+  // No verification email sent — admins are created by trusted existing admins.
   Future<void> createAdmin({
     required String fullName,
     required String email,

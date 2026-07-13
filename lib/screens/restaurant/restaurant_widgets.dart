@@ -58,10 +58,9 @@ class WelcomeCard extends StatelessWidget {
   }
 }
 
-// ── يعرض شعار/صورة المطعم داخل دائرة الترحيب إن وُجدت (users.photoUrl هو
-// المصدر الأساسي، وإلا restaurants/{uid}.logoUrl كاحتياط — نفس الحقلين
-// المستخدمين فعلياً في RestaurantProfileScreen، دون اختراع حقل جديد)؛
-// عند غياب الصورة أو فشل تحميلها يُعرض الحرف الأول من الاسم كما كان سابقاً ──
+// Displays the restaurant logo in the welcome circle: users.photoUrl first,
+// restaurants/{uid}.logoUrl as fallback (same fields used in RestaurantProfileScreen).
+// Falls back to the first letter of the name when no image is available or fails to load.
 class _RestaurantLogoAvatar extends StatelessWidget {
   final String uid;
   final String? photoUrl;
@@ -359,8 +358,7 @@ class FormFieldWidget extends StatelessWidget {
   }
 }
 
-/// حقل اختيار تاريخ ووقت انتهاء العرض — اختياري، بنفس نمط حقل تاريخ
-/// انتهاء الصلاحية المستخدم في نشر فائض الجمعيات (InkWell + Container).
+/// Optional expiry date/time picker — same InkWell+Container pattern used in charity surplus publish.
 class ExpiryDateTimeField extends StatelessWidget {
   final DateTime? value;
   final ValueChanged<DateTime?> onChanged;
@@ -454,10 +452,9 @@ class ExpiryDateTimeField extends StatelessWidget {
   }
 }
 
-/// زر تحديد/تحديث موقع على الخريطة — يعرض الإحداثيات الحالية إن وُجدت مع
-/// خيار مسحها، أو دعوة لتحديد الموقع الحالي/على الخريطة إن لم تُحدَّد بعد.
-/// يُستخدم في ملف تعريف المطعم وشاشات إضافة/تعديل العرض والتبرع للجمعية —
-/// نفس الشاشة المشتركة LocationPickerScreen في كل مكان، بلا أي مُنتقٍ ثانٍ.
+/// Map location picker row — shows current coordinates with a clear option, or an invite
+/// to pick/update when none are set. Shared across restaurant profile, add/edit offer, and
+/// charity donation — always pushes the same LocationPickerScreen.
 class LocationPickerRow extends StatelessWidget {
   final bool hasLocation;
   final double? latitude;

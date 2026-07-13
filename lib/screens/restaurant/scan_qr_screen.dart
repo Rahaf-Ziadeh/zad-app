@@ -25,9 +25,9 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
     super.dispose();
   }
 
-  // ── يفكّ ترميز حمولة QR فقط (لا يُغيّر أي شيء في Firestore) — يحافظ على
-  // نفس صيغتَي QR الحاليتين (JSON الجديدة وpipe القديمة) دون أي تعديل، حتى
-  // تبقى رموز QR الصادرة سابقاً صالحة تماماً كما هي ──
+  // Decodes the QR payload only — no Firestore writes here. Preserves both
+  // QR formats (new JSON and legacy pipe-delimited) so previously issued
+  // codes stay valid.
   ({String reservationId, String offerId, String userId})? _decodeQr(
       String code) {
     try {
@@ -71,9 +71,9 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       return;
     }
 
-    // ── قراءة فقط (بدون معاملة) لعرض صحيفة المعاينة؛ التحقق الملزم
-    // النهائي والكتابة الفعلية يتمّان لاحقاً داخل
-    // ReservationService.confirmPickup وليس هنا ──
+    // Read-only fetch to populate the preview sheet — no transaction here.
+    // Authoritative validation and write happen inside
+    // ReservationService.confirmPickup, not at scan time.
     Map<String, dynamic>? data;
     try {
       final doc = await FirebaseFirestore.instance
@@ -97,8 +97,8 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       return;
     }
 
-    // ── تحقق إضافي: بيانات رمز QR (offerId/userId) يجب أن تطابق الحجز
-    // المخزَّن فعلياً، فوق تحقق الملكية والحالة العام ──
+    // Extra check: QR payload (offerId/userId) must match the stored
+    // reservation, on top of the standard ownership/status validation.
     final storedOfferId = (data['offerId'] as String?) ?? '';
     final storedUserId = (data['userId'] as String?) ?? '';
     if (storedOfferId != offerId || storedUserId != userId) {
@@ -120,8 +120,8 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       return;
     }
 
-    // ── إيقاف حالة التحميل قبل فتح الصحيفة — الصحيفة نفسها لها مؤشرات
-    // تحميل/تأكيد خاصة بها ──
+    // Stop loading before opening the sheet — the sheet has its own
+    // loading/confirm indicators.
     setState(() => _isLoading = false);
 
     if (!mounted) return;
@@ -137,14 +137,13 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       _controller.stop();
       if (Navigator.canPop(context)) Navigator.pop(context);
     } else {
-      // ── أُغلقت الصحيفة دون تأكيد — يُسمح بمسح رمز آخر ──
+      // Sheet dismissed without confirming — allow scanning another code.
       setState(() => _scanned = false);
     }
   }
 
-  // ── تُستخدَم فقط لعرض أخطاء ما قبل فتح صحيفة المعاينة (رمز غير صالح،
-  // حجز غير موجود، لا يتبع مطعمك...)؛ نجاح تأكيد الاستلام تعرضه صحيفة
-  // المعاينة نفسها عبر SnackBar عادي بعد الإغلاق ──
+  // Only for pre-sheet errors (invalid QR, reservation not found, wrong restaurant).
+  // Successful pickup confirmation is reported by the preview sheet via SnackBar after closing.
   void _showResult({
     required String title,
     required String message,
@@ -226,7 +225,6 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       ),
       body: Column(
         children: [
-          // ── الكاميرا ──
           Expanded(
             child: Stack(
               children: [
@@ -238,7 +236,6 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                   },
                 ),
 
-                // ── إطار QR ──
                 Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -283,7 +280,6 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
             ),
           ),
 
-          // ── شريط سفلي ──
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -313,9 +309,6 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   }
 }
 
-// ─────────────────────────────────────────────
-// إطار الـ QR المتحرك
-// ─────────────────────────────────────────────
 class _QrFrame extends StatefulWidget {
   final bool scanned;
   const _QrFrame({required this.scanned});
@@ -360,10 +353,8 @@ class _QrFrameState extends State<_QrFrame>
       height: size,
       child: Stack(
         children: [
-          // ── زوايا الإطار ──
           ..._corners(size, cornerSize, cornerWidth, color),
 
-          // ── خط المسح المتحرك ──
           if (!widget.scanned)
             AnimatedBuilder(
               animation: _scanLine,
@@ -392,28 +383,28 @@ class _QrFrameState extends State<_QrFrame>
 
   List<Widget> _corners(double size, double cs, double cw, Color color) {
     return [
-      // أعلى يمين
+      // top-right
       Positioned(
         top: 0,
         right: 0,
         child: _Corner(
             size: cs, strokeWidth: cw, color: color, top: true, right: true),
       ),
-      // أعلى يسار
+      // top-left
       Positioned(
         top: 0,
         left: 0,
         child: _Corner(
             size: cs, strokeWidth: cw, color: color, top: true, right: false),
       ),
-      // أسفل يمين
+      // bottom-right
       Positioned(
         bottom: 0,
         right: 0,
         child: _Corner(
             size: cs, strokeWidth: cw, color: color, top: false, right: true),
       ),
-      // أسفل يسار
+      // bottom-left
       Positioned(
         bottom: 0,
         left: 0,

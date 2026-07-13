@@ -4,11 +4,8 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// شاشة إنشاء حساب مسؤول جديد.
-// تستخدم AuthService.createAdmin() التي تعتمد على تطبيق Firebase ثانوي مؤقت
-// حتى لا تُلغي جلسة المسؤول الحالي أثناء إنشاء الحساب.
-// ─────────────────────────────────────────────────────────────────────────────
+// Uses AuthService.createAdmin() which runs in a temporary secondary Firebase app
+// so the current admin's session is never invalidated during account creation.
 class AdminCreateAdminScreen extends StatefulWidget {
   const AdminCreateAdminScreen({super.key});
 
@@ -82,7 +79,6 @@ class _AdminCreateAdminScreenState extends State<AdminCreateAdminScreen> {
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
-            // ── تنبيه ──
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -110,7 +106,6 @@ class _AdminCreateAdminScreenState extends State<AdminCreateAdminScreen> {
             ),
             const SizedBox(height: 24),
 
-            // ── الاسم الكامل ──
             TextFormField(
               controller: _nameCtrl,
               textInputAction: TextInputAction.next,
@@ -124,7 +119,6 @@ class _AdminCreateAdminScreenState extends State<AdminCreateAdminScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── البريد الإلكتروني ──
             TextFormField(
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
@@ -143,7 +137,6 @@ class _AdminCreateAdminScreenState extends State<AdminCreateAdminScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── كلمة المرور ──
             TextFormField(
               controller: _passCtrl,
               obscureText: _obscurePass,
@@ -169,7 +162,6 @@ class _AdminCreateAdminScreenState extends State<AdminCreateAdminScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── تأكيد كلمة المرور ──
             TextFormField(
               controller: _confirmCtrl,
               obscureText: _obscureConfirm,
